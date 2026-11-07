@@ -92,7 +92,7 @@ struct ContentView: View {
                     Image(systemName: "slider.vertical.3").font(.system(size: 18, weight: .light)).foregroundStyle(store.effectiveAccent)
                     VStack(alignment: .leading, spacing: 4) { Text(store.t("listeningRoom")).font(.system(size: 11, weight: .medium)); Text(store.preferences.eqEnabled ? store.t(store.preferences.eqPreset) + " · EQ" : store.t("bypass")).font(.system(size: 9)).foregroundStyle(.secondary) }; Spacer(); Image(systemName: "chevron.right").font(.system(size: 9)).foregroundStyle(.secondary)
                 }.padding(13).background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14)).contentShape(Rectangle()).onTapGesture { store.openSettings("sound") }
-                HStack { Button { store.openSettings("appearance") } label: { Label(store.t("settings"), systemImage: "gearshape").font(.system(size: 11)) }.buttonStyle(.plain); Spacer(); HStack(spacing: 4) { Circle().fill(.mint).frame(width: 4, height: 4); Text("LOCAL").font(.system(size: 8, weight: .medium, design: .monospaced)).tracking(1) }.foregroundStyle(.secondary) }.padding(.horizontal, 7)
+                HStack { Button { store.openSettings("appearance") } label: { Label(store.t("settings"), systemImage: "gearshape").font(.system(size: 11)) }.buttonStyle(.plain); Spacer(); HStack(spacing: 4) { Circle().fill(.mint).frame(width: 4, height: 4); Text(store.current?.sourceIsNetwork == true ? "NAS" : "LOCAL").font(.system(size: 8, weight: .medium, design: .monospaced)).tracking(1) }.foregroundStyle(.secondary) }.padding(.horizontal, 7)
             }
         }.padding(14).frame(width: 202).frame(maxHeight: .infinity).prismaGlass(24)
     }
@@ -151,7 +151,7 @@ struct ContentView: View {
                     }.padding(3).padding(.bottom, 20)
                 }.scrollIndicators(.hidden).clipped()
             }
-            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini) }; Text(store.status.isEmpty ? store.t("ready") : store.status).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 05").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
+            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini); Button { store.cancelScan() } label: { Image(systemName:"stop.circle") }.buttonStyle(.plain).help(store.t("cancel")) }; Text(store.status.isEmpty ? store.t("ready") : store.status).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 05").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     private var hero: some View {
@@ -198,7 +198,7 @@ struct ContentView: View {
     private func albumGrid(limit: Int?) -> some View {
         let groups = store.groupedAlbums
         let width: CGFloat = store.preferences.albumSize == "small" ? 140 : store.preferences.albumSize == "large" ? 240 : 185
-        return LazyVGrid(columns: limit == nil ? [GridItem(.adaptive(minimum: width), spacing: 16)] : Array(repeating: GridItem(.flexible(), spacing: 16), count: min(3, max(1, groups.count))), spacing: 18) {
+        return LazyVGrid(columns: limit == nil ? [GridItem(.adaptive(minimum: width), spacing: 16)] : Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 18) {
             ForEach(Array(groups.prefix(limit ?? groups.count)), id: \.key) { group in
                 if let track = group.value.first { AlbumCard(track: track, wide: limit != nil) { store.play(track, in: group.value) }.contextMenu { TrackContextMenu(track: track) { editing = track } } }
             }

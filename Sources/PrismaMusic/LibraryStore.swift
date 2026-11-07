@@ -157,7 +157,7 @@ final class LibraryStore: NSObject, ObservableObject {
         if preferences.rememberPosition,let data=try? Data(contentsOf:dataDirectory.appendingPathComponent("playback.json")),let saved=try? JSONDecoder().decode(PlaybackBookmark.self,from:data) { savedPlayback=(saved.id,saved.position) }
         persistence.setErrorHandler { [weak self] message in Task { @MainActor in self?.error=message } }
         if autoStart {
-            timer=Timer.scheduledTimer(withTimeInterval:1.0/30,repeats:true) { [weak self] _ in Task { @MainActor in self?.tick() } }
+            timer=Timer.scheduledTimer(withTimeInterval:1.0/15,repeats:true) { [weak self] _ in Task { @MainActor in self?.tick() } }
             setupRemoteCommands()
             readyTask=Task { [weak self] in
                 guard let self else { return }
@@ -167,15 +167,21 @@ final class LibraryStore: NSObject, ObservableObject {
                     applyLoaded(snapshot,includeDemo:true)
                 } catch { saveBlocked=true; self.error=error.localizedDescription }
                 loading=false
+                restorePlaybackIfNeeded()
                 if !saveBlocked && (scanOnLaunch || tracks.isEmpty) { await scan() }
-                if let (id,time)=savedPlayback,let track=track(for:id) {
-                    do { let audio=try makePlayer(track); audio.currentTime=time; player=audio; currentID=id; position=min(track.duration,audio.currentTime); queue=filtered.map(\.id); updateNowPlaying() } catch { status=t("offline") }
-                }
+                restorePlaybackIfNeeded()
             }
         } else {
             do { applyLoaded(try persistence.load(),includeDemo:false) } catch { saveBlocked=true; self.error=error.localizedDescription }
             loading=false
         }
+    }
+    private func restorePlaybackIfNeeded() {
+        guard player == nil,currentID == nil,!isPlaying,let (id,time)=savedPlayback,let track=track(for:id) else { return }
+        do {
+            let audio=try makePlayer(track); audio.currentTime=time; player=audio; currentID=id
+            position=min(track.duration,audio.currentTime); queue=filtered.map(\.id); updateNowPlaying()
+        } catch { status=t("offline") }
     }
     private func applyLoaded(_ snapshot:LibrarySnapshot?,includeDemo:Bool) {
         if let snapshot { tracks=snapshot.tracks; sources=snapshot.sources; edited=Set(snapshot.edited); playlists=snapshot.playlists ?? [] }
@@ -254,14 +260,21 @@ final class LibraryStore: NSObject, ObservableObject {
         for source in sources {
             if Task.isCancelled || cancellation.isCancelled { break }
             sourceStates[source.id]="reading"
+            status="\(t("discovering")) · \(source.name)"
             let recursive=preferences.recursiveScan
-            let report=await Task.detached(priority:.utility) { SourceScanner.enumerate(source.url,recursive:recursive,cancellation:cancellation) }.value
+            let report=await Task.detached(priority:.utility) { [weak self] in SourceScanner.enumerate(source.url,recursive:recursive,cancellation:cancellation) { [weak self] count in
+                Task { @MainActor in
+                    guard let self,self.scanning,self.scanCancellation === cancellation,!cancellation.isCancelled else { return }
+                    self.status="\(self.t("discovering")) · \(source.name) · \(count) \(self.t("count"))"
+                }
+            } }.value
             if !report.complete { unavailable += 1 }
-            var pending:[Track]=[]; pending.reserveCapacity(256)
+            var pending:[Track]=[]; pending.reserveCapacity(32)
+            var lastBatch=Date()
             for (index,file) in report.files.enumerated() {
                 if Task.isCancelled || cancellation.isCancelled { break }
                 if index % 16 == 0 { status="\(t("reading")) \(index+1)/\(report.files.count) · \(source.name)" }
-                if !force,let cached=track(for:file.url.path),cached.modified == file.modified,cached.format != nil { continue }
+                if !force,let cached=track(for:file.url.path),cached.modified == file.modified,cached.format != nil,cached.bitrate != nil,(!cached.isLossless || cached.bitDepth != nil) { continue }
                 do {
                     var value=try await MetadataReader.read(file.url)
                     if Task.isCancelled || cancellation.isCancelled { break }
@@ -273,7 +286,7 @@ final class LibraryStore: NSObject, ObservableObject {
                     }
                     value=try await persistence.normalized(value)
                     pending.append(value)
-                    if pending.count >= 256 { upsertTracks(pending); pending.removeAll(keepingCapacity:true); save() }
+                    if pending.count >= 32 || Date().timeIntervalSince(lastBatch) >= 1 { upsertTracks(pending); pending.removeAll(keepingCapacity:true); save(); lastBatch=Date() }
                 } catch { if !Task.isCancelled { failures += 1 } }
             }
             guard !Task.isCancelled,!cancellation.isCancelled else { sourceStates[source.id]="scanCancelled"; break }
@@ -513,6 +526,6 @@ final class LibraryStore: NSObject, ObservableObject {
             if let lyrics,let index=tracks.firstIndex(where:{ $0.id == track.id }),tracks[index].lyrics == nil { tracks[index].lyrics=lyrics; tracks[index].lyricsCredit="LRCLIB" }
             save(); updateNowPlaying()
         }
-        status = hadError ? t("networkError") : (artwork != nil || lyrics != nil) ? t("finished") : t("notFound")
+        if !scanning { status = hadError ? t("networkError") : (artwork != nil || lyrics != nil) ? t("finished") : t("notFound") }
     }
 }

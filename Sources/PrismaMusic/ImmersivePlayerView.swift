@@ -52,7 +52,7 @@ struct ImmersivePlayerView: View {
     }
     private func details(_ track: Track) -> some View {
         VStack(alignment:.leading,spacing:16) {
-            HStack(spacing:8) { QualityBadge(track:track); if let rate = track.sampleRate { Text(String(format:"%g kHz",rate/1000)).font(.system(size:8,design:.monospaced)).foregroundStyle(.white.opacity(0.45)) } }
+            HStack(spacing:8) { QualityBadge(track:track); if let rate = track.sampleRate { Text([track.bitDepth.map { "\($0) bit" },String(format:"%g kHz",rate/1000)].compactMap { $0 }.joined(separator:" / ")).font(.system(size:8,design:.monospaced)).foregroundStyle(.white.opacity(0.45)) } }
             Text(track.title).id(track.id).transition(.opacity).animation(reduceMotion || !store.preferences.microInteractions ? nil : .smooth(duration:0.3),value:track.id).font(.system(size:36,weight:.bold,design:.rounded)).tracking(-0.8).foregroundStyle(.white).lineLimit(2).minimumScaleFactor(0.65)
             Button { store.artist=track.artist; store.section="songs"; store.showImmersive=false; store.showVisualizer=false } label: { HStack(spacing:8) { Text(track.artist).font(.system(size:20,weight:.medium)); Image(systemName:"chevron.right").font(.system(size:10,weight:.semibold)) } }.buttonStyle(.plain).foregroundStyle(accent).lineLimit(1)
             Text(track.album + (track.year.isEmpty ? "" : " · " + track.year)).font(.system(size:12)).foregroundStyle(.white.opacity(0.5)).lineLimit(2)

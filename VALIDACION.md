@@ -1,41 +1,31 @@
-# Validación de Prisma Music 0.5.0
+# Validación de Prisma Music 0.5.1
 
-7 de noviembre de 2026. Apple Silicon, macOS 27.2, Xcode 27.2, Swift 6.4.2.
+7 de noviembre de 2026. macOS 27.2, Apple Silicon, Xcode 27.2 y Swift 6.4.2.
 
-## Resultado
+## Pruebas automatizadas
 
-Compilación de producción, empaquetado DMG y verificación de firma ad hoc completados. Actualizada en `/Applications/Prisma Music.app`.
+29 pruebas aprobadas, 0 omitidas, 0 fallos. Se activaron `PRISMA_LIVE_NETWORK=1` y `PRISMA_NAS_FILE` apuntando a un archivo FLAC del NAS SMB montado. Las pruebas comunes omiten las dos verificaciones externas cuando no se proporcionan esas variables. Los nombres y rutas de la colección personal no se incluyen en este informe.
 
-22 pruebas aprobadas, 0 omitidas y 0 fallos con `PRISMA_LIVE_NETWORK=1 swift test`. Incluye consultas reales de carátula a iTunes y letras a LRCLIB; su disponibilidad futura depende de esos proveedores.
+La prueba NAS leyó metadatos y decodificó audio real en AVAudioEngine a través de SMB, sin copiar el archivo completo al disco local. Comprobó energía de salida, avance temporal, salto a 30 segundos, pausa y reanudación. Resultado del archivo utilizado: FLAC, 96.000 Hz, estéreo, 24 bits, 2.959.692 bit/s estimados. El renderizado de la prueba fue offline y no activó los altavoces.
 
-## Correcciones verificadas
+Nuevas regresiones: una subcarpeta sin permisos hace incompleta la exploración y al recuperar permisos vuelve a leerse; dos fuentes superpuestas conservan una sola canción y retirar una de ellas no la borra si la otra la cubre; un audio dañado conserva el registro y el favorito previos; una base SQLite corrupta impide el reemplazo automático y mantiene sus bytes; los filtros y estadísticas se actualizan tras editar canciones y playlists; el progreso informa el total final y una cancelación previa impide recorrer los archivos. Un FLAC sintético de 24 bits valida la profundidad de origen y el bitrate.
 
-- Biblioteca SQLite incremental: una modificación de favorito cambia un solo registro en una biblioteca de 100 canciones. Transacciones y guardado serial en segundo plano; consolidación de cambios pendientes. El cierre espera el guardado y avisa si falla.
-- Migración de JSON con carátulas embebidas: conserva canciones y favoritos, crea una copia del JSON original y comparte un solo archivo de imagen entre las 100 canciones que usan la misma carátula. Los registros cargados no conservan los bytes de imagen.
-- Una biblioteca JSON corrupta genera un error y conserva exactamente sus bytes originales. La app bloquea el guardado automático de biblioteca tras un fallo de carga.
-- Pruebas de carpeta incompleta, cancelación, ruta inexistente, cambio de identidad y límite de subcarpetas. Una ubicación local desconectada conserva la biblioteca; eliminar un audio de una ubicación disponible permite retirarlo de la colección.
-- Persistencia de 10.000 registros y 20 cambios consecutivos: al recargar aparecen 10.000 canciones y el último cambio. Escritura inicial aproximada de 0,10 s en una ejecución de desarrollo; no incluye lectura de audio ni red y no es un SLA.
-- Cachés compartidas con objetivos de 8 MiB de datos comprimidos y 32 MiB de imágenes; miniaturas de hasta 1024 px. NSCache administra estos objetivos de forma orientativa. Filtros, agrupaciones y estadísticas se invalidan cuando cambian los datos correspondientes.
+Se mantiene la cobertura de migración, imágenes deduplicadas, escritura incremental, biblioteca JSON corrupta, 10.000 registros, guardado consolidado, filtros y acentos, letras LRC, metadatos, EQ renderizado, balance estéreo, velocidad, seek, playlists, cola, temporizador, paletas, contraste, reloj visual y Deshacer. Escritura inicial de 10.000 registros: aproximadamente 0,06 s en una ejecución local de desarrollo; no mide importación de audio ni latencia de red.
 
-## Comprobación de interfaz instalada
+## Pruebas con la app instalada
 
-Se abrió la biblioteca migrada con las tres demos existentes; se reprodujo Órbita y se observó el avance temporal. El panel de información mostró M4A/AAC, aproximadamente 70 kb/s, 212.948 bytes, 22,05 kHz y mono. Se escribió «Prisma Sessions» con espacio y se obtuvo una canción; se limpió la búsqueda. Se abrieron Ajustes → Sonido y Biblioteca y se ejecutó la relectura de etiquetas. Se cerró la app sin alerta de error.
+Se reprodujo un FLAC del NAS con avance del contador. Se usó el salto temporal accesible, se abrió el minirreproductor flotante y se pausó desde él. Se canceló una exploración de la colección y la pista existente permaneció disponible. Se exportó una copia JSON mediante el panel nativo y se verificó que contenía la pista y su carátula embebida. La copia de prueba permanece fuera del repositorio.
 
-Medición puntual con `ps` tras estas acciones y con la app en reposo: RSS 177.824 KiB (~174 MiB), CPU 0,3 %. Durante reproducción y efectos el consumo aumenta. No se ha medido una biblioteca real grande del usuario ni se garantiza ese consumo en otros equipos.
+La revisión visual detectó que una colección con un solo álbum estiraba demasiado la portada destacada. Se conserva ahora la cuadrícula de tres columnas. Se verificaron en la 0.5.1 instalada el tamaño de las portadas y el avance del contador de exploración del NAS. La lectura completa de la colección aún estaba en curso al cerrar esta comprobación. Se añaden progreso de exploración y cancelación en la barra inferior, y bits/kHz en la escucha inmersiva cuando se actualizan sus metadatos. La telemetría baja de 30 a 15 Hz sin cambiar el reloj independiente de las animaciones.
 
-Las pruebas conservadas cubren audio renderizado con EQ, balance estéreo, velocidad y seek; filtros y acentos; LRC; metadatos; favoritos; edición; playlists; cola; temporizador; migraciones; paletas y contraste; reloj visual y Deshacer. No constituyen una comprobación exhaustiva de cada botón en cada estado.
+La carga de sesión se recupera antes del escaneo y solo se vuelve a intentar si no hay un reproductor ni una canción activa; así no reemplaza la selección iniciada durante la lectura. La búsqueda de carátulas y letras no reemplaza el mensaje de progreso del escaneo.
 
-## NAS pendiente
+Una muestra puntual de la versión 0.5.0 tras la prueba NAS indicó huella física de 175,5 MiB y pico de 296,1 MiB; no es una medición de toda la colección ni una garantía de consumo. Las cachés tienen objetivos orientativos de 8 MiB de datos comprimidos y 32 MiB de imágenes decodificadas. Los registros de biblioteca guardan referencias a carátulas compartidas.
 
-No se encontró un volumen SMB/AFP/NFS montado ni se recibió dirección del servidor. La exploración SMB únicamente mostró este Mac. Las pruebas de desconexión usan carpetas locales y no acreditan reproducción desde un NAS real.
+## Alcance pendiente
 
-Para completar la prueba:
+Se validó un archivo FLAC real por SMB, no toda la colección ni todos los códecs del NAS. No se expulsó el volumen durante la reproducción ni se alteraron archivos del servidor para simular fallos. La cobertura de desconexión y permisos utiliza directorios de prueba locales. Las llamadas al servidor o al decodificador pueden tardar antes de devolver el control al cancelar; todavía hay apertura inicial del decodificador en el hilo principal. No se garantiza ausencia de errores ni un límite fijo de RAM.
 
-1. Finder → Ir → Conectarse al servidor (`⌘K`), introducir `smb://servidor/carpeta` e iniciar sesión en Finder sin compartir contraseñas en el chat.
-2. En Prisma, Añadir música → elegir la carpeta montada en Ubicaciones.
-3. Reproducir archivos de varios formatos, avanzar y retroceder, saltar de pista y comprobar las propiedades.
-4. Desconectar la ubicación, volver a leer y comprobar que las canciones existentes se conservan; reconectar y repetir reproducción y lectura.
+El instalador es arm64, requiere macOS 26 o posterior y usa firma ad hoc. Falta Developer ID y notarización para distribución pública convencional. No hay pruebas Intel ni una auditoría exhaustiva de todos los controles en todos los estados. Las etiquetas editadas se conservan en Prisma y no modifican el audio original. Las copias JSON incluyen rutas y carátulas, no el audio; no existe restauración guiada desde la interfaz.
 
-## Alcance de publicación
-
-El código se puede compartir como beta con estas limitaciones documentadas. El código se publica en `https://github.com/josue758/PrismaMusic`; las descargas de la beta se distribuyen en Releases. El DMG es arm64 y está firmado ad hoc; falta Developer ID y notarización para distribución pública convencional. La apertura inicial del decodificador y llamadas del sistema pueden tardar ante un servidor que no responde. No hay garantía de cero errores, validación de NAS real, pruebas en Intel ni batería completa de accesibilidad/teclado en todos los estados. Las etiquetas editadas se guardan en Prisma, no modifican los audios originales. Las copias JSON exportadas contienen metadatos, carátulas y rutas, no audio; no existe restauración guiada desde la interfaz.
+Repositorio: https://github.com/josue758/PrismaMusic. La beta 0.5.0 se conserva como versión histórica; las mejoras se distribuyen en 0.5.1.

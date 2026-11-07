@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import AudioToolbox
 
 struct Track: Identifiable, Codable, Equatable, Sendable {
     var id: String { url.path }
@@ -28,6 +29,7 @@ struct Track: Identifiable, Codable, Equatable, Sendable {
     var bitDepth: Int? = nil
     var lastPlayed: Date? = nil
     var playCount: Int? = nil
+    var sourceIsNetwork: Bool? = nil
     var isLossless: Bool { ["FLAC", "ALAC", "PCM"].contains { format?.contains($0) == true } }
     var qualitySummary: String { [format, bitrate.map { "≈\(Int(($0 / 1000).rounded())) kb/s" }].compactMap { $0 }.joined(separator: " · ") }
     var isDemo: Bool { url.path.contains("/Demo/") }
@@ -115,6 +117,7 @@ enum MetadataReader {
         let stream = audio?.fileFormat.streamDescription.pointee
         let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first
         let rate = try? await audioTrack?.load(.estimatedDataRate)
+        let facts=AudioFileFacts.read(url)
         let codec: String
         switch stream?.mFormatID {
         case kAudioFormatMPEG4AAC: codec = "AAC"
@@ -132,12 +135,29 @@ enum MetadataReader {
                      genre: value(["type", "genre", "id3/TCON", "itsk/©gen", "itsk/gnre"]) ?? "—", year: String(date.prefix(4)),
                      duration: duration, artwork: artwork, lyrics: lyrics, artworkCredit: artwork == nil ? nil : "Archivo local", lyricsCredit: lyrics == nil ? nil : "Archivo local",
                      modified: (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
-                     format: format, bitrate: rate.flatMap { $0 > 0 ? Double($0) : nil }, fileSize: size.map(Int64.init),
+                     format: format, bitrate: rate.flatMap { $0 > 0 ? Double($0) : nil } ?? facts.bitrate, fileSize: size.map(Int64.init),
                      sampleRate: stream?.mSampleRate, channels: stream.map { Int($0.mChannelsPerFrame) },
-                     bitDepth: stream.flatMap { $0.mBitsPerChannel > 0 ? Int($0.mBitsPerChannel) : nil })
+                     bitDepth: stream.flatMap { $0.mBitsPerChannel > 0 ? Int($0.mBitsPerChannel) : nil } ?? facts.bitDepth,
+                     sourceIsNetwork: (try? url.resourceValues(forKeys:[.volumeIsLocalKey]).volumeIsLocal).map { !$0 })
     }
 }
 func clockText(_ seconds: Double) -> String {
     guard seconds.isFinite else { return "0:00" }
     let s = max(0, Int(seconds)); return String(format: "%d:%02d", s / 60, s % 60)
+}
+
+struct AudioFileFacts {
+    var bitDepth:Int?
+    var bitrate:Double?
+    static func read(_ url:URL) -> Self {
+        var facts=Self()
+        var file:AudioFileID?
+        guard AudioFileOpenURL(url as CFURL,.readPermission,0,&file) == noErr,let file else { return facts }
+        defer { AudioFileClose(file) }
+        var depth:Int32=0; var size=UInt32(MemoryLayout<Int32>.size)
+        if AudioFileGetProperty(file,kAudioFilePropertySourceBitDepth,&size,&depth) == noErr,depth != 0,depth >= -64,depth <= 64 { facts.bitDepth=abs(Int(depth)) }
+        var rate:UInt32=0; size=UInt32(MemoryLayout<UInt32>.size)
+        if AudioFileGetProperty(file,kAudioFilePropertyBitRate,&size,&rate) == noErr,rate > 0 { facts.bitrate=Double(rate) }
+        return facts
+    }
 }

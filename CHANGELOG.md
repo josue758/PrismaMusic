@@ -1,5 +1,13 @@
 # Cambios
 
+## 0.5.1 — 7 de noviembre de 2026
+
+Prueba real de streaming desde SMB: FLAC de 24 bits/96 kHz, decodificación, seek y pausa/reanudación. 29 pruebas aprobadas con red y NAS activados.
+
+Exploración con progreso y cancelación directa; resultados por lotes pequeños; bitrate y profundidad de origen en formatos lossless; indicador NAS en metadatos nuevos; profundidad de bits en la vista inmersiva. Se reduce la frecuencia de telemetría a 15 Hz y se limita el tamaño de las portadas destacadas cuando hay pocos álbumes.
+
+La restauración de sesión conserva la reproducción iniciada durante el escaneo; las consultas online no reemplazan el estado de lectura. Se amplía la cobertura de permisos, recuperación, fuentes superpuestas, audio dañado, SQLite corrupto, consultas y cancelación.
+
 ## 0.5.0 — 7 de noviembre de 2026
 
 Guardado incremental SQLite en segundo plano; migración con copia de seguridad; carátulas deduplicadas y miniaturas con caché acotada; resultados de filtros, grupos y estadísticas reutilizables. Se reducen las actualizaciones en pausa.

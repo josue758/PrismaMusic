@@ -1,19 +1,31 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.5.0** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.5.1** para probar e iterar.
 
-[Descargar la versión 0.5.0 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.5.0) · [Ver el código](https://github.com/josue758/PrismaMusic)
+[Descargar la versión 0.5.1 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.5.1) · [Ver el código](https://github.com/josue758/PrismaMusic)
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.5.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.5.1.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
 
 En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.5. La actualización conserva tus datos.
+
+## Novedades de la versión 0.5.1
+
+La prueba con un NAS SMB real reprodujo y decodificó un FLAC de 24 bits/96 kHz, avanzó a otra posición y reanudó después de pausar. También se probó su control desde el minirreproductor y se exportó una copia JSON con la carátula incorporada. Esto verifica ese archivo y esas operaciones, no todos los formatos ni una desconexión real durante la reproducción.
+
+La exploración muestra la carpeta y el número de audios encontrados, con cancelación directa en la barra de estado. Durante la lectura de etiquetas, los resultados llegan por lotes de hasta 32 archivos o aproximadamente cada segundo, después de completar cada lectura individual. Las llamadas de red del sistema pueden tardar antes de devolver el control al cancelar.
+
+Se recuperan bitrate y profundidad de origen mediante AudioToolbox cuando no están disponibles en la descripción habitual del flujo; la vista inmersiva muestra bits y kHz. El indicador de origen muestra NAS para las pistas identificadas como volumen de red al leer sus metadatos. Los FLAC antiguos sin estos datos se vuelven a leer en el próximo escaneo.
+
+Los álbumes destacados conservan tres columnas cuando hay pocas portadas para evitar una carátula enorme. La telemetría del reproductor se actualiza a 15 Hz; el reloj visual mantiene su animación independiente. La restauración de sesión respeta una reproducción iniciada mientras se escaneaba, y las consultas de metadatos no reemplazan el estado del escaneo.
+
+29 pruebas aprobadas con las opciones de NAS e internet activadas: permisos denegados y recuperación, fuentes superpuestas, audio dañado, SQLite corrupto, invalidación de consultas, progreso/cancelación, metadatos FLAC de 24 bits y decodificación real desde SMB, además de la cobertura anterior.
 
 ## Novedades de la versión 0.5
 
@@ -25,7 +37,7 @@ En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba a
 - Abrir un audio desde Finder lo importa y reproduce. Reproducir/pausar usa `⇧⌘P`, evitando capturar los espacios de la búsqueda. Las copias JSON incorporan sus carátulas y se escriben en segundo plano.
 - Respuestas de proveedores limitadas a 8 MiB y cancelables.
 
-El NAS real del usuario sigue pendiente de validación: debe montarse en Finder o indicarse la dirección `smb://servidor/carpeta`. Las pruebas con directorios locales no sustituyen la prueba de streaming por red. La apertura inicial del decodificador y algunas operaciones del sistema pueden tardar si el servidor no responde.
+En 0.5.1 se realizó una prueba de streaming con un archivo FLAC desde un NAS real montado en Finder. Para usar tu servidor, móntalo en Finder mediante `smb://servidor/carpeta` y añade su carpeta de música. Las pruebas con directorios locales complementan la cobertura de errores y desconexión. La apertura inicial del decodificador y algunas operaciones del sistema pueden tardar si el servidor no responde.
 
 ## Novedades de la versión 0.4
 
@@ -93,7 +105,7 @@ El escáner reconoce MP3, M4A, AAC, AIFF, WAV, FLAC, CAF, MP4 y ALAC; la reprodu
 
 Pulsa **Conectar a un NAS…**, introduce `smb://servidor/recurso` y abre la dirección en Finder. Finder gestiona la autenticación y el montaje; no almacenes contraseñas en la dirección. Después pulsa **Añadir música** y selecciona la carpeta montada en **Ubicaciones** o `/Volumes`.
 
-Prisma recuerda las ubicaciones con bookmarks. Si el NAS está desconectado, conserva la biblioteca y muestra un aviso. Vuelve a montar el recurso en Finder y pulsa Actualizar biblioteca (`⌘R`). No incorpora descubrimiento automático, cliente SMB propio ni almacenamiento de contraseñas. La conexión real con tus NAS queda pendiente de probar con tus servidores.
+Prisma recuerda las ubicaciones con bookmarks. Si el NAS está desconectado, conserva la biblioteca y muestra un aviso. Vuelve a montar el recurso en Finder y pulsa Actualizar biblioteca (`⌘R`). No incorpora descubrimiento automático, cliente SMB propio ni almacenamiento de contraseñas. Se verificó la reproducción de un FLAC desde un NAS SMB real en 0.5.1; otros formatos y la desconexión real durante la reproducción quedan pendientes.
 
 Para quitar una carpeta, clic secundario en su nombre → **Quitar ubicación**. Esto solo elimina su referencia de Prisma; no borra los archivos.
 
@@ -122,6 +134,14 @@ Pruebas de proveedores en internet, opcionales:
 ```bash
 PRISMA_LIVE_NETWORK=1 swift test
 ```
+
+Para repetir la comprobación con un audio de tu NAS ya montado:
+
+```bash
+PRISMA_NAS_FILE="/Volumes/TuNAS/Musica/prueba.flac" PRISMA_LIVE_NETWORK=1 swift test
+```
+
+El archivo se abre solo para lectura y se decodifica mediante renderizado offline, sin modificar el audio ni hacer sonar los altavoces. Sin las variables correspondientes, se omiten las dos pruebas externas.
 
 Las pruebas ordinarias no necesitan internet. También verifican la migración desde 0.1, playlists/cola, persistencia de ajustes y que el ecualizador atenúe una señal real de 1 kHz mediante renderizado offline sin activar los altavoces. Cubren filtros y acentos, parser LRC, lectura de etiquetas y decodificación de tres audios reales, persistencia de edición/favoritos y comportamiento con una ubicación desconectada o archivos borrados.
 

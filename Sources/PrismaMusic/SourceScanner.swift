@@ -28,8 +28,11 @@ final class ScanCancellation: @unchecked Sendable {
     func cancel() { value.store(true,ordering:.relaxed) }
 }
 enum SourceScanner {
-    static func enumerate(_ source:URL,recursive:Bool,cancellation:ScanCancellation = .init()) -> SourceScanReport {
+    static func enumerate(_ source:URL,recursive:Bool,cancellation:ScanCancellation = .init(),progress:(@Sendable (Int)->Void)? = nil) -> SourceScanReport {
+        progress?(0)
+        var lastProgress=Date()
         var report=SourceScanReport(source:source,identity:SourceIdentity.read(source),files:[],complete:true,errors:[])
+        defer { progress?(report.files.count) }
         func record(_ error:Error) { report.complete=false; if report.errors.count < 8 { report.errors.append(error.localizedDescription) } }
         do {
             let root=try source.resourceValues(forKeys:[.isDirectoryKey,.isRegularFileKey,.contentModificationDateKey])
@@ -46,6 +49,7 @@ enum SourceScanner {
             guard let enumerator=FileManager.default.enumerator(at:source,includingPropertiesForKeys:[.isRegularFileKey,.isSymbolicLinkKey,.contentModificationDateKey],options:options,errorHandler:{ _,error in record(error); return !cancellation.isCancelled }) else { throw CocoaError(.fileReadUnknown) }
             while let url=enumerator.nextObject() as? URL {
                 if cancellation.isCancelled { report.complete=false; break }
+                if Date().timeIntervalSince(lastProgress) >= 0.5 { progress?(report.files.count); lastProgress=Date() }
                 do {
                     let values=try url.resourceValues(forKeys:[.isRegularFileKey,.isSymbolicLinkKey,.contentModificationDateKey])
                     if values.isSymbolicLink == true { enumerator.skipDescendants(); continue }

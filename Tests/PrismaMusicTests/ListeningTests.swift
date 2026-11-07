@@ -118,4 +118,39 @@ final class ListeningTests: XCTestCase {
         XCTAssertGreaterThan(flat, 0.01)
         XCTAssertLessThan(eq, flat * 0.5, "The actual processed audio must change, not just the sliders")
     }
+    @MainActor
+    func testMountedNASStreamsAndSeeksWhenRequested() async throws {
+        guard let path=ProcessInfo.processInfo.environment["PRISMA_NAS_FILE"] else { throw XCTSkip("Opt-in mounted NAS streaming check") }
+        let url=URL(fileURLWithPath:path)
+        let track=try await MetadataReader.read(url)
+        XCTAssertEqual(track.sourceIsNetwork,true)
+        XCTAssertGreaterThan(track.duration,10)
+        XCTAssertGreaterThan(track.fileSize ?? 0,1000)
+        XCTAssertGreaterThan(track.bitrate ?? 0,0)
+        let player=try AudioPlayback(contentsOf:url)
+        let format=AVAudioFormat(standardFormatWithSampleRate:48000,channels:2)!
+        try player.engine.enableManualRenderingMode(.offline,format:format,maximumFrameCount:1024)
+        let buffer=AVAudioPCMBuffer(pcmFormat:format,frameCapacity:1024)!
+        func renderEnergy() throws -> Double {
+            var energy=0.0
+            for _ in 0..<60 {
+                if try player.engine.renderOffline(1024,to:buffer) == .success {
+                    for channel in 0..<2 { for index in 0..<Int(buffer.frameLength) { energy += pow(Double(buffer.floatChannelData![channel][index]),2) } }
+                }
+            }
+            return energy
+        }
+        XCTAssertTrue(player.play())
+        XCTAssertGreaterThan(try renderEnergy(),0.01,"Actual audio must decode from the network file")
+        let target=min(30,track.duration/2)
+        player.currentTime=target
+        XCTAssertEqual(player.currentTime,target,accuracy:0.1)
+        XCTAssertGreaterThan(try renderEnergy(),0.01,"Audio must also decode after a seek")
+        player.pause(); XCTAssertFalse(player.isPlaying)
+        XCTAssertTrue(player.play())
+        XCTAssertGreaterThan(try renderEnergy(),0.01)
+        player.stop()
+        print("PRISMA_NAS format=\(track.format ?? "?") rate=\(track.sampleRate ?? 0) bits=\(track.bitDepth ?? 0) bitrate=\(track.bitrate ?? 0) decoded-and-seeked=true")
+    }
+
 }
