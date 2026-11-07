@@ -7,8 +7,8 @@ struct ArtworkView: View {
     private var palette: [Color] { seed == 0 ? [Color(red: 0.10, green: 0.06, blue: 0.24), Color(red: 0.53, green: 0.32, blue: 0.80), .pink] : seed == 1 ? [Color(red: 0.015, green: 0.16, blue: 0.19), .teal, Color(red: 0.61, green: 0.88, blue: 0.81)] : [Color(red: 0.26, green: 0.06, blue: 0.11), Color(red: 0.93, green: 0.37, blue: 0.28), Color(red: 1, green: 0.77, blue: 0.51)] }
     var body: some View {
         GeometryReader { proxy in
-            if let data = track?.artwork {
-                BitmapArtwork(data:data).frame(width:proxy.size.width,height:proxy.size.height).clipped()
+            if let track, track.hasArtwork {
+                BitmapArtwork(track:track,pixels:Int(proxy.size.width * 2)).frame(width:proxy.size.width,height:proxy.size.height).clipped()
             } else {
                 LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing)
                     .overlay {
@@ -213,10 +213,14 @@ struct TrackInfoView: View {
 }
 
 private struct BitmapArtwork: View {
-    var data: Data
+    var track: Track
+    var pixels: Int
     @State private var image: NSImage?
     var body: some View {
         Group { if let image { Image(nsImage:image).resizable().scaledToFill() } else { Color.clear } }
-            .task(id:data) { image = NSImage(data:data) }
+            .task(id:track.artworkIdentity+String(pixels)) {
+                let value=await Task.detached(priority:.utility) { ArtworkCache.shared.image(for:track,pixels:pixels) }.value
+                guard !Task.isCancelled else { return }; image=value
+            }.onDisappear { image=nil }
     }
 }

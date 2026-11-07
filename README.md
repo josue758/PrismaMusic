@@ -1,17 +1,29 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión local **0.4.0** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.5.0** para probar e iterar.
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.4.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.5.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
 
-En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.4. La actualización conserva tus datos.
+En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.5. La actualización conserva tus datos.
+
+## Novedades de la versión 0.5
+
+- Guardado incremental en segundo plano, con transacciones SQLite y consolidación de cambios pendientes. Al salir se espera la escritura; un error impide cerrar sin avisar.
+- Migración desde JSON que conserva una copia `library-v0.4-backup.json`. Una biblioteca dañada muestra un error y bloquea el reemplazo automático.
+- Carátulas compartidas por contenido, reducidas hasta 1024 px. Cachés con objetivos de 8 MiB para datos y 32 MiB para imágenes decodificadas; son límites orientativos de NSCache, no una garantía de RAM total.
+- Filtros, agrupaciones y estadísticas reutilizan resultados mientras no cambien los datos. En pausa se evitan publicaciones continuas de posición y nivel sin cambios.
+- Una lectura incompleta, cancelada o de una ubicación que cambió de identidad conserva las entradas existentes. El escaneo permite cancelar y muestra el estado de cada fuente. No se monta un NAS automáticamente al restaurar bookmarks.
+- Abrir un audio desde Finder lo importa y reproduce. Reproducir/pausar usa `⇧⌘P`, evitando capturar los espacios de la búsqueda. Las copias JSON incorporan sus carátulas y se escriben en segundo plano.
+- Respuestas de proveedores limitadas a 8 MiB y cancelables.
+
+El NAS real del usuario sigue pendiente de validación: debe montarse en Finder o indicarse la dirección `smb://servidor/carpeta`. Las pruebas con directorios locales no sustituyen la prueba de streaming por red. La apertura inicial del decodificador y algunas operaciones del sistema pueden tardar si el servidor no responde.
 
 ## Novedades de la versión 0.4
 
@@ -85,7 +97,7 @@ Para quitar una carpeta, clic secundario en su nombre → **Quitar ubicación**.
 
 ## Datos e internet
 
-La biblioteca y carátulas se guardan en `~/Library/Application Support/PrismaMusic/library.json`; los ajustes de escucha se guardan en `preferences.json` y la sesión pausada en `playback.json`, junto a la biblioteca. El color, idioma, tema y volumen se guardan con el identificador `local.prisma.music`. Se conservan la biblioteca, favoritos y etiquetas de la versión 0.1.
+La biblioteca se guarda de forma incremental en `~/Library/Application Support/PrismaMusic/library.sqlite` (SQLite con WAL) y las carátulas compartidas en `Artwork/`; los ajustes de escucha se guardan en `preferences.json` y la sesión pausada en `playback.json`, junto a la biblioteca. El color, idioma, tema y volumen se guardan con el identificador `local.prisma.music`. Se conservan la biblioteca, favoritos y etiquetas de la versión 0.1.
 
 La opción **Completar desde internet** está activada inicialmente. Envía título y artista a iTunes; título, artista, álbum y duración a LRCLIB. No se envían archivos de audio, rutas locales ni credenciales del NAS. Las búsquedas solo aceptan coincidencia de título/artista para carátulas; las letras usan el endpoint exacto de LRCLIB con duración. La disponibilidad depende del catálogo y de la conexión. Los resultados pueden requerir revisión para versiones en directo o remasterizadas. Se muestra la procedencia de letras y un enlace a iTunes cuando hay carátula en línea.
 
@@ -113,7 +125,7 @@ Las pruebas ordinarias no necesitan internet. También verifican la migración d
 
 ## GitHub
 
-El código se entrega como repositorio Git local con `.gitignore`, pruebas y licencia MIT, listo para publicar. No se ha creado ningún repositorio remoto. Cuando decidas publicarlo, conecta tu cuenta y elige el nombre y la visibilidad. No publiques `library.json` ni tu música personal; no forman parte del proyecto.
+El código se entrega como repositorio Git local con `.gitignore`, pruebas y licencia MIT, preparado para publicar como beta. No se ha creado ningún repositorio remoto. Cuando decidas publicarlo, conecta tu cuenta y elige el nombre y la visibilidad. No publiques archivos de tu biblioteca (`library.sqlite`, `library.json`, `Artwork/`) ni tu música personal; no forman parte del proyecto.
 
 ```bash
 # Si partiste del ZIP, primero: git init -b main; git add .; git commit -m "Initial version"

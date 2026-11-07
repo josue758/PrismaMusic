@@ -42,7 +42,7 @@ final class InteractionTests: XCTestCase {
         store.favorite(tracks[0]); XCTAssertNil(store.feedback)
     }
     @MainActor
-    func testUndoPlaylistRemovalRestoresItsContentsAndPersists() throws {
+    func testUndoPlaylistRemovalRestoresItsContentsAndPersists() async throws {
         let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at:directory) }
         let store=LibraryStore(directory:directory,autoStart:false)
@@ -55,6 +55,7 @@ final class InteractionTests: XCTestCase {
         store.undoFeedback()
         XCTAssertEqual(store.playlists[0].id,playlist.id)
         XCTAssertEqual(store.playlists[0].trackIDs,[track.id])
+        try await store.flushSaving()
         let restored=LibraryStore(directory:directory,autoStart:false)
         XCTAssertEqual(restored.playlists,store.playlists)
         XCTAssertEqual(restored.tracks.count,1)

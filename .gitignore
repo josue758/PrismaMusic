@@ -4,3 +4,7 @@
 *.dmg
 *.zip
 build/
+library.sqlite*
+library.json
+library-v*-backup.json
+Artwork/

@@ -174,7 +174,7 @@ let translations: [String: [String]] = [
  "done": ["Listo", "Done", "Concluído"],
  "name": ["Nombre", "Name", "Nome"],
  "keyboard": ["Teclado", "Keyboard", "Teclado"],
- "versionNew": ["Versión 0.4.0 · Swift + SwiftUI · macOS", "Version 0.4.0 · Swift + SwiftUI · macOS", "Versão 0.4.0 · Swift + SwiftUI · macOS"],
+ "versionNew": ["Versión 0.5.0 · Swift + SwiftUI · macOS", "Version 0.5.0 · Swift + SwiftUI · macOS", "Versão 0.5.0 · Swift + SwiftUI · macOS"],
  "engine": ["Motor AVAudioEngine · EQ → velocidad → salida", "AVAudioEngine · EQ → rate → output", "AVAudioEngine · EQ → velocidade → saída"],
  "settingsSaved": ["Los cambios se guardan automáticamente.", "Changes save automatically.", "As alterações são salvas automaticamente."],
  "formatFilter": ["Todos los formatos", "All formats", "Todos os formatos"],
@@ -226,6 +226,7 @@ let translations: [String: [String]] = [
  "autoTag": ["Etiquetas automáticas", "Automatic tags", "Etiquetas automáticas"], "autoTagNote": ["Lee título, artista, álbum, género y año del archivo. Los originales se conservan.", "Reads title, artist, album, genre and year from each file. Originals are preserved.", "Lê título, artista, álbum, gênero e ano de cada arquivo. Os originais são preservados."],
  "pipNote": ["Ventana flotante para audio, visible en todos los escritorios. No usa el PiP de vídeo de macOS.", "Floating audio window, visible on all desktops. Does not use macOS video PiP.", "Janela flutuante de áudio, visível em todas as mesas. Não usa o PiP de vídeo do macOS."],
  "next": ["Siguiente", "Next", "Próxima"], "previous": ["Anterior", "Previous", "Anterior"],
+ "scanCancelled": ["Lectura cancelada", "Scan cancelled", "Leitura cancelada"],
  "scanErrors": ["Algunos archivos no pudieron leerse", "Some files could not be read", "Alguns arquivos não puderam ser lidos"],
  "sort": ["Ordenar", "Sort", "Ordenar"], "added": ["Orden de importación", "Import order", "Ordem de importação"]
 ]

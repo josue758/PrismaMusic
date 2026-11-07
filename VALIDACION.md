@@ -1,40 +1,41 @@
-# Validación de Prisma Music 0.4.0
+# Validación de Prisma Music 0.5.0
 
-7 de noviembre de 2026. macOS 27.2, Apple Silicon, Xcode 27.2 y Swift 6.4.2.
+7 de noviembre de 2026. Apple Silicon, macOS 27.2, Xcode 27.2, Swift 6.4.2.
 
 ## Resultado
 
-- Compilación de producción completada; aplicación 0.4.0 instalada y abierta desde `/Applications/Prisma Music.app`.
-- Suite: 18 pruebas registradas, 17 aprobadas, 1 omitida y 0 fallos. Se omite la consulta opt-in a internet; los proveedores no cambiaron y fueron verificados en 0.2.
-- Se mantienen las pruebas de audio real de EQ, balance, velocidad y búsqueda temporal, la extracción de paletas y la migración de biblioteca/preferencias.
+Compilación de producción, empaquetado DMG y verificación de firma ad hoc completados. Actualizada en `/Applications/Prisma Music.app`.
 
-## Comprobaciones en la aplicación instalada
+22 pruebas aprobadas, 0 omitidas y 0 fallos con `PRISMA_LIVE_NETWORK=1 swift test`. Incluye consultas reales de carátula a iTunes y letras a LRCLIB; su disponibilidad futura depende de esos proveedores.
 
-Se revisaron la biblioteca, la barra de reproducción y la transición hacia Escuchando. Se observó el indicador de sección y la carátula dentro de los límites de la vista.
+## Correcciones verificadas
 
-Se marcó Órbita como favorita y se observó el aviso Añadida a favoritos con Deshacer. Al pulsar Deshacer, el corazón volvió al estado anterior y apareció Cambio deshecho. No quedó un favorito de prueba en la biblioteca.
+- Biblioteca SQLite incremental: una modificación de favorito cambia un solo registro en una biblioteca de 100 canciones. Transacciones y guardado serial en segundo plano; consolidación de cambios pendientes. El cierre espera el guardado y avisa si falla.
+- Migración de JSON con carátulas embebidas: conserva canciones y favoritos, crea una copia del JSON original y comparte un solo archivo de imagen entre las 100 canciones que usan la misma carátula. Los registros cargados no conservan los bytes de imagen.
+- Una biblioteca JSON corrupta genera un error y conserva exactamente sus bytes originales. La app bloquea el guardado automático de biblioteca tras un fallo de carga.
+- Pruebas de carpeta incompleta, cancelación, ruta inexistente, cambio de identidad y límite de subcarpetas. Una ubicación local desconectada conserva la biblioteca; eliminar un audio de una ubicación disponible permite retirarlo de la colección.
+- Persistencia de 10.000 registros y 20 cambios consecutivos: al recargar aparecen 10.000 canciones y el último cambio. Escritura inicial aproximada de 0,10 s en una ejecución de desarrollo; no incluye lectura de audio ni red y no es un SLA.
+- Cachés compartidas con objetivos de 8 MiB de datos comprimidos y 32 MiB de imágenes; miniaturas de hasta 1024 px. NSCache administra estos objetivos de forma orientativa. Filtros, agrupaciones y estadísticas se invalidan cuando cambian los datos correspondientes.
 
-Se utilizó la acción accesible Decrement de la nueva barra temporal: la posición pasó del final de la pista a aproximadamente 19 segundos. Increment la devolvió al final. Se comprobaron su etiqueta, valor temporal, ayuda y las acciones Increment/Decrement. El control ofrece previsualización bajo el cursor y arrastre mediante gestos nativos; la validación automatizada de UI de esta sesión utilizó las acciones accesibles, no una medición de precisión del arrastre.
+## Comprobación de interfaz instalada
 
-Se dejó abierta la vista de escucha. No se cambiaron las preferencias globales de accesibilidad del Mac.
+Se abrió la biblioteca migrada con las tres demos existentes; se reprodujo Órbita y se observó el avance temporal. El panel de información mostró M4A/AAC, aproximadamente 70 kb/s, 212.948 bytes, 22,05 kHz y mono. Se escribió «Prisma Sessions» con espacio y se obtuvo una canción; se limpió la búsqueda. Se abrieron Ajustes → Sonido y Biblioteca y se ejecutó la relectura de etiquetas. Se cerró la app sin alerta de error.
 
-## Pruebas nuevas
+Medición puntual con `ps` tras estas acciones y con la app en reposo: RSS 177.824 KiB (~174 MiB), CPU 0,3 %. Durante reproducción y efectos el consumo aumenta. No se ha medido una biblioteca real grande del usuario ni se garantiza ese consumo en otros equipos.
 
-- El reloj visual acumula únicamente el tiempo activo. Pausar, esperar y reanudar no cambia la fase; iniciar o detener repetidamente no la reinicia.
-- Deshacer rechaza el identificador de un aviso antiguo y solo revierte la acción vigente. Si la reproducción ya avanzó a la canción añadida, deshacer la cola conserva la canción activa.
-- Deshacer una eliminación de playlist recupera su identidad, contenido y posición y lo conserva al volver a cargar la biblioteca.
-- La migración agrega las preferencias nuevas de interacción, profundidad y avisos sin cambiar el EQ, la velocidad, la pantalla de inicio ni los ajustes anteriores.
+Las pruebas conservadas cubren audio renderizado con EQ, balance estéreo, velocidad y seek; filtros y acentos; LRC; metadatos; favoritos; edición; playlists; cola; temporizador; migraciones; paletas y contraste; reloj visual y Deshacer. No constituyen una comprobación exhaustiva de cada botón en cada estado.
 
-## Cobertura conservada
+## NAS pendiente
 
-Filtros y acentos; LRC; metadatos y propiedades técnicas de tres M4A reales; favoritos y etiquetas editadas; ubicaciones desconectadas y archivos borrados; consultas codificadas a proveedores; playlists, cola y temporizador; migración desde 0.1; paletas dominantes, imágenes monocromas/transparentes y contraste de referencia; EQ real con una señal de 1 kHz; y M4A/AAC mono a 22,05 kHz procesado a 1,25× con conversión estéreo, balance y salto a una posición concreta.
+No se encontró un volumen SMB/AFP/NFS montado ni se recibió dirección del servidor. La exploración SMB únicamente mostró este Mac. Las pruebas de desconexión usan carpetas locales y no acreditan reproducción desde un NAS real.
 
-## Movimiento y accesibilidad
+Para completar la prueba:
 
-Las animaciones de interacción son independientes del movimiento ambiental. Reducir movimiento suprime escala, paralaje y desplazamientos de transición. La barra permite ajuste de cinco segundos con flechas sin modificadores, conserva los comandos con Comando y ofrece acciones accesibles de incremento/decremento. La posición de arrastre se confirma al soltar; no se reinicia el motor por cada movimiento del cursor.
+1. Finder → Ir → Conectarse al servidor (`⌘K`), introducir `smb://servidor/carpeta` e iniciar sesión en Finder sin compartir contraseñas en el chat.
+2. En Prisma, Añadir música → elegir la carpeta montada en Ubicaciones.
+3. Reproducir archivos de varios formatos, avanzar y retroceder, saltar de pista y comprobar las propiedades.
+4. Desconectar la ubicación, volver a leer y comprobar que las canciones existentes se conservan; reconectar y repetir reproducción y lectura.
 
-Los efectos de hover y las ramas de accesibilidad se revisaron en código y compilan con el SDK nativo. No se realizó una medición de FPS/GPU ni una auditoría completa de accesibilidad; no se afirma que esas comprobaciones estén completadas.
+## Alcance de publicación
 
-## Límites
-
-Queda pendiente la conexión con los NAS del usuario, la prueba de colecciones grandes y de todos sus formatos y la validación en otros Mac. El paquete es arm64, requiere macOS 26+, tiene firma ad hoc y no está notarizado. No incluye modo exclusivo, garantía bit-perfect, crossfade ni ReplayGain. El minirreproductor sigue siendo una ventana flotante para audio. Las etiquetas editadas se guardan en la biblioteca sin modificar los originales.
+El código se puede compartir como beta con estas limitaciones documentadas. No se publicó un remoto GitHub. El DMG es arm64 y está firmado ad hoc; falta Developer ID y notarización para distribución pública convencional. La apertura inicial del decodificador y llamadas del sistema pueden tardar ante un servidor que no responde. No hay garantía de cero errores, validación de NAS real, pruebas en Intel ni batería completa de accesibilidad/teclado en todos los estados. Las etiquetas editadas se guardan en Prisma, no modifican los audios originales. Las copias JSON exportadas contienen metadatos, carátulas y rutas, no audio; no existe restauración guiada desde la interfaz.

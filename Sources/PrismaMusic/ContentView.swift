@@ -151,7 +151,7 @@ struct ContentView: View {
                     }.padding(3).padding(.bottom, 20)
                 }.scrollIndicators(.hidden).clipped()
             }
-            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini) }; Text(store.status.isEmpty ? store.t("ready") : store.status).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 04").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
+            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini) }; Text(store.status.isEmpty ? store.t("ready") : store.status).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 05").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     private var hero: some View {
@@ -184,9 +184,9 @@ struct ContentView: View {
     }
     private var filterBar: some View {
         HStack(spacing: 8) {
-            filterMenu("allArtists", selection: $store.artist, values: Array(Set(store.tracks.map(\.artist))).sorted())
-            filterMenu("allGenres", selection: $store.genre, values: Array(Set(store.tracks.map(\.genre))).sorted())
-            filterMenu("allYears", selection: $store.year, values: Array(Set(store.tracks.map(\.year).filter { !$0.isEmpty })).sorted().reversed())
+            filterMenu("allArtists", selection: $store.artist, values: store.statistics.artists)
+            filterMenu("allGenres", selection: $store.genre, values: store.statistics.genres)
+            filterMenu("allYears", selection: $store.year, values: store.statistics.years)
             Spacer(minLength: 0)
             Menu { Picker(store.t("sort"), selection: $store.sort) { ForEach(["title", "artist", "album", "year"], id: \.self) { Text(store.t($0)).tag($0) } } } label: { Image(systemName: "arrow.up.arrow.down") }.menuStyle(.borderlessButton).fixedSize().help(store.t("sort"))
             if !store.artist.isEmpty || !store.genre.isEmpty || !store.year.isEmpty { Button { store.clearFilters() } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).help(store.t("clear")) }
@@ -196,7 +196,7 @@ struct ContentView: View {
         Menu { Button(store.t(key)) { selection.wrappedValue = "" }; Divider(); ForEach(values, id: \.self) { value in Button(value) { selection.wrappedValue = value } } } label: { Text(selection.wrappedValue.isEmpty ? store.t(key) : selection.wrappedValue).font(.system(size: 10)).lineLimit(1).padding(.horizontal, 12).padding(.vertical, 9) }.menuStyle(.borderlessButton).prismaGlass(18).fixedSize()
     }
     private func albumGrid(limit: Int?) -> some View {
-        let groups = Dictionary(grouping: store.filtered) { $0.artist + "\u{1f}" + $0.album }.sorted { $0.key < $1.key }
+        let groups = store.groupedAlbums
         let width: CGFloat = store.preferences.albumSize == "small" ? 140 : store.preferences.albumSize == "large" ? 240 : 185
         return LazyVGrid(columns: limit == nil ? [GridItem(.adaptive(minimum: width), spacing: 16)] : Array(repeating: GridItem(.flexible(), spacing: 16), count: min(3, max(1, groups.count))), spacing: 18) {
             ForEach(Array(groups.prefix(limit ?? groups.count)), id: \.key) { group in
@@ -205,7 +205,7 @@ struct ContentView: View {
         }
     }
     private var artistGrid: some View {
-        let groups = Dictionary(grouping: store.filtered, by: \.artist).sorted { $0.key < $1.key }
+        let groups = store.groupedArtists
         return LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 18) {
             ForEach(groups, id: \.key) { group in
                 Button { store.artist = group.key; store.section = "songs" } label: { VStack(spacing: 14) { ArtworkView(track: group.value.first).frame(width: 105, height: 105).clipShape(Circle()); Text(group.key).font(.system(size: 13, weight: .medium)).lineLimit(1); Text("\(group.value.count) \(store.t("count"))").font(.system(size: 10)).foregroundStyle(.secondary) }.padding(22).frame(maxWidth: .infinity).prismaGlass(22) }.buttonStyle(.plain)

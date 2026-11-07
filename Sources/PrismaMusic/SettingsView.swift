@@ -21,7 +21,7 @@ struct SettingsView: View {
                             }
                         }
                         Spacer()
-                        VStack(alignment: .leading, spacing: 7) { HStack(spacing: 5) { Circle().fill(.mint).frame(width: 5, height: 5); Text("PRISMA ENGINE").font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(1) }; Text("0.4 / macOS").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary) }.padding(10)
+                        VStack(alignment: .leading, spacing: 7) { HStack(spacing: 5) { Circle().fill(.mint).frame(width: 5, height: 5); Text("PRISMA ENGINE").font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(1) }; Text("0.5 / macOS").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary) }.padding(10)
                     }.padding(14).frame(width: 203).prismaGlass(24)
                     VStack(alignment: .leading, spacing: 20) {
                         HStack(alignment: .top) {
@@ -42,7 +42,7 @@ struct SettingsView: View {
                                 }
                             }.padding(2).padding(.bottom, 16)
                         }.scrollIndicators(.hidden).clipped()
-                        HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint); Text(store.t("settingsSaved")); Spacer(); Text("PRISMA / 04").font(.system(size: 8, design: .monospaced)).tracking(1) }.font(.system(size: 10)).foregroundStyle(.secondary)
+                        HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint); Text(store.t("settingsSaved")); Spacer(); Text("PRISMA / 05").font(.system(size: 8, design: .monospaced)).tracking(1) }.font(.system(size: 10)).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity)
                 }.padding(20)
             }
@@ -102,10 +102,11 @@ struct SettingsView: View {
             card {
                 HStack { SectionHeading(title: store.t("sources")); Spacer(); Button { store.pickMusic() } label: { Image(systemName: "plus") }.buttonStyle(.glass).disabled(store.scanning) }
                 ForEach(store.sources) { source in
-                    HStack(spacing: 10) { Image(systemName: source.url.path.hasPrefix("/Volumes") ? "externaldrive.connected.to.line.below" : "folder").foregroundStyle(store.effectiveAccent); VStack(alignment: .leading, spacing: 4) { Text(source.name).font(.system(size: 12, weight: .medium)); Text(source.url.path).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }; Spacer(); Button { NSWorkspace.shared.activateFileViewerSelecting([source.url]) } label: { Image(systemName: "arrow.up.forward") }.buttonStyle(.plain).help(store.t("reveal")); Button { store.removeSource(source) } label: { Image(systemName: "minus.circle") }.buttonStyle(.plain).foregroundStyle(.secondary).disabled(store.scanning).help(store.t("removeSource")) }.padding(.vertical, 4)
+                    HStack(spacing: 10) { Image(systemName: source.url.path.hasPrefix("/Volumes") ? "externaldrive.connected.to.line.below" : "folder").foregroundStyle(store.effectiveAccent); VStack(alignment: .leading, spacing: 4) { Text(source.name).font(.system(size: 12, weight: .medium)); Text(store.t(store.sourceStates[source.id] ?? "ready")).font(.system(size:9)).foregroundStyle(.secondary); Text(source.url.path).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }; Spacer(); Button { NSWorkspace.shared.activateFileViewerSelecting([source.url]) } label: { Image(systemName: "arrow.up.forward") }.buttonStyle(.plain).help(store.t("reveal")); Button { store.removeSource(source) } label: { Image(systemName: "minus.circle") }.buttonStyle(.plain).foregroundStyle(.secondary).disabled(store.scanning).help(store.t("removeSource")) }.padding(.vertical, 4)
                 }
                 Divider(); toggle("startScan", $store.scanOnLaunch); toggle("recursive", $store.preferences.recursiveScan)
                 Button { Task { await store.scan(force: true) } } label: { Label(store.scanning ? store.t("reading") : store.t("rescan"), systemImage: "arrow.clockwise") }.buttonStyle(.glass).disabled(store.scanning)
+                if store.scanning { Button { store.cancelScan() } label: { Label(store.t("cancel"),systemImage:"stop.circle") }.buttonStyle(.glass) }
                 Text(store.t("rescanNote")).font(.caption).foregroundStyle(.secondary)
             }
             card {
@@ -119,7 +120,7 @@ struct SettingsView: View {
         VStack(spacing: 16) {
             card { SectionHeading(title: store.t("online")); toggle("online", $store.online); toggle("autoArtwork", $store.preferences.autoArtwork); toggle("autoLyrics", $store.preferences.autoLyrics); Divider(); Text(store.t("privacy")).font(.caption).foregroundStyle(.secondary); HStack { Link("iTunes ↗", destination: URL(string: "https://performance-partners.apple.com/search-api")!); Link("LRCLIB ↗", destination: URL(string: "https://lrclib.net/docs")!) }.font(.caption) }
             card { Label(store.t("localFirst"), systemImage: "checkmark.shield").font(.system(size: 14, weight: .semibold)); Text(store.t("localFirstNote")).font(.caption).foregroundStyle(.secondary) }
-            card { SectionHeading(title: store.t("cache")); HStack(spacing: 30) { metric("\(store.tracks.filter { $0.artwork != nil }.count)", store.t("withArtwork")); metric("\(store.tracks.filter { $0.lyrics != nil }.count)", store.t("withLyrics")); metric("\(store.playlists.count)", store.t("playlists")) }; Button(store.t("dataFolder")) { store.showDataFolder() }.buttonStyle(.glass) }
+            card { SectionHeading(title: store.t("cache")); HStack(spacing: 30) { metric("\(store.statistics.withArtwork)", store.t("withArtwork")); metric("\(store.statistics.withLyrics)", store.t("withLyrics")); metric("\(store.playlists.count)", store.t("playlists")) }; Button(store.t("dataFolder")) { store.showDataFolder() }.buttonStyle(.glass) }
         }
     }
     private var appearance: some View {
@@ -178,7 +179,7 @@ struct SettingsView: View {
         VStack(spacing: 16) {
             card {
                 SectionHeading(title: store.t("keyboard"))
-                ForEach([("add", "⌘ O"), ("fileInfo", "⌘ I"), ("scan", "⌘ R"), ("play", "Space"), ("next", "⌘ →"), ("previous", "⌘ ←"), ("mini", "⇧ ⌘ M"), ("full", "⌃ ⌘ F"), ("settings", "⌘ ,")], id: \.0) { item in HStack { Text(store.t(item.0)).font(.system(size: 12)); Spacer(); Text(item.1).font(.system(size: 11, design: .monospaced)).padding(.horizontal, 9).padding(.vertical, 5).background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6)) } }
+                ForEach([("add", "⌘ O"), ("fileInfo", "⌘ I"), ("scan", "⌘ R"), ("play", "⇧ ⌘ P"), ("next", "⌘ →"), ("previous", "⌘ ←"), ("mini", "⇧ ⌘ M"), ("full", "⌃ ⌘ F"), ("settings", "⌘ ,")], id: \.0) { item in HStack { Text(store.t(item.0)).font(.system(size: 12)); Spacer(); Text(item.1).font(.system(size: 11, design: .monospaced)).padding(.horizontal, 9).padding(.vertical, 5).background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6)) } }
             }
             card { Text("PRISMA MUSIC").font(.system(size: 20, weight: .light, design: .rounded)).tracking(4); Text(store.t("versionNew")).font(.caption).foregroundStyle(.secondary); Text(store.t("engine")).font(.caption).foregroundStyle(.secondary); Text(store.t("tagNote")).font(.caption).foregroundStyle(.secondary) }
         }

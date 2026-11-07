@@ -13,7 +13,7 @@ final class ListeningTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(ListeningPreferences.self, from: JSONEncoder().encode(p)), p)
     }
     @MainActor
-    func testPlaylistsQueueAndPreferencesPersist() throws {
+    func testPlaylistsQueueAndPreferencesPersist() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = LibraryStore(directory: directory, autoStart: false)
@@ -25,6 +25,7 @@ final class ListeningTests: XCTestCase {
         store.section = "playlist:\(playlist.id)"; XCTAssertEqual(store.filtered.map(\.id), [a.id,b.id])
         store.removeFromPlaylist(a); XCTAssertEqual(store.filtered.map(\.id), [b.id])
         store.preferences.eqEnabled = true; store.preferences.selectPreset("jazz"); store.preferences.lyricsOffset = 1.2
+        try await store.flushSaving()
         let restored = LibraryStore(directory: directory, autoStart: false)
         XCTAssertEqual(restored.preferences.eqGains, ListeningPreferences.presets["jazz"])
         XCTAssertEqual(restored.preferences.lyricsOffset, 1.2)
@@ -39,7 +40,7 @@ final class ListeningTests: XCTestCase {
         store.setSleepTimer(minutes: nil); XCTAssertNil(store.sleepDeadline)
     }
     @MainActor
-    func testVersionOneLibraryMigratesWithoutLosingTags() throws {
+    func testVersionOneLibraryMigratesWithoutLosingTags() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -55,6 +56,7 @@ final class ListeningTests: XCTestCase {
         XCTAssertTrue(store.tracks[0].favorite)
         XCTAssertTrue(store.playlists.isEmpty)
         store.createPlaylist("Nueva")
+        try await store.flushSaving()
         let restored = LibraryStore(directory: directory, autoStart: false)
         XCTAssertEqual(restored.tracks[0].genre, "Jazz")
         XCTAssertEqual(restored.playlists[0].name, "Nueva")

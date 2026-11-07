@@ -11,6 +11,10 @@ struct Track: Identifiable, Codable, Equatable, Sendable {
     var year: String
     var duration: Double
     var artwork: Data?
+    var artworkURL: URL? = nil
+    var hasArtwork: Bool { artwork != nil || artworkURL != nil }
+    var artworkData: Data? { artwork ?? artworkURL.flatMap { ArtworkCache.shared.data(at:$0) } }
+    var artworkIdentity: String { artworkURL?.absoluteString ?? (id+":"+String(artwork?.count ?? 0)) }
     var lyrics: String?
     var artworkCredit: String?
     var lyricsCredit: String?
@@ -28,7 +32,7 @@ struct Track: Identifiable, Codable, Equatable, Sendable {
     var qualitySummary: String { [format, bitrate.map { "≈\(Int(($0 / 1000).rounded())) kb/s" }].compactMap { $0 }.joined(separator: " · ") }
     var isDemo: Bool { url.path.contains("/Demo/") }
 }
-struct MusicSource: Identifiable, Codable {
+struct MusicSource: Identifiable, Codable, Equatable, Sendable {
     var id = UUID()
     var url: URL
     var bookmark: Data?

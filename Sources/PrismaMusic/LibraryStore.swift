@@ -6,13 +6,15 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class LibraryStore: NSObject, ObservableObject {
-    @Published var tracks: [Track] = [] { didSet { refreshArtworkPalette() } }
+    @Published var tracks: [Track] = [] { didSet { invalidateLibraryCaches(); refreshArtworkPalette() } }
     @Published var sources: [MusicSource] = []
     @Published var currentID: String? { didSet { refreshArtworkPalette() } }
     @Published var isPlaying = false
     @Published var position = 0.0
     @Published var level = 0.0
-    @Published var scanning = false
+    @Published private(set) var loading = true
+    @Published private(set) var scanning = false
+    @Published private(set) var sourceStates:[UUID:String]=[:]
     @Published var status = ""
     @Published var error: String?
     @Published var search = ""
@@ -32,7 +34,7 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var showInfo = false
     @Published var inspectedID: String?
     @Published var fetching = false
-    @Published var playlists: [Playlist] = []
+    @Published var playlists: [Playlist] = [] { didSet { queryCache=nil } }
     @Published var sleepDeadline: Date?
     @Published var sleepRemaining = 0
     @Published var stopAfterCurrent = false
@@ -50,10 +52,21 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var scanOnLaunch = true { didSet { UserDefaults.standard.set(scanOnLaunch, forKey: "scanOnLaunch") } }
     private var paletteTask: Task<Void, Never>?
     private var paletteTrackID: String?
-    private var paletteArtwork: Data?
+    private var paletteArtworkID:String?
+    private let persistence:LibraryPersistence
+    private var saveBlocked=false
+    private var readyTask:Task<Void,Never>?
+    private var scanTask:Task<Void,Never>?
+    private var scanCancellation=ScanCancellation()
+    private var trackIndex:[String:Int]?
+    private var queueIndexCache:[String:Int]?
+    private var statisticsCache:LibraryStatistics?
+    private var queryCache:LibraryQueryCache?
+    private var revision=0
+    private var lastQueryKey:LibraryQueryKey?
     private var player: AudioPlayback?
     private var timer: Timer?
-    @Published var queue: [String] = []
+    @Published var queue: [String] = [] { didSet { queueIndexCache=nil } }
     private var activity: NSObjectProtocol?
     private var lastRememberedSecond = -1
     private var savedPlayback: (String, Double)?
@@ -63,51 +76,73 @@ final class LibraryStore: NSObject, ObservableObject {
     private var enrichmentTask: Task<Void, Never>?
     private var edited: Set<String> = []
     private let dataDirectory: URL
-    var current: Track? { tracks.first { $0.id == currentID } }
-    var visualTrack: Track? { current ?? tracks.first }
-    var effectiveAccent: Color {
-        guard preferences.adaptiveArtwork, visualTrack != nil else { return accent.color }
-        let dark = colorScheme == .dark || (colorScheme == nil && NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
-        return artworkPalette.primary.readable(onDark: dark).color
+    func track(for id:String) -> Track? {
+        if trackIndex == nil { trackIndex=Dictionary(tracks.indices.map { (tracks[$0].id,$0) },uniquingKeysWith:{ _,last in last }) }
+        guard let index=trackIndex?[id], tracks.indices.contains(index) else { return nil }; return tracks[index]
+    }
+    var current:Track? { currentID.flatMap { track(for:$0) } }
+    var visualTrack:Track? { current ?? tracks.first }
+    var effectiveAccent:Color {
+        guard preferences.adaptiveArtwork,visualTrack != nil else { return accent.color }
+        let dark=colorScheme == .dark || (colorScheme == nil && NSApp.effectiveAppearance.bestMatch(from:[.darkAqua,.aqua]) == .darkAqua)
+        return artworkPalette.primary.readable(onDark:dark).color
     }
     private func refreshArtworkPalette() {
-        let track = visualTrack
-        guard paletteTrackID != track?.id || paletteArtwork != track?.artwork else { return }
-        paletteTrackID = track?.id; paletteArtwork = track?.artwork; paletteTask?.cancel()
-        let fallback = ArtworkPalette.fallback(album: track?.album ?? "Prisma")
-        guard let data = track?.artwork else { artworkPalette = fallback; return }
-        let id = track?.id
-        paletteTask = Task { [weak self] in
-            let palette = await Task.detached(priority: .utility) { ArtworkPalette.extract(data, fallback: fallback) }.value
-            guard !Task.isCancelled, let self, self.paletteTrackID == id, self.paletteArtwork == data else { return }
-            self.artworkPalette = palette
+        let track=visualTrack
+        let artworkID=track?.hasArtwork == true ? track?.artworkIdentity : nil
+        guard paletteTrackID != track?.id || paletteArtworkID != artworkID else { return }
+        paletteTrackID=track?.id; paletteArtworkID=artworkID; paletteTask?.cancel()
+        let fallback=ArtworkPalette.fallback(album:track?.album ?? "Prisma")
+        guard let track,track.hasArtwork else { artworkPalette=fallback; return }
+        paletteTask=Task { [weak self] in
+            let palette=await Task.detached(priority:.utility) { track.artworkData.map { ArtworkPalette.extract($0,fallback:fallback) } ?? fallback }.value
+            guard !Task.isCancelled,let self,self.paletteTrackID == track.id,self.paletteArtworkID == artworkID else { return }
+            self.artworkPalette=palette
         }
     }
-    var colorScheme: ColorScheme? { theme == "dark" ? .dark : theme == "light" ? .light : nil }
-    var queuedTracks: [Track] { queue.compactMap { id in tracks.first { $0.id == id } } }
-    var albumCount: Int { Set(tracks.map { $0.artist + "|" + $0.album }).count }
-    var artistCount: Int { Set(tracks.map(\.artist)).count }
-    var libraryBytes: Int64 { tracks.reduce(0) { $0 + ($1.fileSize ?? 0) } }
-    var totalDuration: Double { tracks.reduce(0) { $0 + $1.duration } }
-    var filtered: [Track] {
-        var base = tracks
-        if section == "lossless" { base = base.filter(\.isLossless) }
-        if section.hasPrefix("playlist:"), let id = UUID(uuidString: String(section.dropFirst(9))), let list = playlists.first(where: { $0.id == id }) { base = list.trackIDs.compactMap { id in tracks.first { $0.id == id } } }
-        let result = LibraryQuery.filter(base, search: search, artist: artist, genre: genre, year: year, favorites: section == "favorites")
-        if section == "recent" { return result.filter { $0.lastPlayed != nil }.sorted { ($0.lastPlayed ?? .distantPast) > ($1.lastPlayed ?? .distantPast) } }
-        if section.hasPrefix("playlist:") { return result }
-        return result.sorted { a, b in
-            let x: String; let y: String
-            switch sort { case "artist": x = a.artist + a.album + a.title; y = b.artist + b.album + b.title
-            case "album": x = a.album + a.title; y = b.album + b.title
-            case "year": x = a.year + a.title; y = b.year + b.title
-            default: x = a.title; y = b.title }
-            return x.localizedStandardCompare(y) == .orderedAscending
-        }
+    var colorScheme:ColorScheme? { theme == "dark" ? .dark : theme == "light" ? .light : nil }
+    var queuedTracks:[Track] { queue.compactMap { track(for:$0) } }
+    func queueIndex(_ id:String) -> Int? {
+        if queueIndexCache == nil { queueIndexCache=Dictionary(queue.enumerated().map { ($0.element,$0.offset) },uniquingKeysWith:{ first,_ in first }) }
+        return queueIndexCache?[id]
     }
+    private func invalidateLibraryCaches() { revision += 1; trackIndex=nil; statisticsCache=nil; queryCache=nil }
+    var statistics:LibraryStatistics {
+        if let statisticsCache { return statisticsCache }
+        let value=LibraryStatistics(tracks:tracks); statisticsCache=value; return value
+    }
+    var albumCount:Int { statistics.albumCount }
+    var artistCount:Int { statistics.artists.count }
+    var libraryBytes:Int64 { statistics.bytes }
+    var totalDuration:Double { statistics.duration }
+    private var results:LibraryQueryCache {
+        let key=LibraryQueryKey(revision:revision,search:search,artist:artist,genre:genre,year:year,section:section,sort:sort)
+        if let queryCache,lastQueryKey == key { return queryCache }
+        var base=tracks
+        if section == "lossless" { base=base.filter(\.isLossless) }
+        if section.hasPrefix("playlist:"),let id=UUID(uuidString:String(section.dropFirst(9))),let list=playlists.first(where:{ $0.id == id }) { base=list.trackIDs.compactMap { track(for:$0) } }
+        var value=LibraryQuery.filter(base,search:search,artist:artist,genre:genre,year:year,favorites:section == "favorites")
+        if section == "recent" { value=value.filter { $0.lastPlayed != nil }.sorted { ($0.lastPlayed ?? .distantPast) > ($1.lastPlayed ?? .distantPast) } }
+        else if !section.hasPrefix("playlist:") {
+            value.sort { a,b in
+                let x:String; let y:String
+                switch sort { case "artist": x=a.artist+a.album+a.title; y=b.artist+b.album+b.title
+                case "album": x=a.album+a.title; y=b.album+b.title
+                case "year": x=a.year+a.title; y=b.year+b.title
+                default: x=a.title; y=b.title }
+                return x.localizedStandardCompare(y) == .orderedAscending
+            }
+        }
+        let cache=LibraryQueryCache(tracks:value); queryCache=cache; lastQueryKey=key; return cache
+    }
+    var filtered:[Track] { results.tracks }
+    var groupedAlbums:[(key:String,value:[Track])] { results.albums }
+    var groupedArtists:[(key:String,value:[Track])] { results.artists }
+    func displayIndex(_ id:String) -> Int { results.indices[id] ?? 0 }
     func t(_ key: String) -> String { translations[key]?[language == .es ? 0 : language == .en ? 1 : 2] ?? key }
     init(directory: URL? = nil, autoStart: Bool = true) {
         dataDirectory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("PrismaMusic")
+        persistence=LibraryPersistence(directory:dataDirectory)
         super.init()
         let defaults = UserDefaults.standard
         language = AppLanguage(rawValue: defaults.string(forKey: "language") ?? "es") ?? .es
@@ -116,57 +151,71 @@ final class LibraryStore: NSObject, ObservableObject {
         online = defaults.object(forKey: "online") as? Bool ?? true
         scanOnLaunch = defaults.object(forKey: "scanOnLaunch") as? Bool ?? true
         volume = defaults.object(forKey: "volume") as? Float ?? 0.7
-        do { try FileManager.default.createDirectory(at: dataDirectory, withIntermediateDirectories: true) } catch { self.error = error.localizedDescription }
-        if let data = try? Data(contentsOf: dataDirectory.appendingPathComponent("library.json")), let saved = try? JSONDecoder().decode(SavedLibrary.self, from: data) {
-            tracks = saved.tracks; sources = saved.sources; edited = Set(saved.edited); playlists = saved.playlists ?? []
-        } else if autoStart, let demo = Bundle.module.url(forResource: "Demo", withExtension: nil) {
-            sources = [MusicSource(url: demo)]
+        if let data=try? Data(contentsOf:dataDirectory.appendingPathComponent("preferences.json")),var prefs=try? JSONDecoder().decode(ListeningPreferences.self,from:data) { prefs.sanitize(); preferences=prefs }
+        section=preferences.startSection == "immersive" ? "home" : preferences.startSection
+        showImmersive=preferences.startSection == "immersive"
+        if preferences.rememberPosition,let data=try? Data(contentsOf:dataDirectory.appendingPathComponent("playback.json")),let saved=try? JSONDecoder().decode(PlaybackBookmark.self,from:data) { savedPlayback=(saved.id,saved.position) }
+        persistence.setErrorHandler { [weak self] message in Task { @MainActor in self?.error=message } }
+        if autoStart {
+            timer=Timer.scheduledTimer(withTimeInterval:1.0/30,repeats:true) { [weak self] _ in Task { @MainActor in self?.tick() } }
+            setupRemoteCommands()
+            readyTask=Task { [weak self] in
+                guard let self else { return }
+                do {
+                    let persistence=self.persistence
+                    let snapshot=try await Task.detached(priority:.utility) { try persistence.load() }.value
+                    applyLoaded(snapshot,includeDemo:true)
+                } catch { saveBlocked=true; self.error=error.localizedDescription }
+                loading=false
+                if !saveBlocked && (scanOnLaunch || tracks.isEmpty) { await scan() }
+                if let (id,time)=savedPlayback,let track=track(for:id) {
+                    do { let audio=try makePlayer(track); audio.currentTime=time; player=audio; currentID=id; position=min(track.duration,audio.currentTime); queue=filtered.map(\.id); updateNowPlaying() } catch { status=t("offline") }
+                }
+            }
+        } else {
+            do { applyLoaded(try persistence.load(),includeDemo:false) } catch { saveBlocked=true; self.error=error.localizedDescription }
+            loading=false
         }
-        if let data = try? Data(contentsOf: dataDirectory.appendingPathComponent("preferences.json")), var prefs = try? JSONDecoder().decode(ListeningPreferences.self, from: data) {
-            prefs.sanitize(); preferences = prefs
-        }
-        section = preferences.startSection == "immersive" ? "home" : preferences.startSection
-        showImmersive = preferences.startSection == "immersive"
-        if preferences.rememberPosition, let data = try? Data(contentsOf: dataDirectory.appendingPathComponent("playback.json")), let saved = try? JSONDecoder().decode(PlaybackBookmark.self, from: data) { savedPlayback = (saved.id, saved.position) }
-        if let demo = Bundle.module.url(forResource: "Demo", withExtension: nil) {
+    }
+    private func applyLoaded(_ snapshot:LibrarySnapshot?,includeDemo:Bool) {
+        if let snapshot { tracks=snapshot.tracks; sources=snapshot.sources; edited=Set(snapshot.edited); playlists=snapshot.playlists ?? [] }
+        else if includeDemo,let demo=Bundle.module.url(forResource:"Demo",withExtension:nil) { sources=[MusicSource(url:demo)] }
+        if let demo=Bundle.module.url(forResource:"Demo",withExtension:nil) {
             for index in sources.indices where sources[index].url.path.contains("PrismaMusic_PrismaMusic.bundle") {
-                let previous = sources[index].url
-                sources[index].url = demo
+                let previous=sources[index].url; sources[index].url=demo
                 if previous != demo {
-                    for i in tracks.indices where tracks[i].url.deletingLastPathComponent().standardizedFileURL == previous.standardizedFileURL {
-                        tracks[i].url = demo.appendingPathComponent(tracks[i].url.lastPathComponent)
-                    }
+                    var remapped=tracks
+                    for i in remapped.indices where remapped[i].url.deletingLastPathComponent().standardizedFileURL == previous.standardizedFileURL { remapped[i].url=demo.appendingPathComponent(remapped[i].url.lastPathComponent) }
+                    tracks=remapped
                 }
             }
         }
         for index in sources.indices {
-            if let data = sources[index].bookmark {
-                var stale = false
-                if let url = try? URL(resolvingBookmarkData: data, options: [.withSecurityScope, .withoutUI], relativeTo: nil, bookmarkDataIsStale: &stale) {
-                    sources[index].url = url
+            if let data=sources[index].bookmark {
+                var stale=false
+                if let url=try? URL(resolvingBookmarkData:data,options:[.withSecurityScope,.withoutUI,.withoutMounting],relativeTo:nil,bookmarkDataIsStale:&stale) {
+                    sources[index].url=url
                     if url.startAccessingSecurityScopedResource() { scopeURLs.append(url) }
-                    if stale { sources[index].bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) }
+                    if stale { sources[index].bookmark=try? url.bookmarkData(options:.withSecurityScope,includingResourceValuesForKeys:nil,relativeTo:nil) }
                 }
             }
         }
-        if autoStart {
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
-        }
-        setupRemoteCommands()
-        Task {
-            if scanOnLaunch || tracks.isEmpty { await scan() }
-            if let (id, time) = savedPlayback, let track = tracks.first(where: { $0.id == id }) {
-                do { let audio = try makePlayer(track); audio.currentTime = time; player = audio; currentID = id; position = audio.currentTime; queue = filtered.map(\.id); updateNowPlaying() } catch { status = t("offline") }
-            }
-        }
-        }
     }
-    private struct SavedLibrary: Codable { var tracks: [Track]; var sources: [MusicSource]; var edited: [String]; var playlists: [Playlist]? }
     func save() {
-        do { let data = try JSONEncoder().encode(SavedLibrary(tracks: tracks, sources: sources, edited: Array(edited), playlists: playlists)); try data.write(to: dataDirectory.appendingPathComponent("library.json"), options: .atomic) }
-        catch { self.error = error.localizedDescription }
+        guard !saveBlocked else { return }
+        persistence.save(.init(tracks:tracks,sources:sources,edited:Array(edited),playlists:playlists))
     }
+    func flushSaving() async throws { try await persistence.flush() }
+    func prepareForTermination() async throws {
+        cancelScan()
+        if loading { await readyTask?.value }
+        await scanTask?.value
+        pausePlayback(); paletteTask?.cancel(); enrichmentTask?.cancel()
+        save(); try await persistence.flush()
+        timer?.invalidate(); timer=nil
+        for url in scopeURLs { url.stopAccessingSecurityScopedResource() }; scopeURLs.removeAll()
+    }
+    func waitUntilReady() async { await readyTask?.value }
     func clearFilters() { search = ""; artist = ""; genre = ""; year = "" }
     func pickMusic() {
         let open = NSOpenPanel(); open.canChooseDirectories = true; open.canChooseFiles = true; open.allowsMultipleSelection = true
@@ -176,54 +225,84 @@ final class LibraryStore: NSObject, ObservableObject {
             Task { @MainActor in await self?.addSources(open.urls) }
         }
     }
-    func addSources(_ urls: [URL]) async {
-        guard !scanning else { return }
-        for url in urls where !sources.contains(where: { $0.url.standardizedFileURL == url.standardizedFileURL }) {
+    func addSources(_ urls:[URL]) async {
+        if loading { await readyTask?.value }
+        if scanning { await scanTask?.value }
+        guard !saveBlocked else { return }
+        for url in urls where url.isFileURL && !sources.contains(where:{ $0.url.standardizedFileURL == url.standardizedFileURL }) {
             if url.startAccessingSecurityScopedResource() { scopeURLs.append(url) }
-            sources.append(MusicSource(url: url, bookmark: try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)))
+            sources.append(MusicSource(url:url,bookmark:try? url.bookmarkData(options:.withSecurityScope,includingResourceValuesForKeys:nil,relativeTo:nil)))
         }
         save(); await scan()
     }
-    func scan(force: Bool = false) async {
-        guard !scanning else { return }; scanning = true; defer { scanning = false }
-        var failures = 0; var unavailable = 0
-        let scanSources = sources
-        for source in scanSources {
-            let available = await Task.detached(priority: .utility) { FileManager.default.fileExists(atPath: source.url.path) }.value
-            guard available else { unavailable += 1; continue }
-            let recursive = preferences.recursiveScan
-            let files = await Task.detached(priority: .utility) { MetadataReader.files(in: source.url, recursive: recursive) }.value
-            let fileIDs = Set(files.map(\.path))
-            // Remove deleted local files only when the source is actually available.
-            tracks.removeAll { track in
-                let isWithin = track.url == source.url || track.url.path.hasPrefix(source.url.path.hasSuffix("/") ? source.url.path : source.url.path + "/")
-                return isWithin && !fileIDs.contains(track.id)
-            }
-            for (index, url) in files.enumerated() {
-                if Task.isCancelled { break }
-                status = "\(t("reading")) \(index + 1)/\(files.count) · \(source.name)"
-                let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-                if !force, let cached = tracks.first(where: { $0.id == url.path }), cached.modified == modified, cached.format != nil, cached.genre != "—", !cached.year.isEmpty { continue }
+    func openAudioURL(_ url:URL) async {
+        await addSources([url])
+        if let track=track(for:url.path) { let list=filtered; play(track,in:list.contains(where:{ $0.id == track.id }) ? list : [track]+list) }
+    }
+    func cancelScan() { scanCancellation.cancel(); scanTask?.cancel() }
+    func scan(force:Bool = false) async {
+        if loading { await readyTask?.value }
+        guard !scanning,!saveBlocked else { return }
+        scanning=true; scanCancellation=ScanCancellation()
+        let task=Task { await performScan(force:force) }; scanTask=task
+        await task.value
+        scanTask=nil; scanning=false
+    }
+    private func performScan(force:Bool) async {
+        var failures=0; var unavailable=0
+        let cancellation=scanCancellation
+        for source in sources {
+            if Task.isCancelled || cancellation.isCancelled { break }
+            sourceStates[source.id]="reading"
+            let recursive=preferences.recursiveScan
+            let report=await Task.detached(priority:.utility) { SourceScanner.enumerate(source.url,recursive:recursive,cancellation:cancellation) }.value
+            if !report.complete { unavailable += 1 }
+            var pending:[Track]=[]; pending.reserveCapacity(256)
+            for (index,file) in report.files.enumerated() {
+                if Task.isCancelled || cancellation.isCancelled { break }
+                if index % 16 == 0 { status="\(t("reading")) \(index+1)/\(report.files.count) · \(source.name)" }
+                if !force,let cached=track(for:file.url.path),cached.modified == file.modified,cached.format != nil { continue }
                 do {
-                    var track = try await MetadataReader.read(url)
-                    if let existing = tracks.firstIndex(where: { $0.id == track.id }) {
-                        let old = tracks[existing]; track.favorite = old.favorite; track.lastPlayed = old.lastPlayed; track.playCount = old.playCount
-                        if edited.contains(old.id) { track.title = old.title; track.artist = old.artist; track.album = old.album; track.genre = old.genre; track.year = old.year }
-                        if track.artwork == nil { track.artwork = old.artwork; track.artworkCredit = old.artworkCredit }
-                        if track.lyrics == nil { track.lyrics = old.lyrics; track.lyricsCredit = old.lyricsCredit }
-                        tracks[existing] = track
-                    } else { tracks.append(track) }
-                } catch { failures += 1 }
+                    var value=try await MetadataReader.read(file.url)
+                    if Task.isCancelled || cancellation.isCancelled { break }
+                    if let old=track(for:value.id) {
+                        value.favorite=old.favorite; value.lastPlayed=old.lastPlayed; value.playCount=old.playCount
+                        if edited.contains(old.id) { value.title=old.title; value.artist=old.artist; value.album=old.album; value.genre=old.genre; value.year=old.year }
+                        if value.artwork == nil { value.artworkURL=old.artworkURL; value.artworkCredit=old.artworkCredit }
+                        if value.lyrics == nil { value.lyrics=old.lyrics; value.lyricsCredit=old.lyricsCredit }
+                    }
+                    value=try await persistence.normalized(value)
+                    pending.append(value)
+                    if pending.count >= 256 { upsertTracks(pending); pending.removeAll(keepingCapacity:true); save() }
+                } catch { if !Task.isCancelled { failures += 1 } }
             }
+            guard !Task.isCancelled,!cancellation.isCancelled else { sourceStates[source.id]="scanCancelled"; break }
+            if !pending.isEmpty { upsertTracks(pending) }
+            let reconciled=await Task.detached(priority:.utility) { SourceScanner.canReconcile(report,cancelled:cancellation.isCancelled) }.value
+            if reconciled && !Task.isCancelled {
+                let found=Set(report.files.map { $0.url.path })
+                tracks.removeAll { SourceScanner.isWithin($0.url,source:source.url,recursive:recursive) && !found.contains($0.id) }
+                sourceStates[source.id]="ready"
+            } else { sourceStates[source.id]="offline"; if report.complete { unavailable += 1 } }
+            save()
         }
-        save()
-        status = unavailable > 0 ? t("offline") : failures > 0 ? "\(t("scanErrors")): \(failures)" : t("ready")
+        if !Task.isCancelled { save(); do { try await persistence.flush() } catch { self.error=error.localizedDescription } }
+        status=cancellation.isCancelled ? t("scanCancelled") : unavailable > 0 ? t("offline") : failures > 0 ? "\(t("scanErrors")): \(failures)" : t("ready")
+    }
+    private func upsertTracks(_ values:[Track]) {
+        var updated=tracks
+        var indices=Dictionary(updated.indices.map { (updated[$0].id,$0) },uniquingKeysWith:{ _,last in last })
+        for track in values { if let index=indices[track.id] { updated[index]=track } else { indices[track.id]=updated.count; updated.append(track) } }
+        tracks=updated
     }
     func removeSource(_ source: MusicSource) {
         guard !scanning else { return }
         sources.removeAll { $0.id == source.id }
         let prefix = source.url.path.hasSuffix("/") ? source.url.path : source.url.path + "/"
-        tracks.removeAll { $0.url == source.url || $0.url.path.hasPrefix(prefix) }
+        tracks.removeAll { track in
+            (track.url == source.url || track.url.path.hasPrefix(prefix)) && !sources.contains { SourceScanner.isWithin(track.url,source:$0.url) }
+        }
+        sourceStates.removeValue(forKey:source.id)
         if let id = currentID, !tracks.contains(where: { $0.id == id }) { player?.stop(); currentID = nil; isPlaying = false; position = 0; updateActivity(); updateNowPlaying() }
         save()
     }
@@ -273,7 +352,7 @@ final class LibraryStore: NSObject, ObservableObject {
             if let i = tracks.firstIndex(where: { $0.id == track.id }) { tracks[i].lastPlayed = Date(); tracks[i].playCount = (tracks[i].playCount ?? 0) + 1; save() }
             updateActivity()
             updateNowPlaying()
-            if online && !track.isDemo && !attempted.contains(track.id) && (track.lyrics == nil || track.artwork == nil) {
+            if online && !track.isDemo && !attempted.contains(track.id) && (track.lyrics == nil || !track.hasArtwork) {
                 attempted.insert(track.id)
                 enrichmentTask?.cancel()
                 enrichmentTask = Task { await enrich(track) }
@@ -295,20 +374,23 @@ final class LibraryStore: NSObject, ObservableObject {
         if automatic && repeatMode == 2, let current { play(current); return }
         let i = list.firstIndex { $0.id == currentID } ?? -1
         let nextIndex = i + (back ? -1 : 1)
-        if nextIndex >= list.count && automatic && repeatMode == 0 { isPlaying = false; position = player?.duration ?? 0; player?.pause(); updateNowPlaying(); updateActivity(); rememberPlayback(); return }
+        if nextIndex >= list.count && automatic && repeatMode == 0 { isPlaying = false; position = min(current?.duration ?? player?.duration ?? 0,player?.duration ?? 0); player?.pause(); updateNowPlaying(); updateActivity(); rememberPlayback(); return }
         play(list[(nextIndex + list.count) % list.count])
     }
     private func tick() {
         if let deadline = sleepDeadline {
-            sleepRemaining = max(0, Int(ceil(deadline.timeIntervalSinceNow)))
+            let remaining=max(0,Int(ceil(deadline.timeIntervalSinceNow)))
+            if remaining != sleepRemaining { sleepRemaining=remaining }
             if deadline <= Date() { sleepDeadline = nil; pausePlayback() }
         }
         let targetEnergy = isPlaying ? min(1, pow(max(0, level), 0.55) * 1.8) : 0
-        ambientEnergy += (targetEnergy - ambientEnergy) * (targetEnergy > ambientEnergy ? 0.20 : 0.075)
+        let energy=ambientEnergy + (targetEnergy - ambientEnergy) * (targetEnergy > ambientEnergy ? 0.20 : 0.075)
+        if abs(energy-ambientEnergy) > 0.0005 { ambientEnergy=energy } else if targetEnergy == 0 && ambientEnergy != 0 { ambientEnergy=0 }
         guard let player else { return }
-        position = player.currentTime
+        let time=min(current?.duration ?? player.duration,player.currentTime)
+        if abs(time-position) >= 0.09 || position > (current?.duration ?? player.duration) { position=time }
         if isPlaying { let meters = player.levels; level = Double(meters.rms); peak = Double(meters.peak) }
-        else { level *= 0.85; peak *= 0.85 }
+        else { if level != 0 { level=level < 0.0001 ? 0 : level * 0.85 }; if peak != 0 { peak=peak < 0.0001 ? 0 : peak * 0.85 } }
         if Int(position) % 5 == 0 && Int(position) != lastRememberedSecond { lastRememberedSecond = Int(position); rememberPlayback() }
     }
     private func makePlayer(_ track: Track) throws -> AudioPlayback {
@@ -322,12 +404,12 @@ final class LibraryStore: NSObject, ObservableObject {
     private struct PlaybackBookmark: Codable { var id: String; var position: Double }
     private func rememberPlayback() {
         guard preferences.rememberPosition, let currentID else { return }
-        do { try JSONEncoder().encode(PlaybackBookmark(id: currentID, position: position)).write(to: dataDirectory.appendingPathComponent("playback.json"), options: .atomic) } catch { status = error.localizedDescription }
+        do { persistence.writeSmallFile("playback.json",data:try JSONEncoder().encode(PlaybackBookmark(id:currentID,position:position))) } catch { status = error.localizedDescription }
     }
     private func preferencesChanged() {
         if !preferences.showFeedback { dismissFeedback() }
         player?.apply(preferences); updateActivity(); configureMiniPlayer()
-        do { try JSONEncoder().encode(preferences).write(to: dataDirectory.appendingPathComponent("preferences.json"), options: .atomic) } catch { self.error = error.localizedDescription }
+        do { persistence.writeSmallFile("preferences.json",data:try JSONEncoder().encode(preferences)) } catch { self.error = error.localizedDescription }
     }
     private func updateActivity() {
         if isPlaying && preferences.keepAwake {
@@ -366,7 +448,15 @@ final class LibraryStore: NSObject, ObservableObject {
         let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "Prisma Library.json"
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            Task { @MainActor in guard let self else { return }; do { let data = try JSONEncoder().encode(SavedLibrary(tracks: self.tracks, sources: self.sources, edited: Array(self.edited), playlists: self.playlists)); try data.write(to: url, options: .atomic) } catch { self.error = error.localizedDescription } }
+            Task { @MainActor in
+                guard let self else { return }
+                let snapshot=LibrarySnapshot(tracks:self.tracks,sources:self.sources,edited:Array(self.edited),playlists:self.playlists)
+                do { try await Task.detached(priority:.utility) {
+                    var portable=snapshot
+                    for index in portable.tracks.indices { portable.tracks[index].artwork=portable.tracks[index].artworkData; portable.tracks[index].artworkURL=nil }
+                    try JSONEncoder().encode(portable).write(to:url,options:.atomic)
+                }.value } catch { self.error=error.localizedDescription }
+            }
         }
     }
     func showDataFolder() { NSWorkspace.shared.open(dataDirectory) }
@@ -386,7 +476,7 @@ final class LibraryStore: NSObject, ObservableObject {
         refreshArtworkPalette()
         guard let track = current else { MPNowPlayingInfoCenter.default().nowPlayingInfo = nil; return }
         var info: [String: Any] = [MPMediaItemPropertyTitle: track.title, MPMediaItemPropertyArtist: track.artist, MPMediaItemPropertyAlbumTitle: track.album, MPMediaItemPropertyPlaybackDuration: track.duration, MPNowPlayingInfoPropertyElapsedPlaybackTime: position, MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? Double(preferences.playbackRate) : 0.0]
-        if let data = track.artwork, let image = NSImage(data: data) { info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image } }
+        if track.hasArtwork,let image=ArtworkCache.shared.image(for:track,pixels:512) { info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image } }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
         MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
     }
@@ -407,7 +497,7 @@ final class LibraryStore: NSObject, ObservableObject {
     func enrich(_ track: Track) async {
         guard !fetching else { return }; fetching = true; defer { fetching = false }
         var artwork: Data?; var credit: String?; var lyrics: String?; var hadError = false
-        if track.artwork == nil && preferences.autoArtwork {
+        if !track.hasArtwork && preferences.autoArtwork {
             do { let result = try await OnlineMetadata.artwork(for: track); artwork = result?.0; credit = result?.1 } catch { if !Task.isCancelled { hadError = true } }
         }
         guard !Task.isCancelled else { return }
@@ -416,8 +506,11 @@ final class LibraryStore: NSObject, ObservableObject {
         }
         guard !Task.isCancelled else { return }
         if let i = tracks.firstIndex(where: { $0.id == track.id }) {
-            if let artwork, tracks[i].artwork == nil { tracks[i].artwork = artwork; tracks[i].artworkCredit = credit }
-            if let lyrics, tracks[i].lyrics == nil { tracks[i].lyrics = lyrics; tracks[i].lyricsCredit = "LRCLIB" }
+            if let artwork,!tracks[i].hasArtwork {
+                var value=tracks[i]; value.artwork=artwork; value.artworkCredit=credit
+                do { value=try await persistence.normalized(value); if let index=tracks.firstIndex(where:{ $0.id == value.id }) { tracks[index]=value } } catch { hadError=true }
+            }
+            if let lyrics,let index=tracks.firstIndex(where:{ $0.id == track.id }),tracks[index].lyrics == nil { tracks[index].lyrics=lyrics; tracks[index].lyricsCredit="LRCLIB" }
             save(); updateNowPlaying()
         }
         status = hadError ? t("networkError") : (artwork != nil || lyrics != nil) ? t("finished") : t("notFound")

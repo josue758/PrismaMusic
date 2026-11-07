@@ -3,12 +3,14 @@ import AppKit
 
 @main
 struct PrismaMusicApp: App {
+    @NSApplicationDelegateAdaptor(PrismaAppDelegate.self) private var delegate
     @StateObject private var store = LibraryStore()
     var body: some Scene {
         WindowGroup("Prisma Music") {
             ContentView().environmentObject(store).tint(store.effectiveAccent).preferredColorScheme(store.colorScheme)
                 .frame(minWidth: 1060, minHeight: 740)
-                .onOpenURL { url in Task { await store.addSources([url]) } }
+                .onAppear { delegate.store=store }
+                .onOpenURL { url in Task { await store.openAudioURL(url) } }
         }
         .defaultSize(width: 1360, height: 900)
         .windowStyle(.hiddenTitleBar)
@@ -20,7 +22,7 @@ struct PrismaMusicApp: App {
                 Button(store.t("scan")) { Task { await store.scan() } }.keyboardShortcut("r").disabled(store.scanning)
             }
             CommandMenu(store.t("play")) {
-                Button(store.t(store.isPlaying ? "pause" : "play")) { store.togglePlay() }.keyboardShortcut(.space, modifiers: [])
+                Button(store.t(store.isPlaying ? "pause" : "play")) { store.togglePlay() }.keyboardShortcut("p", modifiers: [.command, .shift])
                 Button(store.t("next")) { store.next() }.keyboardShortcut(.rightArrow, modifiers: .command)
                 Button(store.t("previous")) { store.next(back: true) }.keyboardShortcut(.leftArrow, modifiers: .command)
                 Button(store.t("mini")) { store.miniPlayer() }.keyboardShortcut("m", modifiers: [.command, .shift])
@@ -28,5 +30,21 @@ struct PrismaMusicApp: App {
             }
         }
         Settings { SettingsView().environmentObject(store).tint(store.effectiveAccent).preferredColorScheme(store.colorScheme) }
+    }
+}
+
+@MainActor
+final class PrismaAppDelegate: NSObject, NSApplicationDelegate {
+    weak var store: LibraryStore?
+    func applicationShouldTerminate(_ sender:NSApplication) -> NSApplication.TerminateReply {
+        guard let store else { return .terminateNow }
+        Task {
+            do { try await store.prepareForTermination(); sender.reply(toApplicationShouldTerminate:true) }
+            catch {
+                let alert=NSAlert(); alert.messageText="Prisma Music"; alert.informativeText=error.localizedDescription
+                alert.runModal(); sender.reply(toApplicationShouldTerminate:false)
+            }
+        }
+        return .terminateLater
     }
 }

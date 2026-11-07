@@ -1,5 +1,13 @@
 # Cambios
 
+## 0.5.0 — 7 de noviembre de 2026
+
+Guardado incremental SQLite en segundo plano; migración con copia de seguridad; carátulas deduplicadas y miniaturas con caché acotada; resultados de filtros, grupos y estadísticas reutilizables. Se reducen las actualizaciones en pausa.
+
+Escaneo conservador ante errores, desconexión, cancelación o reemplazo de la carpeta, con estados de origen y botón de cancelar. Quitar una fuente conserva las canciones cubiertas por otra. Abrir desde Finder reproduce el archivo y el atajo de reproducción deja libres los espacios de búsqueda. Guardado pendiente esperado al cerrar y exportación JSON con imágenes en segundo plano. Consultas online con tamaño limitado.
+
+22 pruebas aprobadas, incluidos proveedores reales y persistencia de 10.000 registros. Pendiente prueba con NAS real y firma Developer ID/notarización para distribución pública.
+
 ## 0.4.0 — 7 de noviembre de 2026
 
 Pulido de movimiento y respuesta: navegación animada, transiciones de vistas y paneles, profundidad e iluminación bajo el cursor, respuesta de botones y corazones y fundido entre portadas. La animación ambiental conserva su fase al pausar y reanudar.

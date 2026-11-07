@@ -24,7 +24,7 @@ struct PrismaBackdrop: View {
                             .init(0,1), .init(0.5,1), .init(1,1)
                         ], colors: [colors[2],colors[0],colors[1], colors[0],colors[1],colors[2], colors[2],colors[0],colors[1]])
                         .opacity(light * (scheme == .dark ? 0.53 : 0.23) + energy * light * 0.08)
-                        if reactive, store.preferences.adaptiveArtwork, let track = store.visualTrack, track.artwork != nil {
+                        if reactive, store.preferences.adaptiveArtwork, let track = store.visualTrack, track.hasArtwork {
                             ArtworkView(track: track).frame(width:geo.size.width,height:geo.size.height).scaleEffect(1.35+energy*0.025).rotationEffect(.degrees(sin(time*0.6)*3)).offset(x:sin(time)*14,y:cos(time*0.7)*12).blur(radius:65).opacity(light * (scheme == .dark ? 0.24 : 0.12)).accessibilityHidden(true)
                         }
                         Ellipse().fill(colors[1].opacity(light*0.20)).frame(width:geo.size.width*0.7,height:geo.size.height*0.6).blur(radius:95).scaleEffect(1+energy*0.12).offset(x:geo.size.width*0.22+sin(time)*25,y:geo.size.height*0.25)

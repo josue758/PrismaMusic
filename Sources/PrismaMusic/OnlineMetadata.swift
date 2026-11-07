@@ -3,8 +3,16 @@ import Foundation
 enum OnlineMetadata {
     static func request(_ url: URL) async throws -> (Data, Int) {
         var request = URLRequest(url: url); request.timeoutInterval = 15
-        request.setValue("PrismaMusic/0.1 (local macOS music player)", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        request.setValue("PrismaMusic/0.5 (local macOS music player)", forHTTPHeaderField: "User-Agent")
+        let (stream,response)=try await URLSession.shared.bytes(for:request)
+        let limit=8*1024*1024
+        guard response.expectedContentLength <= Int64(limit) else { throw URLError(.dataLengthExceedsMaximum) }
+        var data=Data()
+        for try await byte in stream {
+            try Task.checkCancellation()
+            guard data.count < limit else { throw URLError(.dataLengthExceedsMaximum) }
+            data.append(byte)
+        }
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard code == 200 || code == 404 else { throw URLError(.badServerResponse) }
         return (data, code)

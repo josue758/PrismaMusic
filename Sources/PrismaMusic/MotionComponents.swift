@@ -137,7 +137,7 @@ struct ChangingArtwork: View {
     var track:Track?
     var body:some View {
         ZStack {
-            ArtworkView(track:track).id((track?.id ?? "empty")+":"+String(track?.artwork?.count ?? 0))
+            ArtworkView(track:track).id((track?.id ?? "empty")+":"+(track?.artworkIdentity ?? ""))
                 .transition(reduced || !store.preferences.microInteractions ? .opacity : .asymmetric(insertion:.opacity.combined(with:.scale(scale:0.97)),removal:.opacity.combined(with:.scale(scale:1.025))))
         }.animation(reduced || !store.preferences.microInteractions ? nil : .smooth(duration:0.5),value:track?.id)
     }
