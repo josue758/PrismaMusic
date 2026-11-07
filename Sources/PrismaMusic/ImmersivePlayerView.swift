@@ -53,11 +53,11 @@ struct ImmersivePlayerView: View {
     private func details(_ track: Track) -> some View {
         VStack(alignment:.leading,spacing:16) {
             HStack(spacing:8) { QualityBadge(track:track); if let rate = track.sampleRate { Text(String(format:"%g kHz",rate/1000)).font(.system(size:8,design:.monospaced)).foregroundStyle(.white.opacity(0.45)) } }
-            Text(track.title).font(.system(size:36,weight:.bold,design:.rounded)).tracking(-0.8).foregroundStyle(.white).lineLimit(2).minimumScaleFactor(0.65)
+            Text(track.title).id(track.id).transition(.opacity).animation(reduceMotion || !store.preferences.microInteractions ? nil : .smooth(duration:0.3),value:track.id).font(.system(size:36,weight:.bold,design:.rounded)).tracking(-0.8).foregroundStyle(.white).lineLimit(2).minimumScaleFactor(0.65)
             Button { store.artist=track.artist; store.section="songs"; store.showImmersive=false; store.showVisualizer=false } label: { HStack(spacing:8) { Text(track.artist).font(.system(size:20,weight:.medium)); Image(systemName:"chevron.right").font(.system(size:10,weight:.semibold)) } }.buttonStyle(.plain).foregroundStyle(accent).lineLimit(1)
             Text(track.album + (track.year.isEmpty ? "" : " · " + track.year)).font(.system(size:12)).foregroundStyle(.white.opacity(0.5)).lineLimit(2)
             HStack(spacing:12) {
-                Button { store.favorite(track) } label: { Image(systemName:track.favorite ? "heart.fill" : "heart").font(.system(size:14)).foregroundStyle(track.favorite ? accent : .white.opacity(0.7)).frame(width:34,height:32) }.buttonStyle(.glass).help(store.t("favorites"))
+                FavoriteControl(track:track,size:14).frame(width:34,height:32).glassEffect(.regular,in:RoundedRectangle(cornerRadius:10))
                 Button { store.inspectedID=track.id; store.showInfo.toggle(); store.showLyrics=false; store.showQueue=false } label: { Image(systemName:"info.circle").font(.system(size:14)).frame(width:34,height:32) }.buttonStyle(.glass).help(store.t("fileInfo"))
                 Button { store.showLyrics.toggle(); store.showInfo=false; store.showQueue=false } label: { Image(systemName:"quote.bubble").font(.system(size:14)).frame(width:34,height:32) }.buttonStyle(.glass).help(store.t("lyrics"))
             }.padding(.top,4).tint(.white.opacity(0.6))
@@ -91,16 +91,18 @@ struct ReactiveArtwork: View {
     @EnvironmentObject var store: LibraryStore
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     var track: Track
+    @State private var clock=MotionClock()
     private var moving:Bool { store.isPlaying && store.preferences.artworkPulse && !reduceMotion }
     var body:some View {
         TimelineView(.animation(minimumInterval:1.0/24,paused:!moving)) { timeline in
-            let time = moving ? timeline.date.timeIntervalSinceReferenceDate*0.3 : 0
-            let energy = moving ? store.ambientEnergy : 0
-            ArtworkView(track:track)
+            let time = clock.elapsed(at:timeline.date)*0.3
+            let energy = store.preferences.artworkPulse && !reduceMotion ? store.ambientEnergy : 0
+            ChangingArtwork(track:track)
                 .scaleEffect(1+energy*0.018)
                 .rotation3DEffect(.degrees(sin(time)*0.9),axis:(x:0,y:1,z:0))
                 .shadow(color:store.artworkPalette.primary.color.opacity(0.22+energy*0.14),radius:24+energy*16,y:14)
                 .overlay { RoundedRectangle(cornerRadius:14).strokeBorder(LinearGradient(colors:[.white.opacity(0.30),.white.opacity(0.025)],startPoint:.topLeading,endPoint:.bottomTrailing),lineWidth:0.8).allowsHitTesting(false) }
-        }.animation(.easeOut(duration:0.6),value:store.isPlaying)
+        }.onAppear { clock.setRunning(moving,at:Date()) }.onChange(of:moving) { _,running in clock.setRunning(running,at:Date()) }
+        .animation(reduceMotion ? nil : .easeOut(duration:0.6),value:store.isPlaying).interactiveDepth(radius:14,tilt:6)
     }
 }

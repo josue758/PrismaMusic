@@ -45,13 +45,14 @@ final class ArtworkAtmosphereTests: XCTestCase {
         }
     }
     func testVersionTwoPreferencesGainVisualDefaultsWithoutLosingAudioSettings() throws {
-        var old = ListeningPreferences(); old.eqEnabled=true; old.selectPreset("jazz"); old.playbackRate=0.8; old.compactRows=true; old.lyricsOffset = -0.3
+        var old = ListeningPreferences(); old.startSection="favorites"; old.eqEnabled=true; old.selectPreset("jazz"); old.playbackRate=0.8; old.compactRows=true; old.lyricsOffset = -0.3
         var dictionary = try JSONSerialization.jsonObject(with:JSONEncoder().encode(old)) as! [String:Any]
-        for key in ["adaptiveArtwork","ambientMotion","artworkPulse","glassTransparency"] { dictionary.removeValue(forKey:key) }
+        for key in ["adaptiveArtwork","ambientMotion","artworkPulse","glassTransparency","microInteractions","hoverDepth","showFeedback"] { dictionary.removeValue(forKey:key) }
         let restored = try JSONDecoder().decode(ListeningPreferences.self,from:JSONSerialization.data(withJSONObject:dictionary))
         XCTAssertTrue(restored.eqEnabled); XCTAssertEqual(restored.eqGains,old.eqGains); XCTAssertEqual(restored.playbackRate,0.8)
         XCTAssertTrue(restored.compactRows); XCTAssertEqual(restored.lyricsOffset,-0.3)
         XCTAssertTrue(restored.adaptiveArtwork); XCTAssertTrue(restored.ambientMotion); XCTAssertTrue(restored.artworkPulse)
         XCTAssertEqual(restored.glassTransparency,0.65)
+        XCTAssertEqual(restored.startSection,"favorites"); XCTAssertTrue(restored.microInteractions); XCTAssertTrue(restored.hoverDepth); XCTAssertTrue(restored.showFeedback)
     }
 }

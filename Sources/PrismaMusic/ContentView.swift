@@ -3,6 +3,10 @@ import AppKit
 
 struct ContentView: View {
     @EnvironmentObject var store: LibraryStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var navigationSelection
+    private var motion:Bool { store.preferences.microInteractions && !reduceMotion }
+    private var pageKey:String { store.showImmersive ? "immersive" : store.showVisualizer ? "visualizer" : store.section }
     @State private var nas = false
     @State private var editing: Track?
     @State private var newPlaylist = false
@@ -22,18 +26,28 @@ struct ContentView: View {
                         sidebar
                         VStack(spacing: 20) {
                             toolbar
-                            if store.showImmersive { ImmersivePlayerView() }
-                            else if store.showVisualizer { VisualizerView() }
-                            else { library }
+                            ZStack(alignment:.topLeading) {
+                                Group {
+                                    if store.showImmersive { ImmersivePlayerView() }
+                                    else if store.showVisualizer { VisualizerView() }
+                                    else { library }
+                                }.id(pageKey).transition(motion ? .opacity.combined(with:.offset(y:7)) : .opacity)
+                            }.frame(maxWidth:.infinity,maxHeight:.infinity).clipped().animation(motion ? .smooth(duration:0.3) : nil,value:pageKey)
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                        if store.showInfo { TrackInfoView().frame(width: 278).prismaGlass(24) }
-                        if store.showLyrics { LyricsView().frame(width: 278).prismaGlass(24) }
-                        if store.showQueue { QueueView().frame(width: 278).prismaGlass(24) }
-                    }.frame(maxHeight: .infinity)
+                        if store.showInfo { TrackInfoView().frame(width:278).prismaGlass(24).transition(motion ? .move(edge:.trailing).combined(with:.opacity) : .opacity) }
+                        if store.showLyrics { LyricsView().frame(width:278).prismaGlass(24).transition(motion ? .move(edge:.trailing).combined(with:.opacity) : .opacity) }
+                        if store.showQueue { QueueView().frame(width:278).prismaGlass(24).transition(motion ? .move(edge:.trailing).combined(with:.opacity) : .opacity) }
+                    }.frame(maxHeight:.infinity).animation(motion ? .smooth(duration:0.3) : nil,value:inspectorVisible)
                     PlayerBar().padding(.horizontal, 20).padding(.vertical, 14).prismaGlass(26, tinted: true)
                 }.padding(16).padding(.top, 24)
             }
         }
+        .overlay(alignment:.bottom) {
+            if let notice=store.feedback {
+                FeedbackToast(notice:notice).id(notice.id).padding(.horizontal,24).padding(.bottom,124)
+                    .transition(motion ? .move(edge:.bottom).combined(with:.opacity).combined(with:.scale(scale:0.96,anchor:.bottom)) : .opacity)
+            }
+        }.animation(motion ? .spring(duration:0.34,bounce:0.13) : nil,value:store.feedback?.id)
         .frame(minWidth: inspectorVisible ? 1230 : 1060, minHeight: 720)
         .sheet(isPresented: $store.showSettings) { SettingsView().environmentObject(store) }
         .sheet(isPresented: $nas) { NASView().environmentObject(store) }
@@ -86,12 +100,12 @@ struct ContentView: View {
     private func nav(_ key: String, _ icon: String) -> some View {
         let selected = key == "immersive" ? store.showImmersive : store.section == key && !store.showVisualizer && !store.showImmersive
         return Button {
-            withAnimation(.easeInOut(duration:0.25)) {
+            withAnimation(motion ? .smooth(duration:0.3) : nil) {
                 store.showImmersive = key == "immersive"; store.showVisualizer = false
                 if key != "immersive" { store.section=key; store.clearFilters() }
             }
         } label: {
-            HStack(spacing:11) { Image(systemName:icon).font(.system(size:13)).frame(width:18); Text(store.t(key)).font(.system(size:12,weight:selected ? .semibold : .regular)).lineLimit(1); Spacer(minLength:0); if key == "songs" { Text("\(store.tracks.count)").font(.system(size:9)).foregroundStyle(.tertiary) } }.padding(.horizontal,12).padding(.vertical,10).background(selected ? store.effectiveAccent.opacity(0.16) : .clear,in:RoundedRectangle(cornerRadius:11)).foregroundStyle(selected ? store.effectiveAccent : .primary.opacity(0.65))
+            HStack(spacing:11) { Image(systemName:icon).font(.system(size:13)).frame(width:18); Text(store.t(key)).font(.system(size:12,weight:selected ? .semibold : .regular)).lineLimit(1); Spacer(minLength:0); if key == "songs" { Text("\(store.tracks.count)").font(.system(size:9)).foregroundStyle(.tertiary) } }.padding(.horizontal,12).padding(.vertical,10).background { if selected { RoundedRectangle(cornerRadius:11).fill(store.effectiveAccent.opacity(0.16)).matchedGeometryEffect(id:"navigationSelection",in:navigationSelection) } }.foregroundStyle(selected ? store.effectiveAccent : .primary.opacity(0.65))
         }.buttonStyle(.plain)
     }
     private var toolbar: some View {
@@ -137,7 +151,7 @@ struct ContentView: View {
                     }.padding(3).padding(.bottom, 20)
                 }.scrollIndicators(.hidden).clipped()
             }
-            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini) }; Text(store.status.isEmpty ? store.t("ready") : store.status).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 03").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
+            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini) }; Text(store.status.isEmpty ? store.t("ready") : store.status).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 04").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     private var hero: some View {
@@ -208,7 +222,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 5) { HStack(spacing: 7) { Text(track.title).font(.system(size: 12, weight: .medium)).foregroundStyle(store.currentID == track.id ? store.effectiveAccent : .primary); if store.preferences.showQuality && !inspectorVisible { QualityBadge(track: track) } }; Text(track.artist + (store.preferences.showQuality && !track.qualitySummary.isEmpty ? " · " + track.qualitySummary : "")).font(.system(size: 9)).foregroundStyle(.secondary) }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                     if !inspectorVisible { Text(track.album).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1).frame(width: 140, alignment: .leading); Text(track.year).font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary).frame(width: 38) }
                     Text(clockText(track.duration)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary).frame(width: 38)
-                    Button { store.favorite(track) } label: { Image(systemName: track.favorite ? "heart.fill" : "heart").foregroundStyle(track.favorite ? store.effectiveAccent : .secondary.opacity(0.5)) }.buttonStyle(.plain).frame(width: 22).help(store.t("favorites"))
+                    FavoriteControl(track:track).frame(width:22)
                 }.padding(.horizontal, 12).padding(.vertical, store.preferences.compactRows ? 5 : 9).background(selectedID == track.id ? store.effectiveAccent.opacity(0.10) : i % 2 == 0 ? .primary.opacity(0.025) : .clear, in: RoundedRectangle(cornerRadius: 12)).contentShape(Rectangle()).onTapGesture(count: 2) { store.play(track, in: list) }.onTapGesture { selectedID = track.id; store.inspectedID = track.id }.contextMenu { TrackContextMenu(track: track) { editing = track } }
             }
         }
@@ -225,8 +239,8 @@ struct AlbumCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 ArtworkView(track: track).aspectRatio(wide ? 1.65 : 1, contentMode: .fit).overlay(alignment: .bottomTrailing) { Image(systemName: "play.fill").font(.system(size: 12)).frame(width: 34, height: 34).glassEffect(.regular, in: Circle()).padding(10).opacity(hover ? 1 : 0.8) }
                 VStack(alignment: .leading, spacing: 5) { Text(track.album).font(.system(size: 12, weight: .semibold)); HStack { Text(track.artist).font(.system(size: 10)).foregroundStyle(.secondary); Spacer(minLength: 2); Text(track.year).font(.system(size: 8, design: .monospaced)).foregroundStyle(.tertiary) } }.lineLimit(1).padding(.horizontal, 3).padding(.bottom, 3)
-            }.padding(9).prismaGlass(20).scaleEffect(hover ? 1.015 : 1)
-        }.buttonStyle(.plain).onHover { hover = $0 }.animation(.easeOut(duration: 0.18), value: hover)
+            }.padding(9).prismaGlass(20).interactiveDepth()
+        }.buttonStyle(PrismaPressStyle()).onHover { hover = $0 }
     }
 }
 struct TrackContextMenu: View {

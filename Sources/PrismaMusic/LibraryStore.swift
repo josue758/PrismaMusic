@@ -21,6 +21,8 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var year = ""
     @Published var section = "home"
     @Published var sort = "title"
+    @Published var feedback: FeedbackNotice?
+    private var feedbackTask: Task<Void,Never>?
     @Published var showImmersive = true
     @Published var artworkPalette = ArtworkPalette.fallback()
     @Published var ambientEnergy = 0.0
@@ -228,7 +230,39 @@ final class LibraryStore: NSObject, ObservableObject {
     func update(_ track: Track) {
         if let i = tracks.firstIndex(where: { $0.id == track.id }) { tracks[i] = track; edited.insert(track.id); save(); updateNowPlaying() }
     }
-    func favorite(_ track: Track) { if let i = tracks.firstIndex(where: { $0.id == track.id }) { tracks[i].favorite.toggle(); save() } }
+    func favorite(_ track:Track) {
+        guard let i=tracks.firstIndex(where: { $0.id == track.id }) else { return }
+        let old=tracks[i].favorite
+        tracks[i].favorite.toggle(); save()
+        postFeedback(old ? "favoriteRemoved" : "favoriteAdded",detail:track.title,icon:old ? "heart" : "heart.fill",undo:.favorite(track.id,old))
+    }
+    func postFeedback(_ key:String,detail:String = "",icon:String = "checkmark",undo:FeedbackUndo? = nil) {
+        guard preferences.showFeedback else { return }
+        feedbackTask?.cancel()
+        let notice=FeedbackNotice(title:t(key),detail:detail,icon:icon,undo:undo)
+        feedback=notice
+        feedbackTask=Task { [weak self] in
+            do { try await Task.sleep(nanoseconds:3_800_000_000) } catch { return }
+            guard let self, self.feedback?.id == notice.id else { return }
+            self.feedback=nil
+        }
+    }
+    func dismissFeedback(id:UUID? = nil) { guard id == nil || feedback?.id == id else { return }; feedbackTask?.cancel(); feedback=nil }
+    func undoFeedback(id:UUID? = nil) {
+        guard id == nil || feedback?.id == id else { return }
+        guard let undo=feedback?.undo else { return }
+        switch undo {
+        case .favorite(let id,let value): if let i=tracks.firstIndex(where: { $0.id == id }) { tracks[i].favorite=value; save() }
+        case .queue(let previous):
+            let currentIndex=currentID.flatMap { queue.firstIndex(of:$0) } ?? 0
+            var restored=previous.filter { id in tracks.contains { $0.id == id } }
+            if let currentID, !restored.contains(currentID), tracks.contains(where: { $0.id == currentID }) { restored.insert(currentID,at:min(currentIndex,restored.count)) }
+            queue=restored
+        case .playlistAddition(let id,let track): if let i=playlists.firstIndex(where: { $0.id == id }) { playlists[i].trackIDs.removeAll { $0 == track }; save() }
+        case .playlistRemoval(let playlist,let index): if !playlists.contains(where: { $0.id == playlist.id }) { playlists.insert(playlist,at:min(index,playlists.count)); save() }
+        }
+        postFeedback("undone",icon:"arrow.uturn.backward")
+    }
     func play(_ track: Track, in list: [Track]? = nil) {
         if let list { queue = shuffle ? [track.id] + list.filter { $0.id != track.id }.map(\.id).shuffled() : list.map(\.id) }
         if queue.isEmpty { queue = filtered.map(\.id) }
@@ -291,6 +325,7 @@ final class LibraryStore: NSObject, ObservableObject {
         do { try JSONEncoder().encode(PlaybackBookmark(id: currentID, position: position)).write(to: dataDirectory.appendingPathComponent("playback.json"), options: .atomic) } catch { status = error.localizedDescription }
     }
     private func preferencesChanged() {
+        if !preferences.showFeedback { dismissFeedback() }
         player?.apply(preferences); updateActivity(); configureMiniPlayer()
         do { try JSONEncoder().encode(preferences).write(to: dataDirectory.appendingPathComponent("preferences.json"), options: .atomic) } catch { self.error = error.localizedDescription }
     }
@@ -301,15 +336,17 @@ final class LibraryStore: NSObject, ObservableObject {
     }
     func setSleepTimer(minutes: Int?) { sleepDeadline = minutes.map { Date().addingTimeInterval(Double($0) * 60) }; sleepRemaining = (minutes ?? 0) * 60 }
     func openSettings(_ page: String = "sound") { settingsPage = page; showSettings = true }
-    func createPlaylist(_ name: String) { let name = name.trimmingCharacters(in: .whitespacesAndNewlines); guard !name.isEmpty else { return }; playlists.append(Playlist(name: name)); save() }
-    func add(_ track: Track, to playlist: Playlist) { if let i = playlists.firstIndex(where: { $0.id == playlist.id }), !playlists[i].trackIDs.contains(track.id) { playlists[i].trackIDs.append(track.id); save() } }
-    func removePlaylist(_ playlist: Playlist) { playlists.removeAll { $0.id == playlist.id }; if section == "playlist:\(playlist.id)" { section = "home" }; save() }
+    func createPlaylist(_ name: String) { let name = name.trimmingCharacters(in: .whitespacesAndNewlines); guard !name.isEmpty else { return }; playlists.append(Playlist(name: name)); save(); postFeedback("playlistCreated",detail:name,icon:"music.note.list") }
+    func add(_ track: Track, to playlist: Playlist) { if let i = playlists.firstIndex(where: { $0.id == playlist.id }), !playlists[i].trackIDs.contains(track.id) { playlists[i].trackIDs.append(track.id); save(); postFeedback("playlistAdded",detail:playlist.name,icon:"text.badge.plus",undo:.playlistAddition(playlist.id,track.id)) } }
+    func removePlaylist(_ playlist: Playlist) { guard let index=playlists.firstIndex(where: { $0.id == playlist.id }) else { return }; playlists.removeAll { $0.id == playlist.id }; if section == "playlist:\(playlist.id)" { section = "home" }; save(); postFeedback("playlistDeleted",detail:playlist.name,icon:"trash",undo:.playlistRemoval(playlist,index)) }
     func removeFromPlaylist(_ track: Track) { if let i = playlists.firstIndex(where: { section == "playlist:\($0.id)" }) { playlists[i].trackIDs.removeAll { $0 == track.id }; save() } }
     func enqueue(_ track: Track, next: Bool = false) {
         guard track.id != currentID else { return }
+        let previous=queue
         queue.removeAll { $0 == track.id && $0 != currentID }
         if next, let index = queue.firstIndex(where: { $0 == currentID }) { queue.insert(track.id, at: index + 1) }
         else { queue.append(track.id) }
+        postFeedback(next ? "queuedNext" : "queued",detail:track.title,icon:"list.bullet",undo:.queue(previous))
     }
     func removeQueued(_ track: Track) { guard track.id != currentID else { return }; queue.removeAll { $0 == track.id } }
     func moveQueued(_ track: Track, direction: Int) {

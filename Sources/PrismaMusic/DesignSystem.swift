@@ -5,14 +5,15 @@ struct PrismaBackdrop: View {
     @Environment(\.colorScheme) var scheme
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.accessibilityReduceTransparency) var reduceTransparency
+    @State private var clock=MotionClock()
     var reactive = true
     private var moving: Bool { reactive && store.isPlaying && store.preferences.ambientMotion && !reduceMotion && !reduceTransparency }
     private var colors: [Color] { store.preferences.adaptiveArtwork ? store.artworkPalette.colors : [store.accent.color, .cyan, .pink] }
     var body: some View {
         GeometryReader { geo in
             TimelineView(.animation(minimumInterval: 1.0 / 24, paused: !moving)) { timeline in
-                let time = moving ? timeline.date.timeIntervalSinceReferenceDate * 0.13 : 0
-                let energy = moving ? store.ambientEnergy : 0
+                let time = clock.elapsed(at:timeline.date)*0.13
+                let energy = reactive && store.preferences.ambientMotion && !reduceMotion ? store.ambientEnergy : 0
                 let light = store.preferences.atmosphere * (reactive ? 1 : 0.45)
                 ZStack {
                     (scheme == .dark ? Color(red:0.025,green:0.025,blue:0.04) : Color(red:0.93,green:0.94,blue:0.97))
@@ -32,7 +33,7 @@ struct PrismaBackdrop: View {
                     LinearGradient(colors: scheme == .dark ? [.black.opacity(0.12),.clear,.black.opacity(0.62)] : [.white.opacity(0.22),.clear,.white.opacity(0.60)], startPoint:.top,endPoint:.bottom)
                 }.frame(width:geo.size.width,height:geo.size.height).clipped()
             }
-        }.ignoresSafeArea().allowsHitTesting(false).animation(.easeInOut(duration:1.1),value:store.artworkPalette)
+        }.ignoresSafeArea().allowsHitTesting(false).onAppear { clock.setRunning(moving,at:Date()) }.onChange(of:moving) { _,running in clock.setRunning(running,at:Date()) }.animation(reduceMotion ? nil : .easeInOut(duration:1.1),value:store.artworkPalette)
     }
 }
 struct GlassSurface: ViewModifier {
@@ -62,7 +63,7 @@ struct GlassIconButton: View {
     var active = false
     var action: () -> Void
     var body: some View {
-        Button(action: action) { Image(systemName: icon).font(.system(size: 13, weight: .medium)).foregroundStyle(active ? store.effectiveAccent : .primary.opacity(0.75)).frame(width: 35, height: 35) }.buttonStyle(.plain).glassEffect(.regular.tint(active ? store.effectiveAccent.opacity(0.20) : nil).interactive(), in: Circle()).help(label).accessibilityLabel(label)
+        Button(action: action) { Image(systemName: icon).font(.system(size: 13, weight: .medium)).foregroundStyle(active ? store.effectiveAccent : .primary.opacity(0.75)).frame(width: 35, height: 35) }.buttonStyle(PrismaPressStyle()).glassEffect(.regular.tint(active ? store.effectiveAccent.opacity(0.20) : nil).interactive(), in: Circle()).help(label).accessibilityLabel(label)
     }
 }
 struct QualityBadge: View {

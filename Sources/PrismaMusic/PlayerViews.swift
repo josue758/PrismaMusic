@@ -42,27 +42,28 @@ struct ArtworkView: View {
     }
 }
 struct PlayerBar: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var store: LibraryStore
     var body: some View {
         HStack(spacing: 25) {
             HStack(spacing: 13) {
-                ArtworkView(track: store.current).frame(width: 55, height: 55).contentShape(Rectangle()).onTapGesture { store.showImmersive=true; store.showVisualizer=false }
+                ChangingArtwork(track:store.current).frame(width:55,height:55).contentShape(Rectangle()).onTapGesture { store.showImmersive=true; store.showVisualizer=false }
                 VStack(alignment: .leading, spacing: 5) {
                     Text(store.current?.title ?? store.t("choose")).font(.system(size: 13, weight: .semibold)).foregroundStyle(.primary)
                     Text(store.current?.artist ?? "Prisma Music").font(.system(size: 10)).foregroundStyle(.secondary)
                     if let track = store.current, store.preferences.showQuality { Text(track.qualitySummary).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(store.effectiveAccent.opacity(0.85)) }
-                }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture { store.inspectedID = nil; store.showInfo.toggle(); store.showLyrics = false; store.showQueue = false }
-                if let track = store.current { Button { store.favorite(track) } label: { Image(systemName: track.favorite ? "heart.fill" : "heart").font(.system(size: 12)).foregroundStyle(track.favorite ? store.effectiveAccent : .secondary) }.buttonStyle(.plain).help(store.t("favorites")) }
+                }.lineLimit(1).id(store.currentID).transition(.opacity).animation(reduceMotion || !store.preferences.microInteractions ? nil : .smooth(duration:0.25),value:store.currentID).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture { store.inspectedID = nil; store.showInfo.toggle(); store.showLyrics = false; store.showQueue = false }
+                if let track = store.current { FavoriteControl(track:track,size:12) }
             }.frame(width: 275)
             VStack(spacing: 9) {
                 HStack(spacing: 22) {
                     transport("shuffle", "shuffle", active: store.shuffle) { store.shuffle.toggle() }
                     transport("backward.end.fill", "previous") { store.next(back: true) }
-                    Button { store.togglePlay() } label: { Image(systemName: store.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 15, weight: .semibold)).frame(width: 43, height: 36) }.buttonStyle(.glassProminent).buttonBorderShape(.circle).help(store.t(store.isPlaying ? "pause" : "play"))
+                    Button { store.togglePlay() } label: { Image(systemName: store.isPlaying ? "pause.fill" : "play.fill").contentTransition(reduceMotion || !store.preferences.microInteractions ? .identity : .symbolEffect(.replace)).animation(reduceMotion || !store.preferences.microInteractions ? nil : .smooth(duration:0.2),value:store.isPlaying).font(.system(size: 15, weight: .semibold)).frame(width: 43, height: 36) }.buttonStyle(.glassProminent).buttonBorderShape(.circle).help(store.t(store.isPlaying ? "pause" : "play"))
                     transport("forward.end.fill", "next") { store.next() }
                     transport(store.repeatMode == 2 ? "repeat.1" : "repeat", "repeat", active: store.repeatMode > 0) { store.repeatMode = (store.repeatMode + 1) % 3 }
                 }
-                HStack(spacing: 9) { Text(clockText(store.position)).frame(width: 32, alignment: .trailing); Slider(value: Binding(get: { store.position }, set: { store.seek($0) }), in: 0...max(1, store.current?.duration ?? 1)).controlSize(.mini).disabled(store.current == nil).accessibilityLabel(store.t("duration")); Text("−" + clockText(max(0, (store.current?.duration ?? 0) - store.position))).frame(width: 38, alignment: .leading) }.font(.system(size: 8, design: .monospaced)).foregroundStyle(.secondary)
+                HStack(spacing: 9) { Text(clockText(store.position)).frame(width: 32, alignment: .trailing); ScrubTimeline(value:Binding(get:{store.position},set:{store.seek($0)}),duration:store.current?.duration ?? 0,enabled:store.current != nil); Text("−" + clockText(max(0, (store.current?.duration ?? 0) - store.position))).frame(width: 38, alignment: .leading) }.font(.system(size: 8, design: .monospaced)).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity)
             VStack(alignment: .trailing, spacing: 12) {
                 HStack(spacing: 12) {
@@ -75,16 +76,17 @@ struct PlayerBar: View {
             }.frame(width: 175)
         }
     }
-    private func transport(_ icon: String, _ label: String, active: Bool = false, _ action: @escaping () -> Void) -> some View { Button(action: action) { Image(systemName: icon).font(.system(size: 12, weight: .medium)).foregroundStyle(active ? store.effectiveAccent : .primary.opacity(0.75)).frame(width: 19, height: 22) }.buttonStyle(.plain).help(store.t(label)) }
+    private func transport(_ icon: String, _ label: String, active: Bool = false, _ action: @escaping () -> Void) -> some View { Button(action: action) { Image(systemName: icon).font(.system(size: 12, weight: .medium)).foregroundStyle(active ? store.effectiveAccent : .primary.opacity(0.75)).frame(width: 19, height: 22) }.buttonStyle(PrismaPressStyle()).help(store.t(label)) }
 }
 struct MiniPlayerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var store: LibraryStore
     var body: some View {
         ZStack { PrismaBackdrop(); VStack(spacing: 15) {
-            ArtworkView(track: store.current).aspectRatio(1.2, contentMode: .fit)
+            ChangingArtwork(track:store.current).aspectRatio(1.2,contentMode:.fit)
             VStack(spacing: 5) { Text(store.current?.title ?? store.t("choose")).font(.system(size: 19, weight: .medium, design: .rounded)); Text(store.current?.artist ?? "Prisma Music").font(.caption).foregroundStyle(.secondary); if store.preferences.showQuality { Text(store.current?.qualitySummary ?? "").font(.system(size: 9, design: .monospaced)).foregroundStyle(store.effectiveAccent) } }.lineLimit(1)
-            Slider(value: Binding(get: { store.position }, set: { store.seek($0) }), in: 0...max(1, store.current?.duration ?? 1)).controlSize(.mini).disabled(store.current == nil)
-            HStack(spacing: 30) { Button { store.next(back: true) } label: { Image(systemName: "backward.end.fill") }; Button { store.togglePlay() } label: { Image(systemName: store.isPlaying ? "pause.fill" : "play.fill").frame(width: 40, height: 34) }.buttonStyle(.glassProminent).buttonBorderShape(.circle); Button { store.next() } label: { Image(systemName: "forward.end.fill") } }.buttonStyle(.plain)
+            ScrubTimeline(value:Binding(get:{store.position},set:{store.seek($0)}),duration:store.current?.duration ?? 0,enabled:store.current != nil)
+            HStack(spacing: 30) { Button { store.next(back: true) } label: { Image(systemName: "backward.end.fill") }; Button { store.togglePlay() } label: { Image(systemName: store.isPlaying ? "pause.fill" : "play.fill").contentTransition(reduceMotion || !store.preferences.microInteractions ? .identity : .symbolEffect(.replace)).animation(reduceMotion || !store.preferences.microInteractions ? nil : .smooth(duration:0.2),value:store.isPlaying).frame(width: 40, height: 34) }.buttonStyle(.glassProminent).buttonBorderShape(.circle); Button { store.next() } label: { Image(systemName: "forward.end.fill") } }.buttonStyle(.plain)
         }.padding(22).padding(.top, 14) }.tint(store.effectiveAccent).preferredColorScheme(store.colorScheme)
     }
 }

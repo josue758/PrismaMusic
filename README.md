@@ -1,17 +1,30 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión local **0.3.0** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión local **0.4.0** para probar e iterar.
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.3.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.4.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
 
-En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.3. La actualización conserva tus datos.
+En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.4. La actualización conserva tus datos.
+
+## Novedades de la versión 0.4
+
+Esta versión refina la respuesta de la interfaz:
+
+- Transiciones suaves entre biblioteca, escucha y visualizador; el indicador de selección acompaña el cambio de sección. Los paneles laterales aparecen con una transición breve.
+- Carátulas y tarjetas con iluminación y profundidad sutil al pasar el cursor. Los botones responden a la presión y los corazones cambian de estado con una animación corta.
+- Fundido entre portadas al cambiar de canción, también en la barra inferior y el minirreproductor. El icono de reproducción cambia con una transición nativa.
+- El fondo y la carátula conservan la fase de su movimiento al pausar; al reanudar continúan desde allí, sin volver a una posición inicial.
+- Barra temporal con previsualización de tiempo bajo el cursor. Al arrastrar, la posición se confirma al soltar para evitar reiniciar el audio en cada movimiento. Una vez enfocada permite saltos de cinco segundos con las flechas; conserva los atajos de siguiente/anterior con Comando.
+- Avisos breves para favoritos, cola y playlists, con **Deshacer** en las acciones compatibles. Una eliminación de playlist puede deshacerse durante el aviso. Las acciones antiguas no pueden deshacer un aviso más reciente, y deshacer un cambio de cola conserva la canción activa.
+
+Los controles **Animaciones de la interfaz**, **Profundidad al pasar el cursor** y **Avisos breves con Deshacer** están en Ajustes → Apariencia. El movimiento de fondo sigue teniendo sus propios controles. La opción global **Reducir movimiento** retira las transiciones espaciales y el paralaje. No se agregan sonidos de interfaz que interrumpan la música.
 
 ## Novedades de la versión 0.3
 

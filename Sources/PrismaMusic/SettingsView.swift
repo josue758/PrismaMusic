@@ -21,7 +21,7 @@ struct SettingsView: View {
                             }
                         }
                         Spacer()
-                        VStack(alignment: .leading, spacing: 7) { HStack(spacing: 5) { Circle().fill(.mint).frame(width: 5, height: 5); Text("PRISMA ENGINE").font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(1) }; Text("0.3 / macOS").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary) }.padding(10)
+                        VStack(alignment: .leading, spacing: 7) { HStack(spacing: 5) { Circle().fill(.mint).frame(width: 5, height: 5); Text("PRISMA ENGINE").font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(1) }; Text("0.4 / macOS").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary) }.padding(10)
                     }.padding(14).frame(width: 203).prismaGlass(24)
                     VStack(alignment: .leading, spacing: 20) {
                         HStack(alignment: .top) {
@@ -42,7 +42,7 @@ struct SettingsView: View {
                                 }
                             }.padding(2).padding(.bottom, 16)
                         }.scrollIndicators(.hidden).clipped()
-                        HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint); Text(store.t("settingsSaved")); Spacer(); Text("PRISMA / 03").font(.system(size: 8, design: .monospaced)).tracking(1) }.font(.system(size: 10)).foregroundStyle(.secondary)
+                        HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint); Text(store.t("settingsSaved")); Spacer(); Text("PRISMA / 04").font(.system(size: 8, design: .monospaced)).tracking(1) }.font(.system(size: 10)).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity)
                 }.padding(20)
             }
@@ -123,7 +123,13 @@ struct SettingsView: View {
         }
     }
     private var appearance: some View {
-        VStack(spacing: 16) {
+        VStack(spacing:16) {
+            card {
+                SectionHeading(title:store.t("interfaceFeel"),subtitle:store.t("interfaceFeelNote"))
+                toggle("microInteractions",$store.preferences.microInteractions)
+                toggle("hoverDepth",$store.preferences.hoverDepth)
+                toggle("showFeedback",$store.preferences.showFeedback)
+            }
             card {
                 SectionHeading(title:store.t("artworkAtmosphere"),subtitle:store.t("artworkAtmosphereNote"))
                 toggle("adaptiveArtwork",$store.preferences.adaptiveArtwork)

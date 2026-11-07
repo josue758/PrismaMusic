@@ -18,6 +18,9 @@ struct ListeningPreferences: Codable, Equatable {
     var ambientMotion = true
     var artworkPulse = true
     var glassTransparency = 0.65
+    var microInteractions = true
+    var hoverDepth = true
+    var showFeedback = true
     var compactRows = false
     var showQuality = true
     var albumSize = "medium"
@@ -34,7 +37,7 @@ struct ListeningPreferences: Codable, Equatable {
     var miniAlwaysOnTop = true
     var miniAllSpaces = true
     init() {}
-    private enum CodingKeys: String, CodingKey { case eqEnabled, eqGains, eqPreset, preamp, autoHeadroom, balance, playbackRate, continueQueue, keepAwake, rememberPosition, startSection, glassStyle, atmosphere, adaptiveArtwork, ambientMotion, artworkPulse, glassTransparency, compactRows, showQuality, albumSize, autoArtwork, autoLyrics, recursiveScan, lyricsFontSize, lyricsOffset, autoScrollLyrics, visualizerStyle, visualizerSensitivity, visualizerFPS, animateVisualizer, miniAlwaysOnTop, miniAllSpaces }
+    private enum CodingKeys: String, CodingKey { case eqEnabled, eqGains, eqPreset, preamp, autoHeadroom, balance, playbackRate, continueQueue, keepAwake, rememberPosition, startSection, glassStyle, atmosphere, adaptiveArtwork, ambientMotion, artworkPulse, glassTransparency, microInteractions, hoverDepth, showFeedback, compactRows, showQuality, albumSize, autoArtwork, autoLyrics, recursiveScan, lyricsFontSize, lyricsOffset, autoScrollLyrics, visualizerStyle, visualizerSensitivity, visualizerFPS, animateVisualizer, miniAlwaysOnTop, miniAllSpaces }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         eqEnabled = try values.decodeIfPresent(Bool.self, forKey: .eqEnabled) ?? eqEnabled
@@ -54,6 +57,9 @@ struct ListeningPreferences: Codable, Equatable {
         ambientMotion = try values.decodeIfPresent(Bool.self, forKey: .ambientMotion) ?? ambientMotion
         artworkPulse = try values.decodeIfPresent(Bool.self, forKey: .artworkPulse) ?? artworkPulse
         glassTransparency = try values.decodeIfPresent(Double.self, forKey: .glassTransparency) ?? glassTransparency
+        microInteractions = try values.decodeIfPresent(Bool.self,forKey:.microInteractions) ?? microInteractions
+        hoverDepth = try values.decodeIfPresent(Bool.self,forKey:.hoverDepth) ?? hoverDepth
+        showFeedback = try values.decodeIfPresent(Bool.self,forKey:.showFeedback) ?? showFeedback
         compactRows = try values.decodeIfPresent(Bool.self, forKey: .compactRows) ?? compactRows
         showQuality = try values.decodeIfPresent(Bool.self, forKey: .showQuality) ?? showQuality
         albumSize = try values.decodeIfPresent(String.self, forKey: .albumSize) ?? albumSize

@@ -1,44 +1,40 @@
-# Validación de Prisma Music 0.3.0
+# Validación de Prisma Music 0.4.0
 
-Fecha: 7 de noviembre de 2026. macOS 27.2, Apple Silicon, Xcode 27.2, Swift 6.4.2.
+7 de noviembre de 2026. macOS 27.2, Apple Silicon, Xcode 27.2 y Swift 6.4.2.
 
 ## Resultado
 
-- Compilación de producción completada. Versión 0.3.0 instalada y abierta desde `/Applications/Prisma Music.app`.
-- Suite: 15 pruebas registradas, 14 aprobadas, 1 omitida y 0 fallos. La prueba omitida es la consulta opt-in a proveedores de internet, cuya implementación no cambió en 0.3 y que pasó en la validación de 0.2.
-- Se conservaron las pruebas de audio reales con EQ, balance, velocidad, búsqueda temporal y reproducción de M4A/AAC y WAV/PCM.
+- Compilación de producción completada; aplicación 0.4.0 instalada y abierta desde `/Applications/Prisma Music.app`.
+- Suite: 18 pruebas registradas, 17 aprobadas, 1 omitida y 0 fallos. Se omite la consulta opt-in a internet; los proveedores no cambiaron y fueron verificados en 0.2.
+- Se mantienen las pruebas de audio real de EQ, balance, velocidad y búsqueda temporal, la extracción de paletas y la migración de biblioteca/preferencias.
 
-## Revisión en la aplicación instalada
+## Comprobaciones en la aplicación instalada
 
-Se observó la nueva vista Escuchando con carátula grande, datos de la canción, controles de reproducción y fondo difuminado. Se inició reproducción y se pasó de Luz de agua (paleta violeta/rosa) a Órbita (paleta turquesa). Se comprobó el cambio de carátula, colores, acentos y fondo, junto con el avance de posición y la detención al terminar la cola.
+Se revisaron la biblioteca, la barra de reproducción y la transición hacia Escuchando. Se observó el indicador de sección y la carátula dentro de los límites de la vista.
 
-Se abrió Ajustes → Apariencia desde Luz ambiental y se comprobaron los interruptores de colores adaptativos, movimiento de fondo y movimiento de carátula, los controles de transparencia y luz ambiental y la indicación de la procedencia de la paleta. Las piezas demo no contienen una carátula incrustada: usan su portada vectorial y la interfaz muestra PALETA GENERATIVA. La extracción de una carátula de imagen real se verifica mediante las pruebas descritas abajo.
+Se marcó Órbita como favorita y se observó el aviso Añadida a favoritos con Deshacer. Al pulsar Deshacer, el corazón volvió al estado anterior y apareció Cambio deshecho. No quedó un favorito de prueba en la biblioteca.
 
-Después de empaquetar se volvió a abrir la compilación final. Se comprobó que conservaba la pantalla Inicio previamente elegida y que Escuchando abría la vista inmersiva. Se dejó esa vista abierta, con la biblioteca y el EQ conservados.
+Se utilizó la acción accesible Decrement de la nueva barra temporal: la posición pasó del final de la pista a aproximadamente 19 segundos. Increment la devolvió al final. Se comprobaron su etiqueta, valor temporal, ayuda y las acciones Increment/Decrement. El control ofrece previsualización bajo el cursor y arrastre mediante gestos nativos; la validación automatizada de UI de esta sesión utilizó las acciones accesibles, no una medición de precisión del arrastre.
 
-## Pruebas nuevas de la versión 0.3
+Se dejó abierta la vista de escucha. No se cambiaron las preferencias globales de accesibilidad del Mac.
 
-1. Paleta a partir de una imagen PNG creada en memoria, con áreas rojas y cian y un borde blanco. Comprueba que el color dominante y el secundario proceden de los píxeles reales, que son distintos y que el resultado es determinista.
-2. Imágenes negras, transparentes y datos inválidos: conserva paletas monocromas reales y solo usa la paleta generativa cuando no hay píxeles utilizables o no se puede decodificar la imagen.
-3. Legibilidad del color de acento: comprueba contraste mínimo de 4,5:1 con los fondos de referencia claro y oscuro. Esta prueba no sustituye una auditoría de contraste sobre todas las posiciones de un fondo animado.
-4. Migración de preferencias 0.2 sin las nuevas claves visuales: conserva preset y bandas del EQ, velocidad, densidad y ajuste de letras, y agrega los valores predeterminados de las nuevas opciones.
+## Pruebas nuevas
 
-## Pruebas existentes
+- El reloj visual acumula únicamente el tiempo activo. Pausar, esperar y reanudar no cambia la fase; iniciar o detener repetidamente no la reinicia.
+- Deshacer rechaza el identificador de un aviso antiguo y solo revierte la acción vigente. Si la reproducción ya avanzó a la canción añadida, deshacer la cola conserva la canción activa.
+- Deshacer una eliminación de playlist recupera su identidad, contenido y posición y lo conserva al volver a cargar la biblioteca.
+- La migración agrega las preferencias nuevas de interacción, profundidad y avisos sin cambiar el EQ, la velocidad, la pantalla de inicio ni los ajustes anteriores.
 
-- Filtros combinados, búsqueda sin acentos y favoritos.
-- Parser de letras LRC y múltiples marcas por línea.
-- Metadatos de tres audios reales y propiedades de formato, bitrate, tamaño, frecuencia y canales.
-- Persistencia de etiquetas editadas, favoritos y biblioteca; comportamiento con una ubicación desconectada o un archivo borrado.
-- Codificación y normalización de las consultas a proveedores.
-- Playlists, cola, aleatorio, preferencias, clasificación sin pérdida y temporizador.
-- Migración del JSON de biblioteca 0.1.
-- Renderizado offline que verifica atenuación real de una señal de 1 kHz con el EQ.
-- M4A/AAC mono a 22,05 kHz procesado a 1,25×, EQ, conversión estéreo, balance por canal y salto a cinco segundos.
+## Cobertura conservada
 
-## Diseño, privacidad y límites
+Filtros y acentos; LRC; metadatos y propiedades técnicas de tres M4A reales; favoritos y etiquetas editadas; ubicaciones desconectadas y archivos borrados; consultas codificadas a proveedores; playlists, cola y temporizador; migración desde 0.1; paletas dominantes, imágenes monocromas/transparentes y contraste de referencia; EQ real con una señal de 1 kHz; y M4A/AAC mono a 22,05 kHz procesado a 1,25× con conversión estéreo, balance y salto a una posición concreta.
 
-La paleta se obtiene de una miniatura de 48 píxeles en una tarea de segundo plano; no se envía la imagen a servicios externos. Al cambiar la canción se descartan los resultados de extracciones anteriores. Se reutiliza la imagen decodificada mientras no cambie la carátula.
+## Movimiento y accesibilidad
 
-El movimiento se modula con RMS real suavizado, con un límite de 24 fps. No se anuncia detección de tempo ni sincronización con cada beat. El fondo y la portada pueden desactivarse por separado y respetan Reducir movimiento. Reducir transparencia retira la decoración de fondo y usa materiales más opacos. Estas ramas de accesibilidad se revisaron en código; no se cambiaron las preferencias globales del Mac durante la prueba.
+Las animaciones de interacción son independientes del movimiento ambiental. Reducir movimiento suprime escala, paralaje y desplazamientos de transición. La barra permite ajuste de cinco segundos con flechas sin modificadores, conserva los comandos con Comando y ofrece acciones accesibles de incremento/decremento. La posición de arrastre se confirma al soltar; no se reinicia el motor por cada movimiento del cursor.
 
-Pendiente: NAS reales del usuario, colecciones grandes, todos los códecs/variantes de etiquetas y otros Mac. El instalador es arm64, requiere macOS 26+, tiene firma ad hoc y no está notarizado para distribución pública. No incorpora modo exclusivo, garantía de salida bit-perfect, crossfade ni ReplayGain. El PiP sigue siendo un minirreproductor flotante de audio; las etiquetas editadas se guardan en la biblioteca, sin reescribir los archivos originales.
+Los efectos de hover y las ramas de accesibilidad se revisaron en código y compilan con el SDK nativo. No se realizó una medición de FPS/GPU ni una auditoría completa de accesibilidad; no se afirma que esas comprobaciones estén completadas.
+
+## Límites
+
+Queda pendiente la conexión con los NAS del usuario, la prueba de colecciones grandes y de todos sus formatos y la validación en otros Mac. El paquete es arm64, requiere macOS 26+, tiene firma ad hoc y no está notarizado. No incluye modo exclusivo, garantía bit-perfect, crossfade ni ReplayGain. El minirreproductor sigue siendo una ventana flotante para audio. Las etiquetas editadas se guardan en la biblioteca sin modificar los originales.

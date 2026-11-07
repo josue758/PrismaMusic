@@ -1,5 +1,11 @@
 # Cambios
 
+## 0.4.0 — 7 de noviembre de 2026
+
+Pulido de movimiento y respuesta: navegación animada, transiciones de vistas y paneles, profundidad e iluminación bajo el cursor, respuesta de botones y corazones y fundido entre portadas. La animación ambiental conserva su fase al pausar y reanudar.
+
+Nueva barra temporal con previsualización, confirmación al soltar y ajuste mediante teclado/accesibilidad. Avisos con Deshacer para acciones de favoritos, cola y playlists. Preferencias independientes de animación, profundidad y avisos.
+
 ## 0.3.0 — 7 de noviembre de 2026
 
 Nueva vista de escucha inmersiva. Colores extraídos localmente de la carátula, fondo de malla con imagen difuminada, cristal más transparente, pulso sutil de la portada y movimiento modulado por el audio real. Controles independientes de color, movimiento y transparencia, con respeto a las opciones de accesibilidad.
