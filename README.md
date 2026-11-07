@@ -1,17 +1,29 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión local **0.2.0** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión local **0.3.0** para probar e iterar.
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.2.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.3.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
 
-En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.2. La actualización conserva tus datos.
+En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.3. La actualización conserva tus datos.
+
+## Novedades de la versión 0.3
+
+La nueva vista **Escuchando** da protagonismo a la carátula, con un fondo difuminado, cristal más transparente y una paleta que sigue a la canción. Se abre desde la barra lateral, el botón de escucha inmersiva o haciendo clic en la carátula del reproductor. Puedes elegirla como pantalla de inicio en Ajustes → Apariencia. Se conserva la pantalla de inicio que ya tuvieras configurada; las instalaciones nuevas comienzan en la vista inmersiva.
+
+Los colores se extraen de la carátula local en segundo plano, sin enviar la imagen a servicios externos. Una transición suave acompaña los cambios de canción. Cuando no hay imagen, se utiliza la paleta de la portada generativa de Prisma; la interfaz indica su procedencia. Las imágenes blancas, negras o transparentes tienen tratamiento específico.
+
+El fondo y la carátula tienen un movimiento suave modulado por el nivel RMS real del audio, no por una detección de tempo ni por datos inventados. La animación se limita a 24 fps, se detiene en pausa y respeta **Reducir movimiento**. **Reducir transparencia** desactiva el fondo decorativo translúcido y usa materiales más opacos.
+
+En **Ajustes → Apariencia** puedes activar o desactivar por separado los colores adaptativos, el movimiento del fondo y la animación de la carátula, además de regular transparencia y luz ambiental. Elegir uno de los ocho colores manuales desactiva la adaptación de color; puedes reactivarla con su interruptor. Los ajustes de sonido y biblioteca de 0.2 se migran sin restablecerlos.
+
+La vista de escucha muestra título, artista, álbum, año y calidad del archivo. Si hay letras, incluye una vista previa sincronizada; el panel lateral mantiene las letras completas.
 
 ## Novedades de la versión 0.2
 

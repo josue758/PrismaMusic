@@ -1,5 +1,11 @@
 # Cambios
 
+## 0.3.0 — 7 de noviembre de 2026
+
+Nueva vista de escucha inmersiva. Colores extraídos localmente de la carátula, fondo de malla con imagen difuminada, cristal más transparente, pulso sutil de la portada y movimiento modulado por el audio real. Controles independientes de color, movimiento y transparencia, con respeto a las opciones de accesibilidad.
+
+Migración de preferencias compatible con versiones anteriores; mantiene el EQ y la biblioteca. Las instalaciones nuevas comienzan en la vista inmersiva; las existentes conservan la pantalla de inicio elegida.
+
 ## 0.2.0 — 7 de noviembre de 2026
 
 Rediseño de Prisma alrededor de superficies Liquid Glass, iluminación ambiental, una portada para la colección, álbumes destacados y una barra de reproducción más completa.

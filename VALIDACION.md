@@ -1,47 +1,44 @@
-# Validación de Prisma Music 0.2.0
+# Validación de Prisma Music 0.3.0
 
-Fecha: 7 de noviembre de 2026. Entorno: macOS 27.2, Apple Silicon, Xcode 27.2, Swift 6.4.2.
+Fecha: 7 de noviembre de 2026. macOS 27.2, Apple Silicon, Xcode 27.2, Swift 6.4.2.
 
 ## Resultado
 
-- Compilación de producción completada; aplicación 0.2.0 instalada y abierta desde `/Applications/Prisma Music.app`.
-- Firma ad hoc e instalador DMG verificados.
-- Once pruebas funcionales verificadas: seis de biblioteca/proveedores y cinco de escucha/DSP. Los proveedores en internet se verificaron con la ejecución opt-in; las pruebas de escucha se repitieron después de corregir el motor.
-- El renderizado de audio de las pruebas es offline; no activa los altavoces.
+- Compilación de producción completada. Versión 0.3.0 instalada y abierta desde `/Applications/Prisma Music.app`.
+- Suite: 15 pruebas registradas, 14 aprobadas, 1 omitida y 0 fallos. La prueba omitida es la consulta opt-in a proveedores de internet, cuya implementación no cambió en 0.3 y que pasó en la validación de 0.2.
+- Se conservaron las pruebas de audio reales con EQ, balance, velocidad, búsqueda temporal y reproducción de M4A/AAC y WAV/PCM.
 
-## Revisión visual de la aplicación instalada
+## Revisión en la aplicación instalada
 
-Después de desbloquear el Mac se revisaron la portada de la colección, la barra lateral flotante, los álbumes y la barra de reproducción. Se corrigió la composición del cristal y se verificó que el contenido desplazable no invadiera la barra inferior.
+Se observó la nueva vista Escuchando con carátula grande, datos de la canción, controles de reproducción y fondo difuminado. Se inició reproducción y se pasó de Luz de agua (paleta violeta/rosa) a Órbita (paleta turquesa). Se comprobó el cambio de carátula, colores, acentos y fondo, junto con el avance de posición y la detención al terminar la cola.
 
-Se abrió el panel de Sonido con sus diez bandas, presets, preamplificación, compensación de realces, balance y salida. Se observó la activación del EQ y el cambio de acento de color. Se comprobó la apertura del panel completo mediante `⌘,` y su recorte al desplazarse.
+Se abrió Ajustes → Apariencia desde Luz ambiental y se comprobaron los interruptores de colores adaptativos, movimiento de fondo y movimiento de carátula, los controles de transparencia y luz ambiental y la indicación de la procedencia de la paleta. Las piezas demo no contienen una carátula incrustada: usan su portada vectorial y la interfaz muestra PALETA GENERATIVA. La extracción de una carátula de imagen real se verifica mediante las pruebas descritas abajo.
 
-Se inició reproducción real desde la app instalada. Se observaron el avance de posición, la cola de tres canciones, el paso de Horizonte a Luz de agua y Órbita y la detención al terminar la cola. No se observaron errores de inicio del nuevo motor de audio.
+Después de empaquetar se volvió a abrir la compilación final. Se comprobó que conservaba la pantalla Inicio previamente elegida y que Escuchando abría la vista inmersiva. Se dejó esa vista abierta, con la biblioteca y el EQ conservados.
 
-## Pruebas de biblioteca y proveedores
+## Pruebas nuevas de la versión 0.3
 
-1. Filtros combinados, múltiples palabras, acentos y favoritos.
-2. LRC con múltiples marcas por línea y fracciones de segundo.
-3. Metadatos y preparación de decodificación de tres M4A reales: título, artista, álbum, año, género, formato, bitrate, tamaño exacto, frecuencia, canales y letras locales.
-4. Persistencia de edición y favoritos; una ubicación desconectada conserva la biblioteca, y un archivo eliminado de una ubicación accesible se retira.
-5. Codificación de consultas con signos y caracteres especiales y normalización de coincidencias.
-6. Consulta real a iTunes y LRCLIB: recepción de carátula y letras sin imprimir ni incluir letras ajenas en los entregables.
+1. Paleta a partir de una imagen PNG creada en memoria, con áreas rojas y cian y un borde blanco. Comprueba que el color dominante y el secundario proceden de los píxeles reales, que son distintos y que el resultado es determinista.
+2. Imágenes negras, transparentes y datos inválidos: conserva paletas monocromas reales y solo usa la paleta generativa cuando no hay píxeles utilizables o no se puede decodificar la imagen.
+3. Legibilidad del color de acento: comprueba contraste mínimo de 4,5:1 con los fondos de referencia claro y oscuro. Esta prueba no sustituye una auditoría de contraste sobre todas las posiciones de un fondo animado.
+4. Migración de preferencias 0.2 sin las nuevas claves visuales: conserva preset y bandas del EQ, velocidad, densidad y ajuste de letras, y agrega los valores predeterminados de las nuevas opciones.
 
-## Pruebas de escucha y migración
+## Pruebas existentes
 
-1. Presets, límites de los controles, compensación de ganancia y serialización de preferencias.
-2. Playlists sin duplicados, persistencia de ajustes y listas, operaciones de cola, aleatorio sin duplicación, clasificación sin pérdida y temporizador.
-3. Migración de un JSON de biblioteca 0.1 conservando favoritos y etiquetas editadas.
-4. EQ real: renderiza una señal de 1 kHz y verifica que el resultado con una atenuación de 12 dB tenga menos de la mitad del RMS de la señal con EQ desactivado.
-5. M4A/AAC real, mono y 22,05 kHz: pasa por el motor a 1,25× con EQ activo, convierte a salida estéreo, comprueba que el balance atenúe el canal izquierdo, verifica el salto a cinco segundos y prueba pausa, reanudación y detención.
+- Filtros combinados, búsqueda sin acentos y favoritos.
+- Parser de letras LRC y múltiples marcas por línea.
+- Metadatos de tres audios reales y propiedades de formato, bitrate, tamaño, frecuencia y canales.
+- Persistencia de etiquetas editadas, favoritos y biblioteca; comportamiento con una ubicación desconectada o un archivo borrado.
+- Codificación y normalización de las consultas a proveedores.
+- Playlists, cola, aleatorio, preferencias, clasificación sin pérdida y temporizador.
+- Migración del JSON de biblioteca 0.1.
+- Renderizado offline que verifica atenuación real de una señal de 1 kHz con el EQ.
+- M4A/AAC mono a 22,05 kHz procesado a 1,25×, EQ, conversión estéreo, balance por canal y salto a cinco segundos.
 
-La última prueba detectó y permitió corregir dos problemas: el control de pan de los mezcladores no alteraba la señal en esta ruta y el reloj del reproductor adelantaba la posición por el preprocesamiento. El balance utiliza ahora una Audio Unit interna con ganancias por canal y el tiempo utiliza el reloj del mezclador de salida. El control de balance se comunica con el renderizador mediante una variable atómica; no asigna memoria por muestra.
+## Diseño, privacidad y límites
 
-## Límites y comprobaciones pendientes
+La paleta se obtiene de una miniatura de 48 píxeles en una tarea de segundo plano; no se envía la imagen a servicios externos. Al cambiar la canción se descartan los resultados de extracciones anteriores. Se reutiliza la imagen decodificada mientras no cambie la carátula.
 
-- NAS real: autenticación, latencia, reconexión y bibliotecas grandes en los servidores del usuario.
-- Todos los códecs y variantes de etiquetas de la colección personal; las pruebas reales incluidas usan M4A/AAC y WAV/PCM.
-- Otros Mac y versiones mínimas del sistema; el binario entregado es arm64 y requiere macOS 26+.
-- Firma Developer ID y notarización antes de distribución pública.
-- No incluye modo exclusivo, garantía de salida bit-perfect, crossfade, ReplayGain ni reproducción sin pausas garantizada.
+El movimiento se modula con RMS real suavizado, con un límite de 24 fps. No se anuncia detección de tempo ni sincronización con cada beat. El fondo y la portada pueden desactivarse por separado y respetan Reducir movimiento. Reducir transparencia retira la decoración de fondo y usa materiales más opacos. Estas ramas de accesibilidad se revisaron en código; no se cambiaron las preferencias globales del Mac durante la prueba.
 
-Los visualizadores representan geometría reactiva al RMS, no un espectro FFT. El minirreproductor es una ventana flotante para audio, no el PiP de vídeo del sistema. La edición de etiquetas se limita a la biblioteca y no modifica los originales. La exportación JSON no tiene todavía una función de restauración automática.
+Pendiente: NAS reales del usuario, colecciones grandes, todos los códecs/variantes de etiquetas y otros Mac. El instalador es arm64, requiere macOS 26+, tiene firma ad hoc y no está notarizado para distribución pública. No incorpora modo exclusivo, garantía de salida bit-perfect, crossfade ni ReplayGain. El PiP sigue siendo un minirreproductor flotante de audio; las etiquetas editadas se guardan en la biblioteca, sin reescribir los archivos originales.

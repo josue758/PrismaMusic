@@ -7,8 +7,8 @@ struct ArtworkView: View {
     private var palette: [Color] { seed == 0 ? [Color(red: 0.10, green: 0.06, blue: 0.24), Color(red: 0.53, green: 0.32, blue: 0.80), .pink] : seed == 1 ? [Color(red: 0.015, green: 0.16, blue: 0.19), .teal, Color(red: 0.61, green: 0.88, blue: 0.81)] : [Color(red: 0.26, green: 0.06, blue: 0.11), Color(red: 0.93, green: 0.37, blue: 0.28), Color(red: 1, green: 0.77, blue: 0.51)] }
     var body: some View {
         GeometryReader { proxy in
-            if let data = track?.artwork, let image = NSImage(data: data) {
-                Image(nsImage: image).resizable().scaledToFill().frame(width: proxy.size.width, height: proxy.size.height).clipped()
+            if let data = track?.artwork {
+                BitmapArtwork(data:data).frame(width:proxy.size.width,height:proxy.size.height).clipped()
             } else {
                 LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing)
                     .overlay {
@@ -46,13 +46,13 @@ struct PlayerBar: View {
     var body: some View {
         HStack(spacing: 25) {
             HStack(spacing: 13) {
-                ArtworkView(track: store.current).frame(width: 55, height: 55)
+                ArtworkView(track: store.current).frame(width: 55, height: 55).contentShape(Rectangle()).onTapGesture { store.showImmersive=true; store.showVisualizer=false }
                 VStack(alignment: .leading, spacing: 5) {
                     Text(store.current?.title ?? store.t("choose")).font(.system(size: 13, weight: .semibold)).foregroundStyle(.primary)
                     Text(store.current?.artist ?? "Prisma Music").font(.system(size: 10)).foregroundStyle(.secondary)
-                    if let track = store.current, store.preferences.showQuality { Text(track.qualitySummary).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(store.accent.color.opacity(0.85)) }
+                    if let track = store.current, store.preferences.showQuality { Text(track.qualitySummary).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(store.effectiveAccent.opacity(0.85)) }
                 }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture { store.inspectedID = nil; store.showInfo.toggle(); store.showLyrics = false; store.showQueue = false }
-                if let track = store.current { Button { store.favorite(track) } label: { Image(systemName: track.favorite ? "heart.fill" : "heart").font(.system(size: 12)).foregroundStyle(track.favorite ? store.accent.color : .secondary) }.buttonStyle(.plain).help(store.t("favorites")) }
+                if let track = store.current { Button { store.favorite(track) } label: { Image(systemName: track.favorite ? "heart.fill" : "heart").font(.system(size: 12)).foregroundStyle(track.favorite ? store.effectiveAccent : .secondary) }.buttonStyle(.plain).help(store.t("favorites")) }
             }.frame(width: 275)
             VStack(spacing: 9) {
                 HStack(spacing: 22) {
@@ -66,8 +66,8 @@ struct PlayerBar: View {
             }.frame(maxWidth: .infinity)
             VStack(alignment: .trailing, spacing: 12) {
                 HStack(spacing: 12) {
-                    if store.sleepDeadline != nil { Button { store.openSettings("playback") } label: { Label(clockText(Double(store.sleepRemaining)), systemImage: "moon").font(.system(size: 8, design: .monospaced)) }.buttonStyle(.plain).foregroundStyle(store.accent.color) }
-                    Button { store.openSettings("sound") } label: { Text("EQ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(store.preferences.eqEnabled ? store.accent.color : .secondary).padding(.horizontal, 7).padding(.vertical, 4).background(.primary.opacity(0.045), in: Capsule()) }.buttonStyle(.plain).help(store.t("equalizer"))
+                    if store.sleepDeadline != nil { Button { store.openSettings("playback") } label: { Label(clockText(Double(store.sleepRemaining)), systemImage: "moon").font(.system(size: 8, design: .monospaced)) }.buttonStyle(.plain).foregroundStyle(store.effectiveAccent) }
+                    Button { store.openSettings("sound") } label: { Text("EQ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(store.preferences.eqEnabled ? store.effectiveAccent : .secondary).padding(.horizontal, 7).padding(.vertical, 4).background(.primary.opacity(0.045), in: Capsule()) }.buttonStyle(.plain).help(store.t("equalizer"))
                     Button { store.miniPlayer() } label: { Image(systemName: "pip").font(.system(size: 12)) }.buttonStyle(.plain).help(store.t("mini"))
                     Button { store.fullScreen() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 11)) }.buttonStyle(.plain).help(store.t("full"))
                 }.foregroundStyle(.secondary)
@@ -75,17 +75,17 @@ struct PlayerBar: View {
             }.frame(width: 175)
         }
     }
-    private func transport(_ icon: String, _ label: String, active: Bool = false, _ action: @escaping () -> Void) -> some View { Button(action: action) { Image(systemName: icon).font(.system(size: 12, weight: .medium)).foregroundStyle(active ? store.accent.color : .primary.opacity(0.75)).frame(width: 19, height: 22) }.buttonStyle(.plain).help(store.t(label)) }
+    private func transport(_ icon: String, _ label: String, active: Bool = false, _ action: @escaping () -> Void) -> some View { Button(action: action) { Image(systemName: icon).font(.system(size: 12, weight: .medium)).foregroundStyle(active ? store.effectiveAccent : .primary.opacity(0.75)).frame(width: 19, height: 22) }.buttonStyle(.plain).help(store.t(label)) }
 }
 struct MiniPlayerView: View {
     @EnvironmentObject var store: LibraryStore
     var body: some View {
         ZStack { PrismaBackdrop(); VStack(spacing: 15) {
             ArtworkView(track: store.current).aspectRatio(1.2, contentMode: .fit)
-            VStack(spacing: 5) { Text(store.current?.title ?? store.t("choose")).font(.system(size: 19, weight: .medium, design: .rounded)); Text(store.current?.artist ?? "Prisma Music").font(.caption).foregroundStyle(.secondary); if store.preferences.showQuality { Text(store.current?.qualitySummary ?? "").font(.system(size: 9, design: .monospaced)).foregroundStyle(store.accent.color) } }.lineLimit(1)
+            VStack(spacing: 5) { Text(store.current?.title ?? store.t("choose")).font(.system(size: 19, weight: .medium, design: .rounded)); Text(store.current?.artist ?? "Prisma Music").font(.caption).foregroundStyle(.secondary); if store.preferences.showQuality { Text(store.current?.qualitySummary ?? "").font(.system(size: 9, design: .monospaced)).foregroundStyle(store.effectiveAccent) } }.lineLimit(1)
             Slider(value: Binding(get: { store.position }, set: { store.seek($0) }), in: 0...max(1, store.current?.duration ?? 1)).controlSize(.mini).disabled(store.current == nil)
             HStack(spacing: 30) { Button { store.next(back: true) } label: { Image(systemName: "backward.end.fill") }; Button { store.togglePlay() } label: { Image(systemName: store.isPlaying ? "pause.fill" : "play.fill").frame(width: 40, height: 34) }.buttonStyle(.glassProminent).buttonBorderShape(.circle); Button { store.next() } label: { Image(systemName: "forward.end.fill") } }.buttonStyle(.plain)
-        }.padding(22).padding(.top, 14) }.tint(store.accent.color).preferredColorScheme(store.colorScheme)
+        }.padding(22).padding(.top, 14) }.tint(store.effectiveAccent).preferredColorScheme(store.colorScheme)
     }
 }
 struct VisualizerView: View {
@@ -93,11 +93,11 @@ struct VisualizerView: View {
     var body: some View {
         ZStack {
             Color(red: 0.01, green: 0.015, blue: 0.028)
-            VisualizerCanvas(level: store.level, playing: store.isPlaying, color: store.accent.color)
+            VisualizerCanvas(level: store.level, playing: store.isPlaying, color: store.effectiveAccent)
             VStack {
-                HStack { HStack(spacing: 7) { Circle().fill(store.accent.color).frame(width: 5, height: 5); Text("PRISMA / " + store.t(store.preferences.visualizerStyle).uppercased()).font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(2) }; Spacer(); Menu { ForEach(["aurora", "orbit", "ribbons"], id: \.self) { mode in Button(store.t(mode)) { store.preferences.visualizerStyle = mode } } } label: { Image(systemName: "circle.hexagongrid").foregroundStyle(.white.opacity(0.6)) }.menuStyle(.borderlessButton).frame(width: 26) }.foregroundStyle(.white.opacity(0.55))
+                HStack { HStack(spacing: 7) { Circle().fill(store.effectiveAccent).frame(width: 5, height: 5); Text("PRISMA / " + store.t(store.preferences.visualizerStyle).uppercased()).font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(2) }; Spacer(); Menu { ForEach(["aurora", "orbit", "ribbons"], id: \.self) { mode in Button(store.t(mode)) { store.preferences.visualizerStyle = mode } } } label: { Image(systemName: "circle.hexagongrid").foregroundStyle(.white.opacity(0.6)) }.menuStyle(.borderlessButton).frame(width: 26) }.foregroundStyle(.white.opacity(0.55))
                 Spacer()
-                VStack(spacing: 10) { Text(store.t("now")).font(.system(size: 8, weight: .medium)).tracking(3).foregroundStyle(store.accent.color); Text(store.current?.title ?? store.t("choose")).font(.system(size: 28, weight: .light, design: .rounded)); Text(store.current?.artist ?? "").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5)) }.foregroundStyle(.white)
+                VStack(spacing: 10) { Text(store.t("now")).font(.system(size: 8, weight: .medium)).tracking(3).foregroundStyle(store.effectiveAccent); Text(store.current?.title ?? store.t("choose")).font(.system(size: 28, weight: .light, design: .rounded)); Text(store.current?.artist ?? "").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5)) }.foregroundStyle(.white)
             }.padding(28)
         }.clipShape(RoundedRectangle(cornerRadius: 25)).overlay { RoundedRectangle(cornerRadius: 25).strokeBorder(.white.opacity(0.08)) }
     }
@@ -162,7 +162,7 @@ struct LyricsView: View {
                     else {
                         let active = lines.last { $0.time <= store.position + store.preferences.lyricsOffset }?.id
                         ScrollViewReader { proxy in
-                            ScrollView { VStack(alignment: .leading, spacing: 20) { ForEach(lines) { line in Button { store.seek(line.time) } label: { Text(line.text.isEmpty ? "♪" : line.text).font(.system(size: store.preferences.lyricsFontSize, weight: .semibold, design: .rounded)).foregroundStyle(line.id == active ? store.accent.color : Color.secondary.opacity(0.65)).frame(maxWidth: .infinity, alignment: .leading) }.buttonStyle(.plain).id(line.id) } }.padding(.vertical, 12) }
+                            ScrollView { VStack(alignment: .leading, spacing: 20) { ForEach(lines) { line in Button { store.seek(line.time) } label: { Text(line.text.isEmpty ? "♪" : line.text).font(.system(size: store.preferences.lyricsFontSize, weight: .semibold, design: .rounded)).foregroundStyle(line.id == active ? store.effectiveAccent : Color.secondary.opacity(0.65)).frame(maxWidth: .infinity, alignment: .leading) }.buttonStyle(.plain).id(line.id) } }.padding(.vertical, 12) }
                                 .onChange(of: active) { _, value in if store.preferences.autoScrollLyrics { withAnimation { proxy.scrollTo(value, anchor: .center) } } }
                         }
                     }
@@ -207,5 +207,14 @@ struct TrackInfoView: View {
     }
     private func detail(_ key: String, _ value: String?) -> some View {
         VStack(alignment: .leading, spacing: 5) { Text(store.t(key)).font(.system(size: 10)).foregroundStyle(.secondary); Text(value ?? store.t("unavailable")).font(.system(size: 13, weight: .medium, design: .rounded)).textSelection(.enabled) }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct BitmapArtwork: View {
+    var data: Data
+    @State private var image: NSImage?
+    var body: some View {
+        Group { if let image { Image(nsImage:image).resizable().scaledToFill() } else { Color.clear } }
+            .task(id:data) { image = NSImage(data:data) }
     }
 }

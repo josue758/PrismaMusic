@@ -8,20 +8,20 @@ struct SettingsView: View {
     private let icons = ["sound": "slider.vertical.3", "playback": "play.circle", "library": "square.stack", "metadata": "sparkles", "appearance": "paintpalette", "experience": "waveform.path", "shortcuts": "command"]
     var body: some View {
         ZStack {
-            PrismaBackdrop()
+            PrismaBackdrop(reactive:false)
             Group {
                 HStack(spacing: 24) {
                     VStack(alignment: .leading, spacing: 24) {
-                        HStack(spacing: 9) { Image(systemName: "waveform.path").font(.system(size: 24)).foregroundStyle(store.accent.color); VStack(alignment: .leading, spacing: 3) { Text("PRISMA").font(.system(size: 15, weight: .bold, design: .rounded)).tracking(3); Text("CONTROL ROOM").font(.system(size: 8, weight: .medium)).tracking(2).foregroundStyle(.secondary) } }.padding(.top, 15).padding(.leading, 8)
+                        HStack(spacing: 9) { Image(systemName: "waveform.path").font(.system(size: 24)).foregroundStyle(store.effectiveAccent); VStack(alignment: .leading, spacing: 3) { Text("PRISMA").font(.system(size: 15, weight: .bold, design: .rounded)).tracking(3); Text("CONTROL ROOM").font(.system(size: 8, weight: .medium)).tracking(2).foregroundStyle(.secondary) } }.padding(.top, 15).padding(.leading, 8)
                         VStack(spacing: 5) {
                             ForEach(pages, id: \.self) { page in
                                 Button { withAnimation(.easeInOut(duration: 0.18)) { store.settingsPage = page } } label: {
-                                    HStack(spacing: 10) { Image(systemName: icons[page]!).frame(width: 18); Text(store.t(page)).font(.system(size: 12, weight: store.settingsPage == page ? .semibold : .regular)); Spacer(minLength: 0) }.padding(.horizontal, 11).padding(.vertical, 12).frame(maxWidth: .infinity).background(store.settingsPage == page ? store.accent.color.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 12)).foregroundStyle(store.settingsPage == page ? store.accent.color : .primary.opacity(0.7))
+                                    HStack(spacing: 10) { Image(systemName: icons[page]!).frame(width: 18); Text(store.t(page)).font(.system(size: 12, weight: store.settingsPage == page ? .semibold : .regular)); Spacer(minLength: 0) }.padding(.horizontal, 11).padding(.vertical, 12).frame(maxWidth: .infinity).background(store.settingsPage == page ? store.effectiveAccent.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 12)).foregroundStyle(store.settingsPage == page ? store.effectiveAccent : .primary.opacity(0.7))
                                 }.buttonStyle(.plain)
                             }
                         }
                         Spacer()
-                        VStack(alignment: .leading, spacing: 7) { HStack(spacing: 5) { Circle().fill(.mint).frame(width: 5, height: 5); Text("PRISMA ENGINE").font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(1) }; Text("0.2 / macOS").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary) }.padding(10)
+                        VStack(alignment: .leading, spacing: 7) { HStack(spacing: 5) { Circle().fill(.mint).frame(width: 5, height: 5); Text("PRISMA ENGINE").font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(1) }; Text("0.3 / macOS").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary) }.padding(10)
                     }.padding(14).frame(width: 203).prismaGlass(24)
                     VStack(alignment: .leading, spacing: 20) {
                         HStack(alignment: .top) {
@@ -42,11 +42,11 @@ struct SettingsView: View {
                                 }
                             }.padding(2).padding(.bottom, 16)
                         }.scrollIndicators(.hidden).clipped()
-                        HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint); Text(store.t("settingsSaved")); Spacer(); Text("PRISMA / 02").font(.system(size: 8, design: .monospaced)).tracking(1) }.font(.system(size: 10)).foregroundStyle(.secondary)
+                        HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint); Text(store.t("settingsSaved")); Spacer(); Text("PRISMA / 03").font(.system(size: 8, design: .monospaced)).tracking(1) }.font(.system(size: 10)).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity)
                 }.padding(20)
             }
-        }.frame(width: 920, height: 740).tint(store.accent.color).preferredColorScheme(store.colorScheme)
+        }.frame(width: 920, height: 740).tint(store.effectiveAccent).preferredColorScheme(store.colorScheme)
     }
     private var sound: some View {
         VStack(spacing: 16) {
@@ -54,13 +54,13 @@ struct SettingsView: View {
                 HStack { VStack(alignment: .leading, spacing: 4) { Label(store.t("equalizer"), systemImage: "slider.vertical.3").font(.system(size: 15, weight: .semibold)); Text(store.t("eqDescription")).font(.system(size: 10)).foregroundStyle(.secondary) }; Spacer(); Toggle(store.t("equalizer"), isOn: $store.preferences.eqEnabled).labelsHidden().toggleStyle(.switch).controlSize(.small) }
                 HStack {
                     Picker(store.t("preset"), selection: Binding(get: { store.preferences.eqPreset }, set: { store.preferences.selectPreset($0); store.preferences.eqEnabled = true })) { ForEach(["flat", "rock", "jazz", "classical", "electronic", "vocal", "custom"], id: \.self) { Text(store.t($0)).tag($0) } }.frame(width: 210)
-                    Spacer(); Button(store.t("resetEQ")) { store.preferences.selectPreset("flat"); store.preferences.preamp = 0 }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(store.accent.color)
+                    Spacer(); Button(store.t("resetEQ")) { store.preferences.selectPreset("flat"); store.preferences.preamp = 0 }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(store.effectiveAccent)
                 }
-                EqualizerGraph(gains: store.preferences.eqGains, color: store.accent.color).frame(height: 65).opacity(store.preferences.eqEnabled ? 1 : 0.35)
+                EqualizerGraph(gains: store.preferences.eqGains, color: store.effectiveAccent).frame(height: 65).opacity(store.preferences.eqEnabled ? 1 : 0.35)
                 HStack(spacing: 0) {
                     ForEach(0..<10, id: \.self) { i in
                         VStack(spacing: 7) {
-                            Text(String(format: "%+.0f", store.preferences.eqGains[i])).font(.system(size: 10, design: .monospaced)).foregroundStyle(store.accent.color)
+                            Text(String(format: "%+.0f", store.preferences.eqGains[i])).font(.system(size: 10, design: .monospaced)).foregroundStyle(store.effectiveAccent)
                             Slider(value: Binding(get: { Double(store.preferences.eqGains[i]) }, set: { store.preferences.eqGains[i] = Float($0); store.preferences.eqPreset = "custom" }), in: -12...12, step: 0.5).frame(width: 115).rotationEffect(.degrees(-90)).frame(width: 26, height: 120).accessibilityLabel("EQ \(Int(ListeningPreferences.frequencies[i])) Hz").disabled(!store.preferences.eqEnabled)
                             Text(ListeningPreferences.frequencies[i] >= 1000 ? String(format: "%gk", ListeningPreferences.frequencies[i] / 1000) : String(Int(ListeningPreferences.frequencies[i]))).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
                         }.frame(maxWidth: .infinity)
@@ -73,10 +73,10 @@ struct SettingsView: View {
                 HStack { Text(store.t("effectiveGain")); Spacer(); Text(String(format: "%+.1f dB", store.preferences.effectivePreamp)).monospacedDigit() }.font(.system(size: 10)).foregroundStyle(.secondary)
             }
             card {
-                HStack { Text(store.t("balance")).font(.system(size: 14, weight: .semibold)); Spacer(); Button(store.t("center")) { store.preferences.balance = 0 }.buttonStyle(.plain).foregroundStyle(store.accent.color).font(.caption) }
+                HStack { Text(store.t("balance")).font(.system(size: 14, weight: .semibold)); Spacer(); Button(store.t("center")) { store.preferences.balance = 0 }.buttonStyle(.plain).foregroundStyle(store.effectiveAccent).font(.caption) }
                 HStack { Text("L"); Slider(value: $store.preferences.balance, in: -1...1); Text("R") }.font(.system(size: 10, design: .monospaced))
                 HStack { Text(store.t("signal")).font(.system(size: 9, weight: .medium)).tracking(1); Spacer(); Text(String(format: "%.1f dBFS", 20 * log10(max(0.00001, store.peak)))).font(.system(size: 10, design: .monospaced)).foregroundStyle(store.peak >= 1 ? .red : .secondary) }
-                GeometryReader { geo in Capsule().fill(.primary.opacity(0.06)).overlay(alignment: .leading) { Capsule().fill(LinearGradient(colors: [.mint, store.accent.color], startPoint: .leading, endPoint: .trailing)).frame(width: geo.size.width * min(1, store.peak * 2)) } }.frame(height: 5)
+                GeometryReader { geo in Capsule().fill(.primary.opacity(0.06)).overlay(alignment: .leading) { Capsule().fill(LinearGradient(colors: [.mint, store.effectiveAccent], startPoint: .leading, endPoint: .trailing)).frame(width: geo.size.width * min(1, store.peak * 2)) } }.frame(height: 5)
             }
             card { SectionHeading(title: store.t("output"), subtitle: store.t("systemOutput")); Text(store.t("outputNote")).font(.caption).foregroundStyle(.secondary); Button { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension")!) } label: { Label(store.t("openSound"), systemImage: "arrow.up.forward.app") }.buttonStyle(.glass) }
         }
@@ -89,9 +89,9 @@ struct SettingsView: View {
                 Divider(); toggle("continueQueue", $store.preferences.continueQueue); toggle("rememberPosition", $store.preferences.rememberPosition); Text(store.t("rememberNote")).font(.caption).foregroundStyle(.secondary); toggle("keepAwake", $store.preferences.keepAwake)
             }
             card {
-                HStack { SectionHeading(title: store.t("sleepTimer"), subtitle: store.t("sleepNote")); Spacer(); Image(systemName: "moon.zzz").font(.system(size: 28, weight: .ultraLight)).foregroundStyle(store.accent.color) }
+                HStack { SectionHeading(title: store.t("sleepTimer"), subtitle: store.t("sleepNote")); Spacer(); Image(systemName: "moon.zzz").font(.system(size: 28, weight: .ultraLight)).foregroundStyle(store.effectiveAccent) }
                 HStack(spacing: 10) { ForEach([15, 30, 60, 90], id: \.self) { minutes in Button("\(minutes) min") { store.setSleepTimer(minutes: minutes) }.buttonStyle(.glass).frame(maxWidth: .infinity) } }
-                if store.sleepDeadline != nil { HStack { Label("\(clockText(Double(store.sleepRemaining))) \(store.t("remaining"))", systemImage: "timer"); Spacer(); Button(store.t("cancelTimer")) { store.setSleepTimer(minutes: nil) }.buttonStyle(.plain).foregroundStyle(store.accent.color) }.font(.caption) }
+                if store.sleepDeadline != nil { HStack { Label("\(clockText(Double(store.sleepRemaining))) \(store.t("remaining"))", systemImage: "timer"); Spacer(); Button(store.t("cancelTimer")) { store.setSleepTimer(minutes: nil) }.buttonStyle(.plain).foregroundStyle(store.effectiveAccent) }.font(.caption) }
                 Divider(); toggle("stopAfter", $store.stopAfterCurrent)
             }
             card { SectionHeading(title: store.t("mini")); toggle("alwaysOnTop", $store.preferences.miniAlwaysOnTop); toggle("allSpaces", $store.preferences.miniAllSpaces); Text(store.t("pipNote")).font(.caption).foregroundStyle(.secondary) }
@@ -102,7 +102,7 @@ struct SettingsView: View {
             card {
                 HStack { SectionHeading(title: store.t("sources")); Spacer(); Button { store.pickMusic() } label: { Image(systemName: "plus") }.buttonStyle(.glass).disabled(store.scanning) }
                 ForEach(store.sources) { source in
-                    HStack(spacing: 10) { Image(systemName: source.url.path.hasPrefix("/Volumes") ? "externaldrive.connected.to.line.below" : "folder").foregroundStyle(store.accent.color); VStack(alignment: .leading, spacing: 4) { Text(source.name).font(.system(size: 12, weight: .medium)); Text(source.url.path).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }; Spacer(); Button { NSWorkspace.shared.activateFileViewerSelecting([source.url]) } label: { Image(systemName: "arrow.up.forward") }.buttonStyle(.plain).help(store.t("reveal")); Button { store.removeSource(source) } label: { Image(systemName: "minus.circle") }.buttonStyle(.plain).foregroundStyle(.secondary).disabled(store.scanning).help(store.t("removeSource")) }.padding(.vertical, 4)
+                    HStack(spacing: 10) { Image(systemName: source.url.path.hasPrefix("/Volumes") ? "externaldrive.connected.to.line.below" : "folder").foregroundStyle(store.effectiveAccent); VStack(alignment: .leading, spacing: 4) { Text(source.name).font(.system(size: 12, weight: .medium)); Text(source.url.path).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }; Spacer(); Button { NSWorkspace.shared.activateFileViewerSelecting([source.url]) } label: { Image(systemName: "arrow.up.forward") }.buttonStyle(.plain).help(store.t("reveal")); Button { store.removeSource(source) } label: { Image(systemName: "minus.circle") }.buttonStyle(.plain).foregroundStyle(.secondary).disabled(store.scanning).help(store.t("removeSource")) }.padding(.vertical, 4)
                 }
                 Divider(); toggle("startScan", $store.scanOnLaunch); toggle("recursive", $store.preferences.recursiveScan)
                 Button { Task { await store.scan(force: true) } } label: { Label(store.scanning ? store.t("reading") : store.t("rescan"), systemImage: "arrow.clockwise") }.buttonStyle(.glass).disabled(store.scanning)
@@ -111,7 +111,7 @@ struct SettingsView: View {
             card {
                 SectionHeading(title: store.t("backup"), subtitle: store.t("backupNote"))
                 HStack { Button(store.t("backup")) { store.exportLibraryBackup() }.buttonStyle(.glass); Button(store.t("exportPlaylist")) { store.exportPlaylist() }.buttonStyle(.glass) }
-                Button(store.t("dataFolder")) { store.showDataFolder() }.buttonStyle(.plain).foregroundStyle(store.accent.color).font(.caption)
+                Button(store.t("dataFolder")) { store.showDataFolder() }.buttonStyle(.plain).foregroundStyle(store.effectiveAccent).font(.caption)
             }
         }
     }
@@ -125,11 +125,18 @@ struct SettingsView: View {
     private var appearance: some View {
         VStack(spacing: 16) {
             card {
+                SectionHeading(title:store.t("artworkAtmosphere"),subtitle:store.t("artworkAtmosphereNote"))
+                toggle("adaptiveArtwork",$store.preferences.adaptiveArtwork)
+                toggle("ambientMotion",$store.preferences.ambientMotion)
+                toggle("artworkPulse",$store.preferences.artworkPulse)
+                HStack(spacing:8) { ForEach(Array(store.artworkPalette.colors.enumerated()),id:\.offset) { _,color in RoundedRectangle(cornerRadius:8).fill(color.gradient).frame(height:27) }; Text(store.t(store.artworkPalette.extracted ? "paletteFromArtwork" : "paletteGenerated")).font(.system(size:9)).foregroundStyle(.secondary).frame(width:125) }
+                Divider()
                 SectionHeading(title: store.t("accentColor"))
-                HStack(spacing: 14) { ForEach(Accent.allCases) { accent in Button { store.accent = accent } label: { VStack(spacing: 8) { Circle().fill(accent.color.gradient).frame(width: 34, height: 34).overlay { if store.accent == accent { Image(systemName: "checkmark").font(.system(size: 12, weight: .bold)).foregroundStyle(.white) } }.overlay { Circle().strokeBorder(.white.opacity(0.35), lineWidth: 1) }; Text(store.t(accent.rawValue)).font(.system(size: 8)).foregroundStyle(.secondary) } }.buttonStyle(.plain).help(store.t(accent.rawValue)) } }.frame(maxWidth: .infinity)
+                HStack(spacing: 14) { ForEach(Accent.allCases) { accent in Button { store.accent = accent; store.preferences.adaptiveArtwork=false } label: { VStack(spacing: 8) { Circle().fill(accent.color.gradient).frame(width: 34, height: 34).overlay { if store.accent == accent { Image(systemName: "checkmark").font(.system(size: 12, weight: .bold)).foregroundStyle(.white) } }.overlay { Circle().strokeBorder(.white.opacity(0.35), lineWidth: 1) }; Text(store.t(accent.rawValue)).font(.system(size: 8)).foregroundStyle(.secondary) } }.buttonStyle(.plain).help(store.t(accent.rawValue)) } }.frame(maxWidth: .infinity)
                 Divider()
                 Picker(store.t("theme"), selection: $store.theme) { ForEach(["system", "dark", "light"], id: \.self) { Text(store.t($0)).tag($0) } }.pickerStyle(.segmented)
                 Picker(store.t("glassMaterial"), selection: $store.preferences.glassStyle) { Text(store.t("regularGlass")).tag("regular"); Text(store.t("clearGlass")).tag("clear") }
+                HStack { Text(store.t("glassTransparency")).font(.caption); Slider(value:$store.preferences.glassTransparency,in:0...1) }
                 HStack { Text(store.t("atmosphere")).font(.caption); Slider(value: $store.preferences.atmosphere, in: 0...1) }
             }
             card {
@@ -137,7 +144,7 @@ struct SettingsView: View {
                 toggle("qualityBadges", $store.preferences.showQuality)
                 Picker(store.t("albumSize"), selection: $store.preferences.albumSize) { ForEach(["small", "medium", "large"], id: \.self) { Text(store.t($0)).tag($0) } }
                 Picker(store.t("language"), selection: $store.language) { ForEach(AppLanguage.allCases) { Text($0.name).tag($0) } }
-                Picker(store.t("startPage"), selection: $store.preferences.startSection) { ForEach(["home", "songs", "albums", "favorites", "recent"], id: \.self) { Text(store.t($0)).tag($0) } }
+                Picker(store.t("startPage"), selection: $store.preferences.startSection) { ForEach(["immersive", "home", "songs", "albums", "favorites", "recent"], id: \.self) { Text(store.t($0)).tag($0) } }
             }
         }
     }
@@ -146,7 +153,7 @@ struct SettingsView: View {
             card {
                 SectionHeading(title: store.t("lyrics"))
                 HStack { Text(store.t("lyricsSize")).font(.caption); Slider(value: $store.preferences.lyricsFontSize, in: 14...32, step: 1); Text("\(Int(store.preferences.lyricsFontSize)) pt").font(.system(size: 11, design: .monospaced)).frame(width: 45) }
-                Text("♪  Prisma Music").font(.system(size: store.preferences.lyricsFontSize, weight: .semibold, design: .rounded)).foregroundStyle(store.accent.color).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
+                Text("♪  Prisma Music").font(.system(size: store.preferences.lyricsFontSize, weight: .semibold, design: .rounded)).foregroundStyle(store.effectiveAccent).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
                 toggle("autoScroll", $store.preferences.autoScrollLyrics)
                 HStack { Text(store.t("lyricOffset")).font(.caption); Slider(value: $store.preferences.lyricsOffset, in: -10...10, step: 0.1); Text(String(format: "%+.1f s", store.preferences.lyricsOffset)).font(.system(size: 11, design: .monospaced)).frame(width: 55) }
                 Text(store.t("offsetNote")).font(.caption).foregroundStyle(.secondary)
@@ -154,7 +161,7 @@ struct SettingsView: View {
             card {
                 SectionHeading(title: store.t("visualizer"))
                 Picker(store.t("visualStyle"), selection: $store.preferences.visualizerStyle) { ForEach(["aurora", "orbit", "ribbons"], id: \.self) { Text(store.t($0)).tag($0) } }.pickerStyle(.segmented)
-                VisualizerCanvas(level: max(0.1, store.level), playing: store.preferences.animateVisualizer, color: store.accent.color).frame(height: 145).background(.black, in: RoundedRectangle(cornerRadius: 14)).clipped()
+                VisualizerCanvas(level: max(0.1, store.level), playing: store.preferences.animateVisualizer, color: store.effectiveAccent).frame(height: 145).background(.black, in: RoundedRectangle(cornerRadius: 14)).clipped()
                 HStack { Text(store.t("sensitivity")).font(.caption); Slider(value: $store.preferences.visualizerSensitivity, in: 0.5...3) }
                 Picker(store.t("frameRate"), selection: $store.preferences.visualizerFPS) { ForEach([24.0, 30, 60], id: \.self) { Text("\(Int($0)) fps").tag($0) } }
                 toggle("animations", $store.preferences.animateVisualizer)

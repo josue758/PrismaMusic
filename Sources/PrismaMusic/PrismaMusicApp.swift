@@ -6,7 +6,7 @@ struct PrismaMusicApp: App {
     @StateObject private var store = LibraryStore()
     var body: some Scene {
         WindowGroup("Prisma Music") {
-            ContentView().environmentObject(store).tint(store.accent.color).preferredColorScheme(store.colorScheme)
+            ContentView().environmentObject(store).tint(store.effectiveAccent).preferredColorScheme(store.colorScheme)
                 .frame(minWidth: 1060, minHeight: 740)
                 .onOpenURL { url in Task { await store.addSources([url]) } }
         }
@@ -27,6 +27,6 @@ struct PrismaMusicApp: App {
                 Button(store.t("full")) { store.fullScreen() }.keyboardShortcut("f", modifiers: [.command, .control])
             }
         }
-        Settings { SettingsView().environmentObject(store).tint(store.accent.color).preferredColorScheme(store.colorScheme) }
+        Settings { SettingsView().environmentObject(store).tint(store.effectiveAccent).preferredColorScheme(store.colorScheme) }
     }
 }

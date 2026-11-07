@@ -11,9 +11,13 @@ struct ListeningPreferences: Codable, Equatable {
     var continueQueue = true
     var keepAwake = false
     var rememberPosition = true
-    var startSection = "home"
+    var startSection = "immersive"
     var glassStyle = "regular"
     var atmosphere = 0.75
+    var adaptiveArtwork = true
+    var ambientMotion = true
+    var artworkPulse = true
+    var glassTransparency = 0.65
     var compactRows = false
     var showQuality = true
     var albumSize = "medium"
@@ -29,6 +33,44 @@ struct ListeningPreferences: Codable, Equatable {
     var animateVisualizer = true
     var miniAlwaysOnTop = true
     var miniAllSpaces = true
+    init() {}
+    private enum CodingKeys: String, CodingKey { case eqEnabled, eqGains, eqPreset, preamp, autoHeadroom, balance, playbackRate, continueQueue, keepAwake, rememberPosition, startSection, glassStyle, atmosphere, adaptiveArtwork, ambientMotion, artworkPulse, glassTransparency, compactRows, showQuality, albumSize, autoArtwork, autoLyrics, recursiveScan, lyricsFontSize, lyricsOffset, autoScrollLyrics, visualizerStyle, visualizerSensitivity, visualizerFPS, animateVisualizer, miniAlwaysOnTop, miniAllSpaces }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        eqEnabled = try values.decodeIfPresent(Bool.self, forKey: .eqEnabled) ?? eqEnabled
+        eqGains = try values.decodeIfPresent([Float].self, forKey: .eqGains) ?? eqGains
+        eqPreset = try values.decodeIfPresent(String.self, forKey: .eqPreset) ?? eqPreset
+        preamp = try values.decodeIfPresent(Float.self, forKey: .preamp) ?? preamp
+        autoHeadroom = try values.decodeIfPresent(Bool.self, forKey: .autoHeadroom) ?? autoHeadroom
+        balance = try values.decodeIfPresent(Float.self, forKey: .balance) ?? balance
+        playbackRate = try values.decodeIfPresent(Float.self, forKey: .playbackRate) ?? playbackRate
+        continueQueue = try values.decodeIfPresent(Bool.self, forKey: .continueQueue) ?? continueQueue
+        keepAwake = try values.decodeIfPresent(Bool.self, forKey: .keepAwake) ?? keepAwake
+        rememberPosition = try values.decodeIfPresent(Bool.self, forKey: .rememberPosition) ?? rememberPosition
+        startSection = try values.decodeIfPresent(String.self, forKey: .startSection) ?? startSection
+        glassStyle = try values.decodeIfPresent(String.self, forKey: .glassStyle) ?? glassStyle
+        atmosphere = try values.decodeIfPresent(Double.self, forKey: .atmosphere) ?? atmosphere
+        adaptiveArtwork = try values.decodeIfPresent(Bool.self, forKey: .adaptiveArtwork) ?? adaptiveArtwork
+        ambientMotion = try values.decodeIfPresent(Bool.self, forKey: .ambientMotion) ?? ambientMotion
+        artworkPulse = try values.decodeIfPresent(Bool.self, forKey: .artworkPulse) ?? artworkPulse
+        glassTransparency = try values.decodeIfPresent(Double.self, forKey: .glassTransparency) ?? glassTransparency
+        compactRows = try values.decodeIfPresent(Bool.self, forKey: .compactRows) ?? compactRows
+        showQuality = try values.decodeIfPresent(Bool.self, forKey: .showQuality) ?? showQuality
+        albumSize = try values.decodeIfPresent(String.self, forKey: .albumSize) ?? albumSize
+        autoArtwork = try values.decodeIfPresent(Bool.self, forKey: .autoArtwork) ?? autoArtwork
+        autoLyrics = try values.decodeIfPresent(Bool.self, forKey: .autoLyrics) ?? autoLyrics
+        recursiveScan = try values.decodeIfPresent(Bool.self, forKey: .recursiveScan) ?? recursiveScan
+        lyricsFontSize = try values.decodeIfPresent(Double.self, forKey: .lyricsFontSize) ?? lyricsFontSize
+        lyricsOffset = try values.decodeIfPresent(Double.self, forKey: .lyricsOffset) ?? lyricsOffset
+        autoScrollLyrics = try values.decodeIfPresent(Bool.self, forKey: .autoScrollLyrics) ?? autoScrollLyrics
+        visualizerStyle = try values.decodeIfPresent(String.self, forKey: .visualizerStyle) ?? visualizerStyle
+        visualizerSensitivity = try values.decodeIfPresent(Double.self, forKey: .visualizerSensitivity) ?? visualizerSensitivity
+        visualizerFPS = try values.decodeIfPresent(Double.self, forKey: .visualizerFPS) ?? visualizerFPS
+        animateVisualizer = try values.decodeIfPresent(Bool.self, forKey: .animateVisualizer) ?? animateVisualizer
+        miniAlwaysOnTop = try values.decodeIfPresent(Bool.self, forKey: .miniAlwaysOnTop) ?? miniAlwaysOnTop
+        miniAllSpaces = try values.decodeIfPresent(Bool.self, forKey: .miniAllSpaces) ?? miniAllSpaces
+        sanitize()
+    }
     static let frequencies: [Float] = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
     static let presets: [String: [Float]] = [
         "flat": [0,0,0,0,0,0,0,0,0,0],
@@ -48,7 +90,8 @@ struct ListeningPreferences: Codable, Equatable {
         playbackRate = playbackRate.isFinite ? min(1.5, max(0.5, playbackRate)) : 1
         lyricsFontSize = min(32, max(14, lyricsFontSize)); lyricsOffset = min(10, max(-10, lyricsOffset))
         visualizerFPS = [24.0, 30, 60].contains(visualizerFPS) ? visualizerFPS : 30
-        atmosphere = min(1, max(0, atmosphere))
+        atmosphere = atmosphere.isFinite ? min(1, max(0, atmosphere)) : 0.75
+        glassTransparency = glassTransparency.isFinite ? min(1, max(0, glassTransparency)) : 0.65
     }
 }
 struct Playlist: Identifiable, Codable, Equatable {

@@ -6,9 +6,9 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class LibraryStore: NSObject, ObservableObject {
-    @Published var tracks: [Track] = []
+    @Published var tracks: [Track] = [] { didSet { refreshArtworkPalette() } }
     @Published var sources: [MusicSource] = []
-    @Published var currentID: String?
+    @Published var currentID: String? { didSet { refreshArtworkPalette() } }
     @Published var isPlaying = false
     @Published var position = 0.0
     @Published var level = 0.0
@@ -21,6 +21,9 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var year = ""
     @Published var section = "home"
     @Published var sort = "title"
+    @Published var showImmersive = true
+    @Published var artworkPalette = ArtworkPalette.fallback()
+    @Published var ambientEnergy = 0.0
     @Published var showVisualizer = false
     @Published var showLyrics = false
     @Published var showQueue = false
@@ -43,6 +46,9 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var theme = "dark" { didSet { UserDefaults.standard.set(theme, forKey: "theme") } }
     @Published var online = true { didSet { UserDefaults.standard.set(online, forKey: "online") } }
     @Published var scanOnLaunch = true { didSet { UserDefaults.standard.set(scanOnLaunch, forKey: "scanOnLaunch") } }
+    private var paletteTask: Task<Void, Never>?
+    private var paletteTrackID: String?
+    private var paletteArtwork: Data?
     private var player: AudioPlayback?
     private var timer: Timer?
     @Published var queue: [String] = []
@@ -56,6 +62,25 @@ final class LibraryStore: NSObject, ObservableObject {
     private var edited: Set<String> = []
     private let dataDirectory: URL
     var current: Track? { tracks.first { $0.id == currentID } }
+    var visualTrack: Track? { current ?? tracks.first }
+    var effectiveAccent: Color {
+        guard preferences.adaptiveArtwork, visualTrack != nil else { return accent.color }
+        let dark = colorScheme == .dark || (colorScheme == nil && NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
+        return artworkPalette.primary.readable(onDark: dark).color
+    }
+    private func refreshArtworkPalette() {
+        let track = visualTrack
+        guard paletteTrackID != track?.id || paletteArtwork != track?.artwork else { return }
+        paletteTrackID = track?.id; paletteArtwork = track?.artwork; paletteTask?.cancel()
+        let fallback = ArtworkPalette.fallback(album: track?.album ?? "Prisma")
+        guard let data = track?.artwork else { artworkPalette = fallback; return }
+        let id = track?.id
+        paletteTask = Task { [weak self] in
+            let palette = await Task.detached(priority: .utility) { ArtworkPalette.extract(data, fallback: fallback) }.value
+            guard !Task.isCancelled, let self, self.paletteTrackID == id, self.paletteArtwork == data else { return }
+            self.artworkPalette = palette
+        }
+    }
     var colorScheme: ColorScheme? { theme == "dark" ? .dark : theme == "light" ? .light : nil }
     var queuedTracks: [Track] { queue.compactMap { id in tracks.first { $0.id == id } } }
     var albumCount: Int { Set(tracks.map { $0.artist + "|" + $0.album }).count }
@@ -98,7 +123,8 @@ final class LibraryStore: NSObject, ObservableObject {
         if let data = try? Data(contentsOf: dataDirectory.appendingPathComponent("preferences.json")), var prefs = try? JSONDecoder().decode(ListeningPreferences.self, from: data) {
             prefs.sanitize(); preferences = prefs
         }
-        section = preferences.startSection
+        section = preferences.startSection == "immersive" ? "home" : preferences.startSection
+        showImmersive = preferences.startSection == "immersive"
         if preferences.rememberPosition, let data = try? Data(contentsOf: dataDirectory.appendingPathComponent("playback.json")), let saved = try? JSONDecoder().decode(PlaybackBookmark.self, from: data) { savedPlayback = (saved.id, saved.position) }
         if let demo = Bundle.module.url(forResource: "Demo", withExtension: nil) {
             for index in sources.indices where sources[index].url.path.contains("PrismaMusic_PrismaMusic.bundle") {
@@ -243,6 +269,8 @@ final class LibraryStore: NSObject, ObservableObject {
             sleepRemaining = max(0, Int(ceil(deadline.timeIntervalSinceNow)))
             if deadline <= Date() { sleepDeadline = nil; pausePlayback() }
         }
+        let targetEnergy = isPlaying ? min(1, pow(max(0, level), 0.55) * 1.8) : 0
+        ambientEnergy += (targetEnergy - ambientEnergy) * (targetEnergy > ambientEnergy ? 0.20 : 0.075)
         guard let player else { return }
         position = player.currentTime
         if isPlaying { let meters = player.levels; level = Double(meters.rms); peak = Double(meters.peak) }
@@ -318,6 +346,7 @@ final class LibraryStore: NSObject, ObservableObject {
         }
     }
     private func updateNowPlaying() {
+        refreshArtworkPalette()
         guard let track = current else { MPNowPlayingInfoCenter.default().nowPlayingInfo = nil; return }
         var info: [String: Any] = [MPMediaItemPropertyTitle: track.title, MPMediaItemPropertyArtist: track.artist, MPMediaItemPropertyAlbumTitle: track.album, MPMediaItemPropertyPlaybackDuration: track.duration, MPNowPlayingInfoPropertyElapsedPlaybackTime: position, MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? Double(preferences.playbackRate) : 0.0]
         if let data = track.artwork, let image = NSImage(data: data) { info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image } }

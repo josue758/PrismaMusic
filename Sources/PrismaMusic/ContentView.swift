@@ -22,7 +22,8 @@ struct ContentView: View {
                         sidebar
                         VStack(spacing: 20) {
                             toolbar
-                            if store.showVisualizer { VisualizerView() }
+                            if store.showImmersive { ImmersivePlayerView() }
+                            else if store.showVisualizer { VisualizerView() }
                             else { library }
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
                         if store.showInfo { TrackInfoView().frame(width: 278).prismaGlass(24) }
@@ -46,12 +47,12 @@ struct ContentView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(spacing: 11) {
-                Image(systemName: "waveform.path").font(.system(size: 27, weight: .light)).foregroundStyle(store.accent.color).frame(width: 38, height: 38).background(store.accent.color.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                Image(systemName: "waveform.path").font(.system(size: 27, weight: .light)).foregroundStyle(store.effectiveAccent).frame(width: 38, height: 38).background(store.effectiveAccent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 3) { Text("PRISMA").font(.system(size: 17, weight: .semibold, design: .rounded)).tracking(3); Text("M U S I C").font(.system(size: 8, weight: .medium)).tracking(2).foregroundStyle(.secondary) }
             }.padding(.horizontal, 7).padding(.top, 10)
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    VStack(spacing: 4) { nav("home", "square.grid.2x2"); nav("songs", "music.note.list"); nav("albums", "square.stack"); nav("artists", "person.2") }
+                    VStack(spacing: 4) { nav("immersive", "play.rectangle"); nav("home", "square.grid.2x2"); nav("songs", "music.note.list"); nav("albums", "square.stack"); nav("artists", "person.2") }
                     VStack(alignment: .leading, spacing: 5) {
                         sidebarLabel("library")
                         nav("favorites", "heart"); nav("recent", "clock.arrow.circlepath"); nav("lossless", "waveform.badge.magnifyingglass")
@@ -59,14 +60,14 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack { sidebarLabel("playlists"); Spacer(); Button { newPlaylist = true } label: { Image(systemName: "plus").font(.system(size: 11)) }.buttonStyle(.plain).help(store.t("newPlaylist")) }.padding(.trailing, 10)
                         ForEach(store.playlists) { playlist in
-                            Button { store.section = "playlist:\(playlist.id)"; store.showVisualizer = false; store.clearFilters() } label: { HStack(spacing: 10) { Image(systemName: "music.note").foregroundStyle(store.accent.color.opacity(0.7)); Text(playlist.name).lineLimit(1); Spacer(); Text("\(playlist.trackIDs.count)").foregroundStyle(.tertiary) }.font(.system(size: 11)).padding(.horizontal, 12).padding(.vertical, 7).background(store.section == "playlist:\(playlist.id)" ? store.accent.color.opacity(0.13) : .clear, in: RoundedRectangle(cornerRadius: 9)) }.buttonStyle(.plain).contextMenu { Button(store.t("deletePlaylist"), role: .destructive) { store.removePlaylist(playlist) } }
+                            Button { store.section = "playlist:\(playlist.id)"; store.showVisualizer = false; store.showImmersive = false; store.clearFilters() } label: { HStack(spacing: 10) { Image(systemName: "music.note").foregroundStyle(store.effectiveAccent.opacity(0.7)); Text(playlist.name).lineLimit(1); Spacer(); Text("\(playlist.trackIDs.count)").foregroundStyle(.tertiary) }.font(.system(size: 11)).padding(.horizontal, 12).padding(.vertical, 7).background(store.section == "playlist:\(playlist.id)" ? store.effectiveAccent.opacity(0.13) : .clear, in: RoundedRectangle(cornerRadius: 9)) }.buttonStyle(.plain).contextMenu { Button(store.t("deletePlaylist"), role: .destructive) { store.removePlaylist(playlist) } }
                         }
                         if store.playlists.isEmpty { Text(store.t("playlistEmpty")).font(.system(size: 10)).foregroundStyle(.tertiary).lineSpacing(4).padding(.horizontal, 12) }
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         HStack { sidebarLabel("sources"); Spacer(); Button { store.pickMusic() } label: { Image(systemName: "plus").font(.system(size: 11)) }.buttonStyle(.plain).help(store.t("add")).disabled(store.scanning) }.padding(.trailing, 10)
                         ForEach(store.sources) { source in
-                            HStack(spacing: 9) { Image(systemName: source.url.path.hasPrefix("/Volumes") ? "externaldrive.connected.to.line.below" : "folder").foregroundStyle(store.accent.color.opacity(0.8)); Text(source.name).lineLimit(1); Spacer() }.font(.system(size: 11)).padding(.horizontal, 12).padding(.vertical, 4).contextMenu { Button(store.t("reveal")) { NSWorkspace.shared.activateFileViewerSelecting([source.url]) }; Button(store.t("removeSource"), role: .destructive) { store.removeSource(source) }.disabled(store.scanning) }
+                            HStack(spacing: 9) { Image(systemName: source.url.path.hasPrefix("/Volumes") ? "externaldrive.connected.to.line.below" : "folder").foregroundStyle(store.effectiveAccent.opacity(0.8)); Text(source.name).lineLimit(1); Spacer() }.font(.system(size: 11)).padding(.horizontal, 12).padding(.vertical, 4).contextMenu { Button(store.t("reveal")) { NSWorkspace.shared.activateFileViewerSelecting([source.url]) }; Button(store.t("removeSource"), role: .destructive) { store.removeSource(source) }.disabled(store.scanning) }
                         }
                         Button { nas = true } label: { Label(store.t("connect"), systemImage: "network").font(.system(size: 10)).foregroundStyle(.secondary) }.buttonStyle(.plain).padding(.horizontal, 12).padding(.top, 4)
                     }
@@ -74,7 +75,7 @@ struct ContentView: View {
             }.scrollIndicators(.hidden).clipped()
             VStack(spacing: 13) {
                 HStack(spacing: 10) {
-                    Image(systemName: "slider.vertical.3").font(.system(size: 18, weight: .light)).foregroundStyle(store.accent.color)
+                    Image(systemName: "slider.vertical.3").font(.system(size: 18, weight: .light)).foregroundStyle(store.effectiveAccent)
                     VStack(alignment: .leading, spacing: 4) { Text(store.t("listeningRoom")).font(.system(size: 11, weight: .medium)); Text(store.preferences.eqEnabled ? store.t(store.preferences.eqPreset) + " · EQ" : store.t("bypass")).font(.system(size: 9)).foregroundStyle(.secondary) }; Spacer(); Image(systemName: "chevron.right").font(.system(size: 9)).foregroundStyle(.secondary)
                 }.padding(13).background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14)).contentShape(Rectangle()).onTapGesture { store.openSettings("sound") }
                 HStack { Button { store.openSettings("appearance") } label: { Label(store.t("settings"), systemImage: "gearshape").font(.system(size: 11)) }.buttonStyle(.plain); Spacer(); HStack(spacing: 4) { Circle().fill(.mint).frame(width: 4, height: 4); Text("LOCAL").font(.system(size: 8, weight: .medium, design: .monospaced)).tracking(1) }.foregroundStyle(.secondary) }.padding(.horizontal, 7)
@@ -83,17 +84,24 @@ struct ContentView: View {
     }
     private func sidebarLabel(_ key: String) -> some View { Text(store.t(key).uppercased()).font(.system(size: 8, weight: .semibold)).tracking(1.5).foregroundStyle(.tertiary).padding(.horizontal, 12).padding(.bottom, 4) }
     private func nav(_ key: String, _ icon: String) -> some View {
-        Button { withAnimation(.easeInOut(duration: 0.18)) { store.section = key; store.showVisualizer = false; store.clearFilters() } } label: {
-            HStack(spacing: 11) { Image(systemName: icon).font(.system(size: 13)).frame(width: 18); Text(store.t(key)).font(.system(size: 12, weight: store.section == key && !store.showVisualizer ? .semibold : .regular)).lineLimit(1); Spacer(minLength: 0); if key == "songs" { Text("\(store.tracks.count)").font(.system(size: 9)).foregroundStyle(.tertiary) } }.padding(.horizontal, 12).padding(.vertical, 10).background(store.section == key && !store.showVisualizer ? store.accent.color.opacity(0.18) : .clear, in: RoundedRectangle(cornerRadius: 11)).foregroundStyle(store.section == key && !store.showVisualizer ? store.accent.color : .primary.opacity(0.65))
+        let selected = key == "immersive" ? store.showImmersive : store.section == key && !store.showVisualizer && !store.showImmersive
+        return Button {
+            withAnimation(.easeInOut(duration:0.25)) {
+                store.showImmersive = key == "immersive"; store.showVisualizer = false
+                if key != "immersive" { store.section=key; store.clearFilters() }
+            }
+        } label: {
+            HStack(spacing:11) { Image(systemName:icon).font(.system(size:13)).frame(width:18); Text(store.t(key)).font(.system(size:12,weight:selected ? .semibold : .regular)).lineLimit(1); Spacer(minLength:0); if key == "songs" { Text("\(store.tracks.count)").font(.system(size:9)).foregroundStyle(.tertiary) } }.padding(.horizontal,12).padding(.vertical,10).background(selected ? store.effectiveAccent.opacity(0.16) : .clear,in:RoundedRectangle(cornerRadius:11)).foregroundStyle(selected ? store.effectiveAccent : .primary.opacity(0.65))
         }.buttonStyle(.plain)
     }
     private var toolbar: some View {
         HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 5) { Text("PRISMA / LIBRARY").font(.system(size: 8, weight: .medium, design: .monospaced)).tracking(1.5).foregroundStyle(.tertiary); Text(store.showVisualizer ? store.t("visualizer") : sectionTitle).font(.system(size: 15, weight: .medium, design: .rounded)).lineLimit(1) }
+            VStack(alignment: .leading, spacing: 5) { Text("PRISMA / LIBRARY").font(.system(size: 8, weight: .medium, design: .monospaced)).tracking(1.5).foregroundStyle(.tertiary); Text(store.showImmersive ? store.t("immersiveMode") : store.showVisualizer ? store.t("visualizer") : sectionTitle).font(.system(size: 15, weight: .medium, design: .rounded)).lineLimit(1) }
             Spacer(minLength: 8)
             HStack(spacing: 7) { Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(.secondary); TextField(store.t("search"), text: $store.search).textFieldStyle(.plain).font(.system(size: 11)); if !store.search.isEmpty { Button { store.search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }.buttonStyle(.plain) } }.padding(.horizontal, 13).frame(width: inspectorVisible ? 190 : 255, height: 36).prismaGlass(22)
             HStack(spacing: 7) {
-                GlassIconButton(icon: "waveform.path", label: store.t("visualizer"), active: store.showVisualizer) { store.showVisualizer.toggle() }
+                GlassIconButton(icon:"play.rectangle",label:store.t("immersiveMode"),active:store.showImmersive) { store.showImmersive.toggle(); store.showVisualizer=false }
+                GlassIconButton(icon: "waveform.path", label: store.t("visualizer"), active: store.showVisualizer) { store.showVisualizer.toggle(); store.showImmersive=false }
                 GlassIconButton(icon: "quote.bubble", label: store.t("lyrics"), active: store.showLyrics) { store.showLyrics.toggle(); store.showInfo = false; store.showQueue = false }
                 GlassIconButton(icon: "list.bullet", label: store.t("queue"), active: store.showQueue) { store.showQueue.toggle(); store.showLyrics = false; store.showInfo = false }
                 GlassIconButton(icon: "info", label: store.t("fileInfo"), active: store.showInfo) { store.inspectedID = selectedID; store.showInfo.toggle(); store.showLyrics = false; store.showQueue = false }
@@ -129,13 +137,13 @@ struct ContentView: View {
                     }.padding(3).padding(.bottom, 20)
                 }.scrollIndicators(.hidden).clipped()
             }
-            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini) }; Text(store.status.isEmpty ? store.t("ready") : store.status).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 02").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
+            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini) }; Text(store.status.isEmpty ? store.t("ready") : store.status).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 03").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     private var hero: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 13) {
-                HStack(spacing: 6) { Circle().fill(store.accent.color).frame(width: 4, height: 4); Text(store.t("collection")).font(.system(size: 8, weight: .semibold)).tracking(2) }.foregroundStyle(store.accent.color)
+                HStack(spacing: 6) { Circle().fill(store.effectiveAccent).frame(width: 4, height: 4); Text(store.t("collection")).font(.system(size: 8, weight: .semibold)).tracking(2) }.foregroundStyle(store.effectiveAccent)
                 Text(store.t("heroTitle")).font(.system(size: inspectorVisible ? 30 : 39, weight: .light, design: .rounded)).tracking(-1).fixedSize(horizontal: false, vertical: true)
                 Text(store.t("heroSubtitle")).font(.system(size: 11)).foregroundStyle(.secondary)
                 HStack(spacing: 10) { Button { if let first = store.filtered.first { store.play(first, in: store.filtered) } } label: { Label(store.t("listen"), systemImage: "play.fill").font(.system(size: 11, weight: .medium)).padding(.horizontal, 4).padding(.vertical, 3) }.buttonStyle(.glassProminent); Button { store.pickMusic() } label: { Image(systemName: "plus").frame(width: 22, height: 25) }.buttonStyle(.glass).help(store.t("add")).disabled(store.scanning) }
@@ -147,7 +155,7 @@ struct ContentView: View {
                     }
                 }.frame(width: 235, height: 185).accessibilityHidden(true)
             }
-        }.padding(26).frame(maxWidth: .infinity, minHeight: 225).background { LinearGradient(colors: [store.accent.color.opacity(0.08), .clear], startPoint: .topLeading, endPoint: .bottomTrailing).clipShape(RoundedRectangle(cornerRadius: 26)) }.prismaGlass(26, tinted: true)
+        }.padding(26).frame(maxWidth: .infinity, minHeight: 225).background { LinearGradient(colors: [store.effectiveAccent.opacity(0.08), .clear], startPoint: .topLeading, endPoint: .bottomTrailing).clipShape(RoundedRectangle(cornerRadius: 26)) }.prismaGlass(26, tinted: true)
     }
     private var collectionStats: some View {
         HStack(spacing: 12) {
@@ -158,7 +166,7 @@ struct ContentView: View {
         }
     }
     private func stat(_ icon: String, _ value: String, _ label: String) -> some View {
-        HStack(spacing: 12) { Image(systemName: icon).font(.system(size: 16, weight: .light)).foregroundStyle(store.accent.color.opacity(0.8)); VStack(alignment: .leading, spacing: 5) { Text(value).font(.system(size: 19, weight: .medium, design: .rounded)).lineLimit(1).minimumScaleFactor(0.7); Text(label).font(.system(size: 9)).foregroundStyle(.secondary) }; Spacer(minLength: 0) }.padding(15).frame(maxWidth: .infinity).prismaGlass(17)
+        HStack(spacing: 12) { Image(systemName: icon).font(.system(size: 16, weight: .light)).foregroundStyle(store.effectiveAccent.opacity(0.8)); VStack(alignment: .leading, spacing: 5) { Text(value).font(.system(size: 19, weight: .medium, design: .rounded)).lineLimit(1).minimumScaleFactor(0.7); Text(label).font(.system(size: 9)).foregroundStyle(.secondary) }; Spacer(minLength: 0) }.padding(15).frame(maxWidth: .infinity).prismaGlass(17)
     }
     private var filterBar: some View {
         HStack(spacing: 8) {
@@ -195,13 +203,13 @@ struct ContentView: View {
             HStack(spacing: 10) { Text("#").frame(width: 22); Text(store.t("title")).frame(maxWidth: .infinity, alignment: .leading); if !inspectorVisible { Text(store.t("album")).frame(width: 140, alignment: .leading); Text(store.t("year")).frame(width: 38) }; Image(systemName: "clock").frame(width: 38); Text("").frame(width: 22) }.font(.system(size: 9, weight: .medium)).foregroundStyle(.tertiary).padding(.horizontal, 12).padding(.bottom, 9)
             ForEach(Array(list.enumerated()), id: \.element.id) { i, track in
                 HStack(spacing: 10) {
-                    Button { store.play(track, in: list) } label: { Group { if store.currentID == track.id && store.isPlaying { Image(systemName: "waveform").foregroundStyle(store.accent.color) } else { Text(String(format: "%02d", i + 1)).foregroundStyle(.tertiary) } }.font(.system(size: 10, design: .monospaced)).frame(width: 22, height: 32) }.buttonStyle(.plain).help(store.t("play"))
+                    Button { store.play(track, in: list) } label: { Group { if store.currentID == track.id && store.isPlaying { Image(systemName: "waveform").foregroundStyle(store.effectiveAccent) } else { Text(String(format: "%02d", i + 1)).foregroundStyle(.tertiary) } }.font(.system(size: 10, design: .monospaced)).frame(width: 22, height: 32) }.buttonStyle(.plain).help(store.t("play"))
                     ArtworkView(track: track).frame(width: store.preferences.compactRows ? 30 : 40, height: store.preferences.compactRows ? 30 : 40).clipShape(RoundedRectangle(cornerRadius: 8))
-                    VStack(alignment: .leading, spacing: 5) { HStack(spacing: 7) { Text(track.title).font(.system(size: 12, weight: .medium)).foregroundStyle(store.currentID == track.id ? store.accent.color : .primary); if store.preferences.showQuality && !inspectorVisible { QualityBadge(track: track) } }; Text(track.artist + (store.preferences.showQuality && !track.qualitySummary.isEmpty ? " · " + track.qualitySummary : "")).font(.system(size: 9)).foregroundStyle(.secondary) }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 5) { HStack(spacing: 7) { Text(track.title).font(.system(size: 12, weight: .medium)).foregroundStyle(store.currentID == track.id ? store.effectiveAccent : .primary); if store.preferences.showQuality && !inspectorVisible { QualityBadge(track: track) } }; Text(track.artist + (store.preferences.showQuality && !track.qualitySummary.isEmpty ? " · " + track.qualitySummary : "")).font(.system(size: 9)).foregroundStyle(.secondary) }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                     if !inspectorVisible { Text(track.album).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1).frame(width: 140, alignment: .leading); Text(track.year).font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary).frame(width: 38) }
                     Text(clockText(track.duration)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary).frame(width: 38)
-                    Button { store.favorite(track) } label: { Image(systemName: track.favorite ? "heart.fill" : "heart").foregroundStyle(track.favorite ? store.accent.color : .secondary.opacity(0.5)) }.buttonStyle(.plain).frame(width: 22).help(store.t("favorites"))
-                }.padding(.horizontal, 12).padding(.vertical, store.preferences.compactRows ? 5 : 9).background(selectedID == track.id ? store.accent.color.opacity(0.10) : i % 2 == 0 ? .primary.opacity(0.025) : .clear, in: RoundedRectangle(cornerRadius: 12)).contentShape(Rectangle()).onTapGesture(count: 2) { store.play(track, in: list) }.onTapGesture { selectedID = track.id; store.inspectedID = track.id }.contextMenu { TrackContextMenu(track: track) { editing = track } }
+                    Button { store.favorite(track) } label: { Image(systemName: track.favorite ? "heart.fill" : "heart").foregroundStyle(track.favorite ? store.effectiveAccent : .secondary.opacity(0.5)) }.buttonStyle(.plain).frame(width: 22).help(store.t("favorites"))
+                }.padding(.horizontal, 12).padding(.vertical, store.preferences.compactRows ? 5 : 9).background(selectedID == track.id ? store.effectiveAccent.opacity(0.10) : i % 2 == 0 ? .primary.opacity(0.025) : .clear, in: RoundedRectangle(cornerRadius: 12)).contentShape(Rectangle()).onTapGesture(count: 2) { store.play(track, in: list) }.onTapGesture { selectedID = track.id; store.inspectedID = track.id }.contextMenu { TrackContextMenu(track: track) { editing = track } }
             }
         }
     }
@@ -250,7 +258,7 @@ struct QueueView: View {
                 LazyVStack(spacing: 12) {
                     ForEach(Array(store.queuedTracks.enumerated()), id: \.offset) { index, track in
                         VStack(spacing: 9) {
-                            HStack(spacing: 10) { ArtworkView(track: track).frame(width: 38, height: 38); VStack(alignment: .leading, spacing: 5) { Text(track.title).font(.system(size: 11, weight: .medium)).foregroundStyle(track.id == store.currentID ? store.accent.color : .primary); Text(track.artist).font(.system(size: 9)).foregroundStyle(.secondary) }.lineLimit(1); Spacer(minLength: 0); Button { store.play(track) } label: { Image(systemName: track.id == store.currentID && store.isPlaying ? "waveform" : "play.fill").font(.system(size: 10)) }.buttonStyle(.plain).help(store.t("play")) }
+                            HStack(spacing: 10) { ArtworkView(track: track).frame(width: 38, height: 38); VStack(alignment: .leading, spacing: 5) { Text(track.title).font(.system(size: 11, weight: .medium)).foregroundStyle(track.id == store.currentID ? store.effectiveAccent : .primary); Text(track.artist).font(.system(size: 9)).foregroundStyle(.secondary) }.lineLimit(1); Spacer(minLength: 0); Button { store.play(track) } label: { Image(systemName: track.id == store.currentID && store.isPlaying ? "waveform" : "play.fill").font(.system(size: 10)) }.buttonStyle(.plain).help(store.t("play")) }
                             HStack(spacing: 15) { Text(String(format: "%02d / %@", index+1, clockText(track.duration))).font(.system(size: 8, design: .monospaced)).foregroundStyle(.tertiary); Spacer(); Button { store.moveQueued(track, direction: -1) } label: { Image(systemName: "arrow.up") }.disabled(index == 0).help(store.t("moveUp")); Button { store.moveQueued(track, direction: 1) } label: { Image(systemName: "arrow.down") }.disabled(index == store.queue.count - 1).help(store.t("moveDown")); Button { store.removeQueued(track) } label: { Image(systemName: "xmark") }.disabled(track.id == store.currentID).help(store.t("remove")) }.buttonStyle(.plain).font(.system(size: 9))
                         }.padding(12).background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 15))
                     }
