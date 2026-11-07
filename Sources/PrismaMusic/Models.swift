@@ -22,6 +22,9 @@ struct Track: Identifiable, Codable, Equatable, Sendable {
     var sampleRate: Double? = nil
     var channels: Int? = nil
     var bitDepth: Int? = nil
+    var lastPlayed: Date? = nil
+    var playCount: Int? = nil
+    var isLossless: Bool { ["FLAC", "ALAC", "PCM"].contains { format?.contains($0) == true } }
     var qualitySummary: String { [format, bitrate.map { "≈\(Int(($0 / 1000).rounded())) kb/s" }].compactMap { $0 }.joined(separator: " · ") }
     var isDemo: Bool { url.path.contains("/Demo/") }
 }
@@ -65,9 +68,9 @@ struct LyricLine: Identifiable {
 }
 enum MetadataReader {
     static let extensions: Set<String> = ["mp3", "m4a", "aac", "aiff", "aif", "wav", "flac", "caf", "mp4", "alac"]
-    static func files(in source: URL) -> [URL] {
+    static func files(in source: URL, recursive: Bool = true) -> [URL] {
         if !source.hasDirectoryPath, extensions.contains(source.pathExtension.lowercased()) { return [source] }
-        guard let enumerator = FileManager.default.enumerator(at: source, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
+        guard let enumerator = FileManager.default.enumerator(at: source, includingPropertiesForKeys: [.isRegularFileKey], options: recursive ? [.skipsHiddenFiles, .skipsPackageDescendants] : [.skipsHiddenFiles, .skipsPackageDescendants, .skipsSubdirectoryDescendants]) else { return [] }
         return enumerator.compactMap { $0 as? URL }.filter { extensions.contains($0.pathExtension.lowercased()) && ((try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true) }.sorted { $0.path < $1.path }
     }
     static func read(_ url: URL) async throws -> Track {

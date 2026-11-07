@@ -1,17 +1,34 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Primera versión local **0.1.0** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión local **0.2.0** para probar e iterar.
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.1.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.2.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
 
-En este Mac ya se instaló en `/Applications/Prisma Music.app`.
+En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.2. La actualización conserva tus datos.
+
+## Novedades de la versión 0.2
+
+- Diseño renovado: pantalla de inicio editorial, álbumes en primer plano, estadísticas reales de la colección, barra lateral flotante y controles con Liquid Glass nativo. Nuevas carátulas generativas vectoriales para archivos sin imagen.
+- Panel de configuración en siete secciones: Sonido, Reproducción, Biblioteca, Metadatos e internet, Apariencia, Letras y visualizador, Atajos y acerca de.
+- Motor de audio AVAudioEngine con ecualizador de diez bandas, seis presets y modo personalizado, preamplificación y compensación automática de realces. Balance estéreo y velocidad 0,5×–1,5× conservando el tono.
+- Cola editable: reproducir a continuación, añadir, subir/bajar y quitar canciones pendientes.
+- Playlists locales, favoritos, historial de escucha y vista de formatos sin pérdida.
+- Temporizador de sueño (15/30/60/90 minutos), detener después de la canción y continuar o pausar al terminar cada pista.
+- Recuperación de la canción y posición en pausa al abrir. Opción de evitar el reposo del sistema mientras se reproduce.
+- Ocho colores, material suave/cristalino, luz ambiental, densidad de filas, tamaño de álbumes, indicadores de calidad y pantalla de inicio configurable.
+- Letras con tamaño configurable, ajuste de sincronización ±10 segundos y seguimiento opcional del verso.
+- Tres visualizadores reactivos al RMS: Aurora, Órbita y Ondas. Sensibilidad y 24/30/60 fps configurables; respeta Reducir movimiento.
+- Minirreproductor con nivel flotante y visibilidad en todos los escritorios configurables.
+- Búsqueda de carátulas y letras activable por separado; relectura completa de etiquetas, escaneo con/sin subcarpetas y exportación de biblioteca JSON o selección M3U8.
+
+No incluye modo de audio exclusivo, salida bit-perfect, crossfade, ReplayGain ni reproducción sin pausas garantizada. La salida y su frecuencia se gestionan desde macOS. La compensación de EQ conserva margen según el mayor realce, pero no es un limitador de picos. La vista Sin pérdida clasifica el **archivo de origen**, no garantiza una ruta de salida sin procesamiento. La copia JSON es una exportación; esta versión no tiene restauración automática desde ella.
 
 ## Qué incluye
 
@@ -21,8 +38,8 @@ En este Mac ya se instaló en `/Applications/Prisma Music.app`.
 - Reproducción, pausa, anterior/siguiente, búsqueda temporal, volumen, aleatorio y repetición de biblioteca o canción.
 - Controles multimedia integrados con Now Playing y MPRemoteCommandCenter.
 - Información técnica por canción: contenedor y códec, bitrate estimado del flujo de audio, tamaño del archivo (y bytes exactos), frecuencia de muestreo, canales y profundidad de bits cuando el formato la expone. Pulsa `⌘I`, el botón ⓘ o clic secundario → **Información del archivo**. El formato y bitrate también aparecen en la lista y en el reproductor.
-- Cinco colores de acento, apariencia clara/oscura/sistema e idiomas español, inglés y portugués.
-- Pantalla completa nativa (`⌃⌘F`). Visualizador Aurora inspirado en los visualizadores de iTunes: responde al nivel RMS real del audio, con respeto a Reducir movimiento. No es un analizador FFT.
+- Ocho colores de acento, apariencia clara/oscura/sistema e idiomas español, inglés y portugués.
+- Pantalla completa nativa (`⌃⌘F`). Visualizadores inspirados en los visualizadores de iTunes: responde al nivel RMS real del audio, con respeto a Reducir movimiento. No es un analizador FFT.
 - Minirreproductor flotante (`⇧⌘M`), visible en los escritorios y sobre otras aplicaciones. **Es una ventana de audio tipo PiP; no implementa el PiP de vídeo del sistema.**
 - Lectura automática de título, artista, álbum, género, año, carátulas y letras desde los metadatos del archivo al importar. En los siguientes inicios, revisa los cambios de las ubicaciones guardadas.
 - Carátulas locales `cover.jpg`, `folder.jpg`, `Folder.jpg` y `cover.png`; letras `.lrc` o `.txt` con el mismo nombre base del audio. Las letras LRC se sincronizan y permiten saltar a un verso.
@@ -43,7 +60,7 @@ Para quitar una carpeta, clic secundario en su nombre → **Quitar ubicación**.
 
 ## Datos e internet
 
-La biblioteca y carátulas se guardan en `~/Library/Application Support/PrismaMusic/library.json`; las preferencias se guardan con el identificador `local.prisma.music`.
+La biblioteca y carátulas se guardan en `~/Library/Application Support/PrismaMusic/library.json`; los ajustes de escucha se guardan en `preferences.json` y la sesión pausada en `playback.json`, junto a la biblioteca. El color, idioma, tema y volumen se guardan con el identificador `local.prisma.music`. Se conservan la biblioteca, favoritos y etiquetas de la versión 0.1.
 
 La opción **Completar desde internet** está activada inicialmente. Envía título y artista a iTunes; título, artista, álbum y duración a LRCLIB. No se envían archivos de audio, rutas locales ni credenciales del NAS. Las búsquedas solo aceptan coincidencia de título/artista para carátulas; las letras usan el endpoint exacto de LRCLIB con duración. La disponibilidad depende del catálogo y de la conexión. Los resultados pueden requerir revisión para versiones en directo o remasterizadas. Se muestra la procedencia de letras y un enlace a iTunes cuando hay carátula en línea.
 
@@ -67,7 +84,7 @@ Pruebas de proveedores en internet, opcionales:
 PRISMA_LIVE_NETWORK=1 swift test
 ```
 
-Las pruebas ordinarias no necesitan internet. Cubren filtros y acentos, parser LRC, lectura de etiquetas y decodificación de tres audios reales, persistencia de edición/favoritos y comportamiento con una ubicación desconectada o archivos borrados.
+Las pruebas ordinarias no necesitan internet. También verifican la migración desde 0.1, playlists/cola, persistencia de ajustes y que el ecualizador atenúe una señal real de 1 kHz mediante renderizado offline sin activar los altavoces. Cubren filtros y acentos, parser LRC, lectura de etiquetas y decodificación de tres audios reales, persistencia de edición/favoritos y comportamiento con una ubicación desconectada o archivos borrados.
 
 ## GitHub
 
@@ -84,6 +101,6 @@ Los binarios de instalación deben adjuntarse a una Release, no al historial de 
 ## Referencias de APIs
 
 - [Apple: aplicar Liquid Glass a vistas personalizadas](https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views)
-- [Apple: medición de audio con AVAudioPlayer](https://developer.apple.com/documentation/avfaudio/avaudioplayer/updatemeters())
+- [Apple: medición de audio con AVAudioEngine](https://developer.apple.com/documentation/avfaudio/avaudioplayer/updatemeters())
 - [Apple: iTunes Search API](https://performance-partners.apple.com/search-api)
 - [LRCLIB: documentación](https://lrclib.net/docs)

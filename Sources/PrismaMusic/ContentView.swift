@@ -3,119 +3,162 @@ import AppKit
 
 struct ContentView: View {
     @EnvironmentObject var store: LibraryStore
-    @Environment(\.colorScheme) var scheme
-    @State private var settings = false
     @State private var nas = false
     @State private var editing: Track?
+    @State private var newPlaylist = false
+    @State private var playlistName = ""
+    @State private var selectedID: String?
+    private var inspectorVisible: Bool { store.showInfo || store.showLyrics || store.showQueue }
+    private var sectionTitle: String {
+        if store.section.hasPrefix("playlist:"), let playlist = store.playlists.first(where: { store.section == "playlist:\($0.id)" }) { return playlist.name }
+        return store.t(store.section)
+    }
     var body: some View {
         ZStack {
-            (scheme == .dark ? Color(red: 0.045, green: 0.045, blue: 0.075) : Color(red: 0.95, green: 0.95, blue: 0.98)).ignoresSafeArea()
-            GeometryReader { proxy in
-                Ellipse().fill(store.accent.color.opacity(scheme == .dark ? 0.16 : 0.12)).frame(width: 600, height: 450).blur(radius: 120).offset(x: proxy.size.width * 0.45, y: -200)
-            }.allowsHitTesting(false)
-            VStack(spacing: 0) {
-                HStack(spacing: 0) {
-                    sidebar
-                    VStack(spacing: 0) {
-                        toolbar
-                        if store.showVisualizer {
-                            VisualizerView().padding(22)
-                        } else {
-                            library
-                        }
-                    }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                    if store.showInfo { TrackInfoView().frame(width: 282).background(.ultraThinMaterial) }
-                    if store.showLyrics { LyricsView().frame(width: 282).background(.ultraThinMaterial) }
-                }
-                PlayerBar().padding(14).glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24)).padding(.horizontal, 14).padding(.bottom, 14)
+            PrismaBackdrop()
+            Group {
+                VStack(spacing: 16) {
+                    HStack(alignment: .top, spacing: 20) {
+                        sidebar
+                        VStack(spacing: 20) {
+                            toolbar
+                            if store.showVisualizer { VisualizerView() }
+                            else { library }
+                        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                        if store.showInfo { TrackInfoView().frame(width: 278).prismaGlass(24) }
+                        if store.showLyrics { LyricsView().frame(width: 278).prismaGlass(24) }
+                        if store.showQueue { QueueView().frame(width: 278).prismaGlass(24) }
+                    }.frame(maxHeight: .infinity)
+                    PlayerBar().padding(.horizontal, 20).padding(.vertical, 14).prismaGlass(26, tinted: true)
+                }.padding(16).padding(.top, 24)
             }
         }
-        .sheet(isPresented: $settings) { SettingsView().environmentObject(store).frame(width: 520) }
+        .frame(minWidth: inspectorVisible ? 1230 : 1060, minHeight: 720)
+        .sheet(isPresented: $store.showSettings) { SettingsView().environmentObject(store) }
         .sheet(isPresented: $nas) { NASView().environmentObject(store) }
         .sheet(item: $editing) { track in TagEditor(track: track).environmentObject(store) }
+        .sheet(isPresented: $newPlaylist) {
+            VStack(alignment: .leading, spacing: 20) { Label(store.t("newPlaylist"), systemImage: "music.note.list").font(.title2.bold()); TextField(store.t("playlistName"), text: $playlistName).textFieldStyle(.roundedBorder).onSubmit { createPlaylist() }; Text(store.t("playlistEmpty")).font(.caption).foregroundStyle(.secondary); HStack { Button(store.t("cancel")) { newPlaylist = false }; Spacer(); Button(store.t("create")) { createPlaylist() }.buttonStyle(.glassProminent).disabled(playlistName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } }.padding(30).frame(width: 420)
+        }
         .alert("Prisma Music", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) { Button("OK") { store.error = nil } } message: { Text(store.error ?? "") }
     }
+    private func createPlaylist() { store.createPlaylist(playlistName); playlistName = ""; newPlaylist = false }
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 26) {
-            HStack(spacing: 10) {
-                Image(systemName: "waveform.path").font(.system(size: 23, weight: .bold)).foregroundStyle(store.accent.color)
-                VStack(alignment: .leading, spacing: 0) { Text("PRISMA").font(.system(size: 17, weight: .heavy, design: .rounded)).tracking(3); Text("MUSIC").font(.system(size: 9, weight: .medium)).tracking(5).foregroundStyle(.secondary) }
-            }.padding(.top, 50).padding(.leading, 12)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(store.t("library").uppercased()).font(.system(size: 10, weight: .semibold)).tracking(2).foregroundStyle(.secondary).padding(.horizontal, 14).padding(.bottom, 8)
-                nav("songs", "music.note.list")
-                nav("albums", "square.stack")
-                nav("artists", "person.2")
-                nav("favorites", "heart")
-            }
-            VStack(alignment: .leading, spacing: 10) {
-                HStack { Text(store.t("sources").uppercased()).font(.system(size: 10, weight: .semibold)).tracking(2).foregroundStyle(.secondary); Spacer(); Button { store.pickMusic() } label: { Image(systemName: "plus") }.buttonStyle(.plain).help(store.t("add")).disabled(store.scanning) }.padding(.horizontal, 14)
-                ForEach(store.sources) { source in
-                    HStack(spacing: 9) { Image(systemName: source.url.path.hasPrefix("/Volumes") ? "externaldrive.connected.to.line.below" : "folder").foregroundStyle(store.accent.color); Text(source.name).lineLimit(1).font(.system(size: 12)); Spacer() }
-                        .padding(.horizontal, 14).padding(.vertical, 5)
-                        .contextMenu { Button(store.t("reveal")) { NSWorkspace.shared.activateFileViewerSelecting([source.url]) }; Button(store.t("removeSource"), role: .destructive) { store.removeSource(source) }.disabled(store.scanning) }
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(spacing: 11) {
+                Image(systemName: "waveform.path").font(.system(size: 27, weight: .light)).foregroundStyle(store.accent.color).frame(width: 38, height: 38).background(store.accent.color.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                VStack(alignment: .leading, spacing: 3) { Text("PRISMA").font(.system(size: 17, weight: .semibold, design: .rounded)).tracking(3); Text("M U S I C").font(.system(size: 8, weight: .medium)).tracking(2).foregroundStyle(.secondary) }
+            }.padding(.horizontal, 7).padding(.top, 10)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    VStack(spacing: 4) { nav("home", "square.grid.2x2"); nav("songs", "music.note.list"); nav("albums", "square.stack"); nav("artists", "person.2") }
+                    VStack(alignment: .leading, spacing: 5) {
+                        sidebarLabel("library")
+                        nav("favorites", "heart"); nav("recent", "clock.arrow.circlepath"); nav("lossless", "waveform.badge.magnifyingglass")
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack { sidebarLabel("playlists"); Spacer(); Button { newPlaylist = true } label: { Image(systemName: "plus").font(.system(size: 11)) }.buttonStyle(.plain).help(store.t("newPlaylist")) }.padding(.trailing, 10)
+                        ForEach(store.playlists) { playlist in
+                            Button { store.section = "playlist:\(playlist.id)"; store.showVisualizer = false; store.clearFilters() } label: { HStack(spacing: 10) { Image(systemName: "music.note").foregroundStyle(store.accent.color.opacity(0.7)); Text(playlist.name).lineLimit(1); Spacer(); Text("\(playlist.trackIDs.count)").foregroundStyle(.tertiary) }.font(.system(size: 11)).padding(.horizontal, 12).padding(.vertical, 7).background(store.section == "playlist:\(playlist.id)" ? store.accent.color.opacity(0.13) : .clear, in: RoundedRectangle(cornerRadius: 9)) }.buttonStyle(.plain).contextMenu { Button(store.t("deletePlaylist"), role: .destructive) { store.removePlaylist(playlist) } }
+                        }
+                        if store.playlists.isEmpty { Text(store.t("playlistEmpty")).font(.system(size: 10)).foregroundStyle(.tertiary).lineSpacing(4).padding(.horizontal, 12) }
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack { sidebarLabel("sources"); Spacer(); Button { store.pickMusic() } label: { Image(systemName: "plus").font(.system(size: 11)) }.buttonStyle(.plain).help(store.t("add")).disabled(store.scanning) }.padding(.trailing, 10)
+                        ForEach(store.sources) { source in
+                            HStack(spacing: 9) { Image(systemName: source.url.path.hasPrefix("/Volumes") ? "externaldrive.connected.to.line.below" : "folder").foregroundStyle(store.accent.color.opacity(0.8)); Text(source.name).lineLimit(1); Spacer() }.font(.system(size: 11)).padding(.horizontal, 12).padding(.vertical, 4).contextMenu { Button(store.t("reveal")) { NSWorkspace.shared.activateFileViewerSelecting([source.url]) }; Button(store.t("removeSource"), role: .destructive) { store.removeSource(source) }.disabled(store.scanning) }
+                        }
+                        Button { nas = true } label: { Label(store.t("connect"), systemImage: "network").font(.system(size: 10)).foregroundStyle(.secondary) }.buttonStyle(.plain).padding(.horizontal, 12).padding(.top, 4)
+                    }
                 }
-                Button { nas = true } label: { Label(store.t("connect"), systemImage: "network").font(.system(size: 12)) }.buttonStyle(.plain).foregroundStyle(.secondary).padding(.horizontal, 14)
+            }.scrollIndicators(.hidden).clipped()
+            VStack(spacing: 13) {
+                HStack(spacing: 10) {
+                    Image(systemName: "slider.vertical.3").font(.system(size: 18, weight: .light)).foregroundStyle(store.accent.color)
+                    VStack(alignment: .leading, spacing: 4) { Text(store.t("listeningRoom")).font(.system(size: 11, weight: .medium)); Text(store.preferences.eqEnabled ? store.t(store.preferences.eqPreset) + " · EQ" : store.t("bypass")).font(.system(size: 9)).foregroundStyle(.secondary) }; Spacer(); Image(systemName: "chevron.right").font(.system(size: 9)).foregroundStyle(.secondary)
+                }.padding(13).background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14)).contentShape(Rectangle()).onTapGesture { store.openSettings("sound") }
+                HStack { Button { store.openSettings("appearance") } label: { Label(store.t("settings"), systemImage: "gearshape").font(.system(size: 11)) }.buttonStyle(.plain); Spacer(); HStack(spacing: 4) { Circle().fill(.mint).frame(width: 4, height: 4); Text("LOCAL").font(.system(size: 8, weight: .medium, design: .monospaced)).tracking(1) }.foregroundStyle(.secondary) }.padding(.horizontal, 7)
             }
-            Spacer()
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(spacing: 6) { Circle().fill(store.scanning ? .orange : .mint).frame(width: 5, height: 5); Text(store.scanning ? store.t("reading") : store.t("localAudio")).font(.system(size: 9, weight: .semibold)).tracking(1) }
-                Button { settings = true } label: { Label(store.t("settings"), systemImage: "slider.horizontal.3").font(.system(size: 12)) }.buttonStyle(.plain).foregroundStyle(.secondary)
-            }.padding(14)
-        }.padding(.horizontal, 12).padding(.bottom, 8).frame(width: 202).background(.ultraThinMaterial)
+        }.padding(14).frame(width: 202).frame(maxHeight: .infinity).prismaGlass(24)
     }
+    private func sidebarLabel(_ key: String) -> some View { Text(store.t(key).uppercased()).font(.system(size: 8, weight: .semibold)).tracking(1.5).foregroundStyle(.tertiary).padding(.horizontal, 12).padding(.bottom, 4) }
     private func nav(_ key: String, _ icon: String) -> some View {
-        Button { store.section = key; store.showVisualizer = false; store.clearFilters() } label: {
-            HStack(spacing: 12) { Image(systemName: icon).frame(width: 18); Text(store.t(key)).font(.system(size: 13, weight: store.section == key ? .semibold : .regular)); Spacer(); if key == "songs" { Text("\(store.tracks.count)").font(.system(size: 11)).foregroundStyle(.secondary) } }.padding(.horizontal, 14).padding(.vertical, 11)
-                .background(store.section == key && !store.showVisualizer ? store.accent.color.opacity(0.17) : .clear, in: RoundedRectangle(cornerRadius: 12))
-                .foregroundStyle(store.section == key ? store.accent.color : .primary)
+        Button { withAnimation(.easeInOut(duration: 0.18)) { store.section = key; store.showVisualizer = false; store.clearFilters() } } label: {
+            HStack(spacing: 11) { Image(systemName: icon).font(.system(size: 13)).frame(width: 18); Text(store.t(key)).font(.system(size: 12, weight: store.section == key && !store.showVisualizer ? .semibold : .regular)).lineLimit(1); Spacer(minLength: 0); if key == "songs" { Text("\(store.tracks.count)").font(.system(size: 9)).foregroundStyle(.tertiary) } }.padding(.horizontal, 12).padding(.vertical, 10).background(store.section == key && !store.showVisualizer ? store.accent.color.opacity(0.18) : .clear, in: RoundedRectangle(cornerRadius: 11)).foregroundStyle(store.section == key && !store.showVisualizer ? store.accent.color : .primary.opacity(0.65))
         }.buttonStyle(.plain)
     }
     private var toolbar: some View {
-        HStack(spacing: 12) {
-            HStack { Image(systemName: "magnifyingglass").foregroundStyle(.secondary); TextField(store.t("search"), text: $store.search).textFieldStyle(.plain); if !store.search.isEmpty { Button { store.search = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain) } }.padding(10).background(.quaternary.opacity(0.45), in: Capsule()).frame(maxWidth: 400)
-            Spacer(minLength: 0)
-            iconButton("arrow.clockwise", store.t("scan")) { Task { await store.scan() } }.disabled(store.scanning)
-            iconButton("waveform.path", store.t("visualizer"), selected: store.showVisualizer) { store.showVisualizer.toggle() }
-            iconButton("quote.bubble", store.t("lyrics"), selected: store.showLyrics) { store.showLyrics.toggle(); store.showInfo = false }
-            iconButton("info.circle", store.t("fileInfo"), selected: store.showInfo) { store.inspectedID = nil; store.showInfo.toggle(); store.showLyrics = false }
-            iconButton("pip", store.t("mini")) { store.miniPlayer() }
-            iconButton("arrow.up.left.and.arrow.down.right", store.t("full")) { store.fullScreen() }
-        }.padding(.horizontal, 28).padding(.top, 30).padding(.bottom, 20)
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 5) { Text("PRISMA / LIBRARY").font(.system(size: 8, weight: .medium, design: .monospaced)).tracking(1.5).foregroundStyle(.tertiary); Text(store.showVisualizer ? store.t("visualizer") : sectionTitle).font(.system(size: 15, weight: .medium, design: .rounded)).lineLimit(1) }
+            Spacer(minLength: 8)
+            HStack(spacing: 7) { Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(.secondary); TextField(store.t("search"), text: $store.search).textFieldStyle(.plain).font(.system(size: 11)); if !store.search.isEmpty { Button { store.search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }.buttonStyle(.plain) } }.padding(.horizontal, 13).frame(width: inspectorVisible ? 190 : 255, height: 36).prismaGlass(22)
+            HStack(spacing: 7) {
+                GlassIconButton(icon: "waveform.path", label: store.t("visualizer"), active: store.showVisualizer) { store.showVisualizer.toggle() }
+                GlassIconButton(icon: "quote.bubble", label: store.t("lyrics"), active: store.showLyrics) { store.showLyrics.toggle(); store.showInfo = false; store.showQueue = false }
+                GlassIconButton(icon: "list.bullet", label: store.t("queue"), active: store.showQueue) { store.showQueue.toggle(); store.showLyrics = false; store.showInfo = false }
+                GlassIconButton(icon: "info", label: store.t("fileInfo"), active: store.showInfo) { store.inspectedID = selectedID; store.showInfo.toggle(); store.showLyrics = false; store.showQueue = false }
+            }
+        }.padding(.horizontal, 2).frame(height: 42)
     }
     private var library: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(store.t("tagline")).font(.system(size: 10, weight: .semibold)).tracking(2.5).foregroundStyle(store.accent.color)
-                    Text(store.t(store.section)).font(.system(size: 34, weight: .bold, design: .rounded))
-                    Text("\(store.filtered.count) \(store.t("count")) · \(clockText(store.filtered.reduce(0) { $0 + $1.duration }))").font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button { store.pickMusic() } label: { Label(store.t("add"), systemImage: "plus").padding(.horizontal, 5).padding(.vertical, 3) }.buttonStyle(.glassProminent).disabled(store.scanning)
-            }
-            filterBar
+        VStack(spacing: 12) {
             if store.tracks.isEmpty {
                 ContentUnavailableView { Label(store.t("empty"), systemImage: "music.note.house") } description: { Text(store.t("emptyNote")) } actions: { Button(store.t("add")) { store.pickMusic() }.buttonStyle(.glassProminent) }.frame(maxHeight: .infinity)
-            } else if store.filtered.isEmpty {
-                ContentUnavailableView { Label(store.t("noResults"), systemImage: "magnifyingglass") } actions: { Button(store.t("clear")) { store.clearFilters() } }.frame(maxHeight: .infinity)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 22) {
-                        if store.section == "songs" && store.search.isEmpty && store.artist.isEmpty && store.genre.isEmpty && store.year.isEmpty {
-                            if store.tracks.allSatisfy(\.isDemo) {
-                                VStack(alignment: .leading, spacing: 5) { Text(store.t("demo")).font(.system(size: 13, weight: .semibold)); Text(store.t("demoNote")).font(.system(size: 11)).foregroundStyle(.secondary) }
-                            }
+                    VStack(alignment: .leading, spacing: 24) {
+                        if store.section == "home" && store.search.isEmpty {
+                            hero
+                            collectionStats
+                            HStack { SectionHeading(title: store.t("featured")); Spacer(); Button(store.t("seeAll") + " ↗") { store.section = "albums" }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(.secondary) }
                             albumGrid(limit: 3)
+                            HStack { SectionHeading(title: store.t("songs"), subtitle: store.tracks.allSatisfy(\.isDemo) ? store.t("demoNote") : nil); Spacer(); Button(store.t("allSongs") + " ↗") { store.section = "songs" }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(.secondary) }
+                            songList(Array(store.filtered.prefix(8)))
+                        } else {
+                            HStack(alignment: .bottom) {
+                                VStack(alignment: .leading, spacing: 8) { Text(sectionTitle).font(.system(size: 30, weight: .semibold, design: .rounded)); Text("\(store.filtered.count) \(store.t("count")) · \(clockText(store.filtered.reduce(0) { $0 + $1.duration }))").font(.system(size: 11)).foregroundStyle(.secondary) }
+                                Spacer(); Button { store.pickMusic() } label: { Label(store.t("add"), systemImage: "plus").font(.system(size: 11)).padding(.vertical, 3) }.buttonStyle(.glassProminent).disabled(store.scanning)
+                            }.padding(.top, 10)
+                            filterBar
+                            if store.filtered.isEmpty {
+                                ContentUnavailableView { Label(store.t("noResults"), systemImage: "music.note") } description: { Text(store.section.hasPrefix("playlist:") ? store.t("playlistEmpty") : "") } actions: { Button(store.t("clear")) { store.clearFilters() } }.frame(minHeight: 240)
+                            } else if store.section == "albums" { albumGrid(limit: nil) }
+                            else if store.section == "artists" { artistGrid }
+                            else { songList(store.filtered) }
                         }
-                        if store.section == "albums" { albumGrid(limit: nil) }
-                        else if store.section == "artists" { artistGrid }
-                        else { songList }
-                    }.padding(.bottom, 10)
-                }
+                    }.padding(3).padding(.bottom, 20)
+                }.scrollIndicators(.hidden).clipped()
             }
-            HStack(spacing: 7) { if store.scanning { ProgressView().controlSize(.mini) }; Text(store.status).lineLimit(2).font(.system(size: 10)).foregroundStyle(.secondary); Spacer(); Text("PRISMA / 01").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(.tertiary) }.frame(minHeight: 14)
-        }.padding(.horizontal, 28).padding(.bottom, 12).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini) }; Text(store.status.isEmpty ? store.t("ready") : store.status).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 02").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
+        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    private var hero: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 13) {
+                HStack(spacing: 6) { Circle().fill(store.accent.color).frame(width: 4, height: 4); Text(store.t("collection")).font(.system(size: 8, weight: .semibold)).tracking(2) }.foregroundStyle(store.accent.color)
+                Text(store.t("heroTitle")).font(.system(size: inspectorVisible ? 30 : 39, weight: .light, design: .rounded)).tracking(-1).fixedSize(horizontal: false, vertical: true)
+                Text(store.t("heroSubtitle")).font(.system(size: 11)).foregroundStyle(.secondary)
+                HStack(spacing: 10) { Button { if let first = store.filtered.first { store.play(first, in: store.filtered) } } label: { Label(store.t("listen"), systemImage: "play.fill").font(.system(size: 11, weight: .medium)).padding(.horizontal, 4).padding(.vertical, 3) }.buttonStyle(.glassProminent); Button { store.pickMusic() } label: { Image(systemName: "plus").frame(width: 22, height: 25) }.buttonStyle(.glass).help(store.t("add")).disabled(store.scanning) }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+            if !inspectorVisible {
+                ZStack {
+                    ForEach(Array(store.tracks.prefix(3).enumerated().reversed()), id: \.element.id) { i, track in
+                        ArtworkView(track: track).frame(width: 164, height: 164).rotationEffect(.degrees(i == 0 ? -7 : i == 1 ? 8 : 19)).offset(x: CGFloat(i) * 27 - 25, y: CGFloat(i) * -2).shadow(color: .black.opacity(0.25), radius: 15, y: 10)
+                    }
+                }.frame(width: 235, height: 185).accessibilityHidden(true)
+            }
+        }.padding(26).frame(maxWidth: .infinity, minHeight: 225).background { LinearGradient(colors: [store.accent.color.opacity(0.08), .clear], startPoint: .topLeading, endPoint: .bottomTrailing).clipShape(RoundedRectangle(cornerRadius: 26)) }.prismaGlass(26, tinted: true)
+    }
+    private var collectionStats: some View {
+        HStack(spacing: 12) {
+            stat("square.stack", "\(store.albumCount)", store.t("albums"))
+            stat("person.2", "\(store.artistCount)", store.t("artists"))
+            stat("waveform", clockText(store.totalDuration), store.t("duration"))
+            stat("externaldrive", ByteCountFormatter.string(fromByteCount: store.libraryBytes, countStyle: .file), store.t("fileSize"))
+        }
+    }
+    private func stat(_ icon: String, _ value: String, _ label: String) -> some View {
+        HStack(spacing: 12) { Image(systemName: icon).font(.system(size: 16, weight: .light)).foregroundStyle(store.accent.color.opacity(0.8)); VStack(alignment: .leading, spacing: 5) { Text(value).font(.system(size: 19, weight: .medium, design: .rounded)).lineLimit(1).minimumScaleFactor(0.7); Text(label).font(.system(size: 9)).foregroundStyle(.secondary) }; Spacer(minLength: 0) }.padding(15).frame(maxWidth: .infinity).prismaGlass(17)
     }
     private var filterBar: some View {
         HStack(spacing: 8) {
@@ -127,54 +170,94 @@ struct ContentView: View {
             if !store.artist.isEmpty || !store.genre.isEmpty || !store.year.isEmpty { Button { store.clearFilters() } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).help(store.t("clear")) }
         }
     }
-    private func filterMenu(_ label: String, selection: Binding<String>, values: [String]) -> some View {
-        Menu { Button(store.t(label)) { selection.wrappedValue = "" }; Divider(); ForEach(values, id: \.self) { value in Button(value) { selection.wrappedValue = value } } } label: { HStack(spacing: 6) { Text(selection.wrappedValue.isEmpty ? store.t(label) : selection.wrappedValue).lineLimit(1); Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)) }.font(.system(size: 11)).padding(.horizontal, 11).padding(.vertical, 8).background(selection.wrappedValue.isEmpty ? Color.primary.opacity(0.045) : store.accent.color.opacity(0.15), in: Capsule()) }.menuStyle(.borderlessButton).fixedSize(horizontal: false, vertical: true)
+    private func filterMenu(_ key: String, selection: Binding<String>, values: [String]) -> some View {
+        Menu { Button(store.t(key)) { selection.wrappedValue = "" }; Divider(); ForEach(values, id: \.self) { value in Button(value) { selection.wrappedValue = value } } } label: { Text(selection.wrappedValue.isEmpty ? store.t(key) : selection.wrappedValue).font(.system(size: 10)).lineLimit(1).padding(.horizontal, 12).padding(.vertical, 9) }.menuStyle(.borderlessButton).prismaGlass(18).fixedSize()
     }
     private func albumGrid(limit: Int?) -> some View {
         let groups = Dictionary(grouping: store.filtered) { $0.artist + "\u{1f}" + $0.album }.sorted { $0.key < $1.key }
-        return LazyVGrid(columns: limit == nil ? [GridItem(.adaptive(minimum: 160), spacing: 18)] : Array(repeating: GridItem(.flexible(), spacing: 18), count: min(3, max(1, groups.count))), alignment: .leading, spacing: 20) {
+        let width: CGFloat = store.preferences.albumSize == "small" ? 140 : store.preferences.albumSize == "large" ? 240 : 185
+        return LazyVGrid(columns: limit == nil ? [GridItem(.adaptive(minimum: width), spacing: 16)] : Array(repeating: GridItem(.flexible(), spacing: 16), count: min(3, max(1, groups.count))), spacing: 18) {
             ForEach(Array(groups.prefix(limit ?? groups.count)), id: \.key) { group in
-                if let track = group.value.first {
-                    Button { store.play(track, in: group.value.sorted { $0.title < $1.title }) } label: {
-                        VStack(alignment: .leading, spacing: 10) {
-                            ArtworkView(track: track).aspectRatio(limit == nil ? 1 : 1.5, contentMode: .fit).overlay(alignment: .bottomTrailing) { Image(systemName: "play.fill").font(.system(size: 14)).padding(13).glassEffect(.regular, in: Circle()).padding(12) }
-                            Text(track.album).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                            Text(track.artist + (track.year.isEmpty ? "" : " · " + track.year)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                        }.contentShape(Rectangle())
-                    }.buttonStyle(.plain).contextMenu { Button(store.t("reveal")) { NSWorkspace.shared.activateFileViewerSelecting([track.url]) } }
-                }
+                if let track = group.value.first { AlbumCard(track: track, wide: limit != nil) { store.play(track, in: group.value) }.contextMenu { TrackContextMenu(track: track) { editing = track } } }
             }
         }
     }
     private var artistGrid: some View {
         let groups = Dictionary(grouping: store.filtered, by: \.artist).sorted { $0.key < $1.key }
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 20) {
+        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 18) {
             ForEach(groups, id: \.key) { group in
-                Button { store.artist = group.key; store.section = "songs" } label: {
-                    VStack(spacing: 12) { ArtworkView(track: group.value.first).clipShape(Circle()).frame(width: 110, height: 110); Text(group.key).font(.headline); Text("\(group.value.count) \(store.t("count"))").font(.caption).foregroundStyle(.secondary) }.padding(20).frame(maxWidth: .infinity)
-                }.buttonStyle(.plain)
+                Button { store.artist = group.key; store.section = "songs" } label: { VStack(spacing: 14) { ArtworkView(track: group.value.first).frame(width: 105, height: 105).clipShape(Circle()); Text(group.key).font(.system(size: 13, weight: .medium)).lineLimit(1); Text("\(group.value.count) \(store.t("count"))").font(.system(size: 10)).foregroundStyle(.secondary) }.padding(22).frame(maxWidth: .infinity).prismaGlass(22) }.buttonStyle(.plain)
             }
         }
     }
-    private var songList: some View {
-        LazyVStack(spacing: 0) {
-            HStack { Text("#").frame(width: 24); Text(store.t("title")).frame(maxWidth: .infinity, alignment: .leading); Text(store.t("album")).frame(width: 130, alignment: .leading); Text(store.t("year")).frame(width: 45); Image(systemName: "clock").frame(width: 44); Text("").frame(width: 24) }.font(.system(size: 10, weight: .medium)).foregroundStyle(.tertiary).padding(.horizontal, 10).padding(.bottom, 10)
-            ForEach(Array(store.filtered.enumerated()), id: \.element.id) { index, track in
+    private func songList(_ list: [Track]) -> some View {
+        LazyVStack(spacing: 3) {
+            HStack(spacing: 10) { Text("#").frame(width: 22); Text(store.t("title")).frame(maxWidth: .infinity, alignment: .leading); if !inspectorVisible { Text(store.t("album")).frame(width: 140, alignment: .leading); Text(store.t("year")).frame(width: 38) }; Image(systemName: "clock").frame(width: 38); Text("").frame(width: 22) }.font(.system(size: 9, weight: .medium)).foregroundStyle(.tertiary).padding(.horizontal, 12).padding(.bottom, 9)
+            ForEach(Array(list.enumerated()), id: \.element.id) { i, track in
                 HStack(spacing: 10) {
-                    Button { store.play(track, in: store.filtered) } label: { Group { if store.currentID == track.id && store.isPlaying { Image(systemName: "waveform").foregroundStyle(store.accent.color) } else { Text(String(format: "%02d", index + 1)).foregroundStyle(.tertiary) } }.font(.system(size: 11, design: .monospaced)).frame(width: 24, height: 40) }.buttonStyle(.plain).help(store.t("play"))
-                    ArtworkView(track: track).frame(width: 36, height: 36).clipShape(RoundedRectangle(cornerRadius: 7))
-                    VStack(alignment: .leading, spacing: 4) { Text(track.title).font(.system(size: 12, weight: .medium)).foregroundStyle(store.currentID == track.id ? store.accent.color : .primary); Text(track.artist + (track.qualitySummary.isEmpty ? "" : " · " + track.qualitySummary)).font(.system(size: 10)).foregroundStyle(.secondary) }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-                    Text(track.album).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).frame(width: 130, alignment: .leading)
-                    Text(track.year).font(.system(size: 10)).foregroundStyle(.tertiary).frame(width: 45)
-                    Text(clockText(track.duration)).monospacedDigit().font(.system(size: 10)).foregroundStyle(.secondary).frame(width: 44)
-                    Button { store.favorite(track) } label: { Image(systemName: track.favorite ? "heart.fill" : "heart").foregroundStyle(track.favorite ? store.accent.color : Color.secondary.opacity(0.5)) }.buttonStyle(.plain).frame(width: 24).help(store.t("favorites"))
-                }.padding(.horizontal, 10).padding(.vertical, 8).background(index % 2 == 0 ? Color.primary.opacity(0.025) : .clear, in: RoundedRectangle(cornerRadius: 10)).contentShape(Rectangle())
-                    .onTapGesture(count: 2) { store.play(track, in: store.filtered) }
-                    .contextMenu { Button(store.t("play")) { store.play(track, in: store.filtered) }; Button(store.t("fileInfo")) { store.inspectedID = track.id; store.showInfo = true; store.showLyrics = false }; Button(store.t("edit")) { editing = track }; Button(store.t("fetch")) { Task { await store.enrich(track) } }; Button(store.t("reveal")) { NSWorkspace.shared.activateFileViewerSelecting([track.url]) } }
+                    Button { store.play(track, in: list) } label: { Group { if store.currentID == track.id && store.isPlaying { Image(systemName: "waveform").foregroundStyle(store.accent.color) } else { Text(String(format: "%02d", i + 1)).foregroundStyle(.tertiary) } }.font(.system(size: 10, design: .monospaced)).frame(width: 22, height: 32) }.buttonStyle(.plain).help(store.t("play"))
+                    ArtworkView(track: track).frame(width: store.preferences.compactRows ? 30 : 40, height: store.preferences.compactRows ? 30 : 40).clipShape(RoundedRectangle(cornerRadius: 8))
+                    VStack(alignment: .leading, spacing: 5) { HStack(spacing: 7) { Text(track.title).font(.system(size: 12, weight: .medium)).foregroundStyle(store.currentID == track.id ? store.accent.color : .primary); if store.preferences.showQuality && !inspectorVisible { QualityBadge(track: track) } }; Text(track.artist + (store.preferences.showQuality && !track.qualitySummary.isEmpty ? " · " + track.qualitySummary : "")).font(.system(size: 9)).foregroundStyle(.secondary) }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                    if !inspectorVisible { Text(track.album).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1).frame(width: 140, alignment: .leading); Text(track.year).font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary).frame(width: 38) }
+                    Text(clockText(track.duration)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary).frame(width: 38)
+                    Button { store.favorite(track) } label: { Image(systemName: track.favorite ? "heart.fill" : "heart").foregroundStyle(track.favorite ? store.accent.color : .secondary.opacity(0.5)) }.buttonStyle(.plain).frame(width: 22).help(store.t("favorites"))
+                }.padding(.horizontal, 12).padding(.vertical, store.preferences.compactRows ? 5 : 9).background(selectedID == track.id ? store.accent.color.opacity(0.10) : i % 2 == 0 ? .primary.opacity(0.025) : .clear, in: RoundedRectangle(cornerRadius: 12)).contentShape(Rectangle()).onTapGesture(count: 2) { store.play(track, in: list) }.onTapGesture { selectedID = track.id; store.inspectedID = track.id }.contextMenu { TrackContextMenu(track: track) { editing = track } }
             }
         }
     }
-    private func iconButton(_ icon: String, _ help: String, selected: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: icon).font(.system(size: 13)).foregroundStyle(selected ? store.accent.color : .secondary).frame(width: 26, height: 28) }.buttonStyle(.plain).help(help).accessibilityLabel(help)
+}
+struct AlbumCard: View {
+    @EnvironmentObject var store: LibraryStore
+    var track: Track
+    var wide = false
+    var action: () -> Void
+    @State private var hover = false
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 12) {
+                ArtworkView(track: track).aspectRatio(wide ? 1.65 : 1, contentMode: .fit).overlay(alignment: .bottomTrailing) { Image(systemName: "play.fill").font(.system(size: 12)).frame(width: 34, height: 34).glassEffect(.regular, in: Circle()).padding(10).opacity(hover ? 1 : 0.8) }
+                VStack(alignment: .leading, spacing: 5) { Text(track.album).font(.system(size: 12, weight: .semibold)); HStack { Text(track.artist).font(.system(size: 10)).foregroundStyle(.secondary); Spacer(minLength: 2); Text(track.year).font(.system(size: 8, design: .monospaced)).foregroundStyle(.tertiary) } }.lineLimit(1).padding(.horizontal, 3).padding(.bottom, 3)
+            }.padding(9).prismaGlass(20).scaleEffect(hover ? 1.015 : 1)
+        }.buttonStyle(.plain).onHover { hover = $0 }.animation(.easeOut(duration: 0.18), value: hover)
+    }
+}
+struct TrackContextMenu: View {
+    @EnvironmentObject var store: LibraryStore
+    var track: Track
+    var edit: () -> Void
+    var body: some View {
+        Button(store.t("play")) { store.play(track, in: store.filtered) }
+        Button(store.t("playNext")) { store.enqueue(track, next: true) }
+        Button(store.t("addQueue")) { store.enqueue(track) }
+        Divider()
+        Menu(store.t("addToPlaylist")) { ForEach(store.playlists) { playlist in Button(playlist.name) { store.add(track, to: playlist) } }; if store.playlists.isEmpty { Text(store.t("playlistEmpty")) } }
+        if store.section.hasPrefix("playlist:") { Button(store.t("removeFromPlaylist")) { store.removeFromPlaylist(track) } }
+        Button(store.t("favorites")) { store.favorite(track) }
+        Divider()
+        Button(store.t("fileInfo")) { store.inspectedID = track.id; store.showInfo = true; store.showLyrics = false; store.showQueue = false }
+        Button(store.t("edit"), action: edit)
+        Button(store.t("fetch")) { Task { await store.enrich(track) } }.disabled(store.fetching)
+        Button(store.t("reveal")) { NSWorkspace.shared.activateFileViewerSelecting([track.url]) }
+    }
+}
+struct QueueView: View {
+    @EnvironmentObject var store: LibraryStore
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack { SectionHeading(title: store.t("queue")); Spacer(); Button { store.showQueue = false } label: { Image(systemName: "xmark") }.buttonStyle(.plain) }
+            HStack { Text(store.t("upNext")).font(.system(size: 8, weight: .medium)).tracking(1.5); Spacer(); Text("\(store.queue.count)").font(.system(size: 10, design: .monospaced)) }.foregroundStyle(.secondary)
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(Array(store.queuedTracks.enumerated()), id: \.offset) { index, track in
+                        VStack(spacing: 9) {
+                            HStack(spacing: 10) { ArtworkView(track: track).frame(width: 38, height: 38); VStack(alignment: .leading, spacing: 5) { Text(track.title).font(.system(size: 11, weight: .medium)).foregroundStyle(track.id == store.currentID ? store.accent.color : .primary); Text(track.artist).font(.system(size: 9)).foregroundStyle(.secondary) }.lineLimit(1); Spacer(minLength: 0); Button { store.play(track) } label: { Image(systemName: track.id == store.currentID && store.isPlaying ? "waveform" : "play.fill").font(.system(size: 10)) }.buttonStyle(.plain).help(store.t("play")) }
+                            HStack(spacing: 15) { Text(String(format: "%02d / %@", index+1, clockText(track.duration))).font(.system(size: 8, design: .monospaced)).foregroundStyle(.tertiary); Spacer(); Button { store.moveQueued(track, direction: -1) } label: { Image(systemName: "arrow.up") }.disabled(index == 0).help(store.t("moveUp")); Button { store.moveQueued(track, direction: 1) } label: { Image(systemName: "arrow.down") }.disabled(index == store.queue.count - 1).help(store.t("moveDown")); Button { store.removeQueued(track) } label: { Image(systemName: "xmark") }.disabled(track.id == store.currentID).help(store.t("remove")) }.buttonStyle(.plain).font(.system(size: 9))
+                        }.padding(12).background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 15))
+                    }
+                }
+            }.scrollIndicators(.hidden).clipped()
+            if store.queue.isEmpty { Text(store.t("queueEmpty")).font(.caption).foregroundStyle(.secondary); Spacer() }
+            Button { store.openSettings("playback") } label: { Label(store.t("playback"), systemImage: "slider.horizontal.3").font(.caption) }.buttonStyle(.glass)
+        }.padding(18).padding(.top, 5)
     }
 }

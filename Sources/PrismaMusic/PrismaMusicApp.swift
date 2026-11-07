@@ -7,15 +7,16 @@ struct PrismaMusicApp: App {
     var body: some Scene {
         WindowGroup("Prisma Music") {
             ContentView().environmentObject(store).tint(store.accent.color).preferredColorScheme(store.colorScheme)
-                .frame(minWidth: 940, minHeight: 640)
+                .frame(minWidth: 1060, minHeight: 740)
                 .onOpenURL { url in Task { await store.addSources([url]) } }
         }
-        .defaultSize(width: 1240, height: 820)
+        .defaultSize(width: 1360, height: 900)
         .windowStyle(.hiddenTitleBar)
         .commands {
+            CommandGroup(replacing: .appSettings) { Button(store.t("settings")) { store.openSettings() }.keyboardShortcut(",") }
             CommandGroup(after: .newItem) {
                 Button(store.t("add")) { store.pickMusic() }.keyboardShortcut("o")
-                Button(store.t("fileInfo")) { store.inspectedID = nil; store.showInfo.toggle(); store.showLyrics = false }.keyboardShortcut("i")
+                Button(store.t("fileInfo")) { store.inspectedID = nil; store.showInfo.toggle(); store.showLyrics = false; store.showQueue = false }.keyboardShortcut("i")
                 Button(store.t("scan")) { Task { await store.scan() } }.keyboardShortcut("r").disabled(store.scanning)
             }
             CommandMenu(store.t("play")) {

@@ -3,109 +3,149 @@ import AppKit
 
 struct ArtworkView: View {
     var track: Track?
-    var palette: [Color] {
-        let seed = (track?.album ?? "Prisma").unicodeScalars.reduce(0) { $0 + Int($1.value) } % 3
-        return seed == 0 ? [Color(red: 0.24, green: 0.09, blue: 0.48), .purple, .pink] : seed == 1 ? [Color(red: 0.025, green: 0.20, blue: 0.26), .teal, .cyan] : [Color(red: 0.43, green: 0.12, blue: 0.14), .orange, .pink]
-    }
+    private var seed: Int { (track?.album ?? "Prisma").unicodeScalars.reduce(0) { $0 + Int($1.value) } % 3 }
+    private var palette: [Color] { seed == 0 ? [Color(red: 0.10, green: 0.06, blue: 0.24), Color(red: 0.53, green: 0.32, blue: 0.80), .pink] : seed == 1 ? [Color(red: 0.015, green: 0.16, blue: 0.19), .teal, Color(red: 0.61, green: 0.88, blue: 0.81)] : [Color(red: 0.26, green: 0.06, blue: 0.11), Color(red: 0.93, green: 0.37, blue: 0.28), Color(red: 1, green: 0.77, blue: 0.51)] }
     var body: some View {
         GeometryReader { proxy in
             if let data = track?.artwork, let image = NSImage(data: data) {
                 Image(nsImage: image).resizable().scaledToFill().frame(width: proxy.size.width, height: proxy.size.height).clipped()
             } else {
-                ZStack {
-                    LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing)
-                    Circle().fill(.white.opacity(0.17)).frame(width: proxy.size.width * 0.8).blur(radius: proxy.size.width * 0.15).offset(x: proxy.size.width * 0.28, y: -proxy.size.height * 0.2)
-                    ForEach(0..<7) { i in
-                        Ellipse().stroke(.white.opacity(0.12 + Double(i) * 0.025), lineWidth: max(1, proxy.size.width / 170)).frame(width: proxy.size.width * (0.5 + Double(i) * 0.13), height: proxy.size.height * (0.3 + Double(i) * 0.10)).rotationEffect(.degrees(-35)).offset(y: proxy.size.height * 0.04)
+                LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .overlay {
+                        Canvas { context, size in
+                            let center = CGPoint(x: size.width * 0.57, y: size.height * 0.48)
+                            let r = min(size.width, size.height) * 0.32
+                            var glow = context; glow.addFilter(.blur(radius: r * 0.6))
+                            glow.fill(Path(ellipseIn: CGRect(x: center.x-r, y: center.y-r, width: r*2, height: r*2)), with: .color(.white.opacity(0.24)))
+                            if seed == 1 {
+                                for layer in 0..<16 {
+                                    var path = Path()
+                                    for step in 0...100 { let x = Double(step) / 100 * size.width; let y = size.height * 0.2 + Double(layer) * size.height * 0.047 + sin(Double(step) / 100 * 5 + Double(layer) * 0.16) * size.height * 0.16; if step == 0 { path.move(to: CGPoint(x:x,y:y)) } else { path.addLine(to: CGPoint(x:x,y:y)) } }
+                                    context.stroke(path, with: .color(.white.opacity(0.09 + Double(layer % 4) * 0.06)), lineWidth: layer % 4 == 0 ? 2 : 0.7)
+                                }
+                            } else {
+                                for i in 0..<12 {
+                                    var ring = context; ring.translateBy(x: center.x, y: center.y); ring.rotate(by: .degrees(seed == 0 ? -28 : 30))
+                                    let width = r * (0.6 + Double(i) * 0.17)
+                                    ring.stroke(Path(ellipseIn: CGRect(x: -width, y: -width * 0.57, width: width*2, height: width*1.14)), with: .linearGradient(Gradient(colors: [.white.opacity(0.015), .white.opacity(0.6), .white.opacity(0.035)]), startPoint: CGPoint(x: -r, y: -r), endPoint: CGPoint(x:r,y:r)), lineWidth: i % 3 == 0 ? 1.5 : 0.65)
+                                }
+                            }
+                            let orb = CGRect(x:center.x-r*0.62, y:center.y-r*0.62, width:r*1.24, height:r*1.24)
+                            context.fill(Path(ellipseIn: orb), with: .radialGradient(Gradient(stops: [.init(color: .white.opacity(0.8), location: 0), .init(color: palette[2].opacity(0.8), location: 0.35), .init(color: palette[0].opacity(0.9), location: 1)]), center: CGPoint(x:center.x-r*0.22,y:center.y-r*0.25), startRadius: 0, endRadius: r*1.1))
+                        }
                     }
-                    Image(systemName: "waveform.path").font(.system(size: proxy.size.width * 0.24, weight: .ultraLight)).foregroundStyle(.white.opacity(0.8))
-                    if proxy.size.width > 100 { VStack { HStack { Text("PRISMA SESSIONS").font(.system(size: max(7, proxy.size.width * 0.035), weight: .medium)).tracking(2); Spacer() }; Spacer(); HStack { Spacer(); Text("◌").font(.system(size: proxy.size.width * 0.15, weight: .ultraLight)) } }.padding(proxy.size.width * 0.10).foregroundStyle(.white.opacity(0.6)) }
-                }.frame(width: proxy.size.width, height: proxy.size.height).clipped()
+                    .overlay(alignment: .topLeading) { if proxy.size.width > 100 { Text(track?.isDemo == true ? "P R I S M A   S E S S I O N S" : "P R I S M A   /   A U D I O").font(.system(size: max(6, proxy.size.width * 0.027), weight: .medium)).foregroundStyle(.white.opacity(0.65)).lineLimit(1).padding(proxy.size.width * 0.08) } }
+                    .overlay(alignment: .bottomLeading) { if proxy.size.width > 130 { Text(seed == 0 ? "A M E T H Y S T" : seed == 1 ? "T I D A L" : "S O L S T I C E").font(.system(size: max(7, proxy.size.width * 0.035), weight: .light, design: .rounded)).foregroundStyle(.white.opacity(0.8)).padding(proxy.size.width * 0.08) } }
+                    .frame(width: proxy.size.width, height: proxy.size.height).clipped()
             }
-        }.clipShape(RoundedRectangle(cornerRadius: 14))
+        }.clipShape(RoundedRectangle(cornerRadius: 14)).overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.12), lineWidth: 0.6) }
     }
 }
 struct PlayerBar: View {
     @EnvironmentObject var store: LibraryStore
     var body: some View {
-        HStack(spacing: 16) {
-            HStack(spacing: 12) {
-                ArtworkView(track: store.current).frame(width: 49, height: 49).clipShape(RoundedRectangle(cornerRadius: 9))
-                VStack(alignment: .leading, spacing: 5) { Text(store.current?.title ?? store.t("choose")).font(.system(size: 12, weight: .semibold)); Text((store.current.map { $0.artist + ($0.qualitySummary.isEmpty ? "" : " · " + $0.qualitySummary) }) ?? "Prisma Music").font(.system(size: 10)).foregroundStyle(.secondary) }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-                if let track = store.current { Button { store.favorite(track) } label: { Image(systemName: track.favorite ? "heart.fill" : "heart").foregroundStyle(track.favorite ? store.accent.color : .secondary) }.buttonStyle(.plain).help(store.t("favorites")) }
-            }.frame(width: 225)
-            VStack(spacing: 5) {
+        HStack(spacing: 25) {
+            HStack(spacing: 13) {
+                ArtworkView(track: store.current).frame(width: 55, height: 55)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(store.current?.title ?? store.t("choose")).font(.system(size: 13, weight: .semibold)).foregroundStyle(.primary)
+                    Text(store.current?.artist ?? "Prisma Music").font(.system(size: 10)).foregroundStyle(.secondary)
+                    if let track = store.current, store.preferences.showQuality { Text(track.qualitySummary).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(store.accent.color.opacity(0.85)) }
+                }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture { store.inspectedID = nil; store.showInfo.toggle(); store.showLyrics = false; store.showQueue = false }
+                if let track = store.current { Button { store.favorite(track) } label: { Image(systemName: track.favorite ? "heart.fill" : "heart").font(.system(size: 12)).foregroundStyle(track.favorite ? store.accent.color : .secondary) }.buttonStyle(.plain).help(store.t("favorites")) }
+            }.frame(width: 275)
+            VStack(spacing: 9) {
                 HStack(spacing: 22) {
-                    Button { store.shuffle.toggle() } label: { Image(systemName: "shuffle").foregroundStyle(store.shuffle ? store.accent.color : .secondary) }.help(store.t("shuffle"))
-                    Button { store.next(back: true) } label: { Image(systemName: "backward.end.fill") }.help(store.t("previous"))
-                    Button { store.togglePlay() } label: { Image(systemName: store.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 16, weight: .semibold)).frame(width: 36, height: 32) }.buttonStyle(.glassProminent).help(store.t(store.isPlaying ? "pause" : "play"))
-                    Button { store.next() } label: { Image(systemName: "forward.end.fill") }.help(store.t("next"))
-                    Button { store.repeatMode = (store.repeatMode + 1) % 3 } label: { Image(systemName: store.repeatMode == 2 ? "repeat.1" : "repeat").foregroundStyle(store.repeatMode > 0 ? store.accent.color : .secondary) }.help(store.t("repeat"))
-                }.buttonStyle(.plain).font(.system(size: 12))
-                HStack(spacing: 8) { Text(clockText(store.position)).frame(width: 34, alignment: .trailing); Slider(value: Binding(get: { store.position }, set: { store.seek($0) }), in: 0...max(1, store.current?.duration ?? 1)).controlSize(.mini).disabled(store.current == nil).accessibilityLabel("Playback position"); Text(clockText(store.current?.duration ?? 0)).frame(width: 34, alignment: .leading) }.font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
+                    transport("shuffle", "shuffle", active: store.shuffle) { store.shuffle.toggle() }
+                    transport("backward.end.fill", "previous") { store.next(back: true) }
+                    Button { store.togglePlay() } label: { Image(systemName: store.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 15, weight: .semibold)).frame(width: 43, height: 36) }.buttonStyle(.glassProminent).buttonBorderShape(.circle).help(store.t(store.isPlaying ? "pause" : "play"))
+                    transport("forward.end.fill", "next") { store.next() }
+                    transport(store.repeatMode == 2 ? "repeat.1" : "repeat", "repeat", active: store.repeatMode > 0) { store.repeatMode = (store.repeatMode + 1) % 3 }
+                }
+                HStack(spacing: 9) { Text(clockText(store.position)).frame(width: 32, alignment: .trailing); Slider(value: Binding(get: { store.position }, set: { store.seek($0) }), in: 0...max(1, store.current?.duration ?? 1)).controlSize(.mini).disabled(store.current == nil).accessibilityLabel(store.t("duration")); Text("−" + clockText(max(0, (store.current?.duration ?? 0) - store.position))).frame(width: 38, alignment: .leading) }.font(.system(size: 8, design: .monospaced)).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity)
-            HStack(spacing: 8) { Image(systemName: store.volume == 0 ? "speaker.slash" : "speaker.wave.2").font(.system(size: 11)).foregroundStyle(.secondary); Slider(value: $store.volume, in: 0...1).controlSize(.mini).accessibilityLabel(store.t("volume")) }.frame(width: 110)
-        }.padding(.horizontal, 6)
+            VStack(alignment: .trailing, spacing: 12) {
+                HStack(spacing: 12) {
+                    if store.sleepDeadline != nil { Button { store.openSettings("playback") } label: { Label(clockText(Double(store.sleepRemaining)), systemImage: "moon").font(.system(size: 8, design: .monospaced)) }.buttonStyle(.plain).foregroundStyle(store.accent.color) }
+                    Button { store.openSettings("sound") } label: { Text("EQ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(store.preferences.eqEnabled ? store.accent.color : .secondary).padding(.horizontal, 7).padding(.vertical, 4).background(.primary.opacity(0.045), in: Capsule()) }.buttonStyle(.plain).help(store.t("equalizer"))
+                    Button { store.miniPlayer() } label: { Image(systemName: "pip").font(.system(size: 12)) }.buttonStyle(.plain).help(store.t("mini"))
+                    Button { store.fullScreen() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 11)) }.buttonStyle(.plain).help(store.t("full"))
+                }.foregroundStyle(.secondary)
+                HStack(spacing: 9) { Image(systemName: store.volume == 0 ? "speaker.slash" : "speaker.wave.2").font(.system(size: 10)).foregroundStyle(.secondary); Slider(value: $store.volume, in: 0...1).controlSize(.mini).accessibilityLabel(store.t("volume")); Text("\(Int(store.volume * 100))").font(.system(size: 8, design: .monospaced)).foregroundStyle(.tertiary).frame(width: 22) }
+            }.frame(width: 175)
+        }
     }
+    private func transport(_ icon: String, _ label: String, active: Bool = false, _ action: @escaping () -> Void) -> some View { Button(action: action) { Image(systemName: icon).font(.system(size: 12, weight: .medium)).foregroundStyle(active ? store.accent.color : .primary.opacity(0.75)).frame(width: 19, height: 22) }.buttonStyle(.plain).help(store.t(label)) }
 }
 struct MiniPlayerView: View {
     @EnvironmentObject var store: LibraryStore
     var body: some View {
-        VStack(spacing: 15) {
-            ArtworkView(track: store.current).aspectRatio(1, contentMode: .fit).overlay { if store.showVisualizer { VisualizerCanvas(level: store.level, playing: store.isPlaying, color: store.accent.color).clipShape(RoundedRectangle(cornerRadius: 14)).opacity(0.6) } }
-            VStack(spacing: 4) { Text(store.current?.title ?? store.t("choose")).font(.headline); Text(store.current?.artist ?? "Prisma Music").font(.caption).foregroundStyle(.secondary) }.lineLimit(1)
+        ZStack { PrismaBackdrop(); VStack(spacing: 15) {
+            ArtworkView(track: store.current).aspectRatio(1.2, contentMode: .fit)
+            VStack(spacing: 5) { Text(store.current?.title ?? store.t("choose")).font(.system(size: 19, weight: .medium, design: .rounded)); Text(store.current?.artist ?? "Prisma Music").font(.caption).foregroundStyle(.secondary); if store.preferences.showQuality { Text(store.current?.qualitySummary ?? "").font(.system(size: 9, design: .monospaced)).foregroundStyle(store.accent.color) } }.lineLimit(1)
             Slider(value: Binding(get: { store.position }, set: { store.seek($0) }), in: 0...max(1, store.current?.duration ?? 1)).controlSize(.mini).disabled(store.current == nil)
-            HStack(spacing: 30) { Button { store.next(back: true) } label: { Image(systemName: "backward.end.fill") }; Button { store.togglePlay() } label: { Image(systemName: store.isPlaying ? "pause.fill" : "play.fill").frame(width: 38, height: 32) }.buttonStyle(.glassProminent); Button { store.next() } label: { Image(systemName: "forward.end.fill") } }.buttonStyle(.plain)
-        }.padding(22).padding(.top, 16).background(.ultraThinMaterial).tint(store.accent.color).preferredColorScheme(store.colorScheme)
+            HStack(spacing: 30) { Button { store.next(back: true) } label: { Image(systemName: "backward.end.fill") }; Button { store.togglePlay() } label: { Image(systemName: store.isPlaying ? "pause.fill" : "play.fill").frame(width: 40, height: 34) }.buttonStyle(.glassProminent).buttonBorderShape(.circle); Button { store.next() } label: { Image(systemName: "forward.end.fill") } }.buttonStyle(.plain)
+        }.padding(22).padding(.top, 14) }.tint(store.accent.color).preferredColorScheme(store.colorScheme)
     }
 }
 struct VisualizerView: View {
     @EnvironmentObject var store: LibraryStore
     var body: some View {
         ZStack {
-            Color.black
+            Color(red: 0.01, green: 0.015, blue: 0.028)
             VisualizerCanvas(level: store.level, playing: store.isPlaying, color: store.accent.color)
             VStack {
-                HStack { Text(store.t("visualizer").uppercased()).font(.system(size: 10, weight: .medium)).tracking(3); Spacer(); Text("PRISMA / AURORA").font(.system(size: 9, design: .monospaced)).tracking(2) }.foregroundStyle(.white.opacity(0.45))
+                HStack { HStack(spacing: 7) { Circle().fill(store.accent.color).frame(width: 5, height: 5); Text("PRISMA / " + store.t(store.preferences.visualizerStyle).uppercased()).font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(2) }; Spacer(); Menu { ForEach(["aurora", "orbit", "ribbons"], id: \.self) { mode in Button(store.t(mode)) { store.preferences.visualizerStyle = mode } } } label: { Image(systemName: "circle.hexagongrid").foregroundStyle(.white.opacity(0.6)) }.menuStyle(.borderlessButton).frame(width: 26) }.foregroundStyle(.white.opacity(0.55))
                 Spacer()
-                VStack(spacing: 8) { Text(store.current?.title ?? store.t("choose")).font(.system(size: 28, weight: .light, design: .rounded)); Text(store.current?.artist ?? "").font(.system(size: 12)).foregroundStyle(.white.opacity(0.55)) }.foregroundStyle(.white)
-            }.padding(30)
-        }.clipShape(RoundedRectangle(cornerRadius: 22)).overlay { RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.08)) }
+                VStack(spacing: 10) { Text(store.t("now")).font(.system(size: 8, weight: .medium)).tracking(3).foregroundStyle(store.accent.color); Text(store.current?.title ?? store.t("choose")).font(.system(size: 28, weight: .light, design: .rounded)); Text(store.current?.artist ?? "").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5)) }.foregroundStyle(.white)
+            }.padding(28)
+        }.clipShape(RoundedRectangle(cornerRadius: 25)).overlay { RoundedRectangle(cornerRadius: 25).strokeBorder(.white.opacity(0.08)) }
     }
 }
-// The geometry reacts to the audio player's measured RMS level; it is not an FFT spectrum.
+/// Audio-reactive geometry driven by measured post-DSP RMS. These are not FFT bins.
 struct VisualizerCanvas: View {
+    @EnvironmentObject var store: LibraryStore
     var level: Double
     var playing: Bool
     var color: Color
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    private var animated: Bool { playing && !reduceMotion && store.preferences.animateVisualizer }
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !playing || reduceMotion)) { timeline in
+        TimelineView(.animation(minimumInterval: 1 / store.preferences.visualizerFPS, paused: !animated)) { timeline in
             Canvas { context, size in
-                let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
-                let energy = min(1, max(0, level))
-                let center = CGPoint(x: size.width / 2, y: size.height * 0.45)
-                for layer in 0..<9 {
+                let time = animated ? timeline.date.timeIntervalSinceReferenceDate : 0
+                let energy = min(1, pow(max(0, level), 0.55) * store.preferences.visualizerSensitivity)
+                let center = CGPoint(x: size.width / 2, y: size.height * 0.43)
+                let radius = min(size.width, size.height) * 0.22
+                var haze = context; haze.addFilter(.blur(radius: radius * 0.55))
+                haze.fill(Path(ellipseIn: CGRect(x: center.x-radius*1.3, y: center.y-radius, width: radius*2.6, height: radius*2)), with: .radialGradient(Gradient(colors: [color.opacity(0.20 + energy * 0.2), .clear]), center: center, startRadius: 0, endRadius: radius*1.5))
+                for layer in 0..<14 {
                     var path = Path()
-                    for point in 0...220 {
-                        let angle = Double(point) / 220 * Double.pi * 2
-                        let movement = sin(angle * 3 + time * 0.65 + Double(layer) * 0.3) * (10 + energy * 45) + cos(angle * 5 - time * 0.4) * energy * 22
-                        let radius = min(size.width, size.height) * 0.20 + Double(layer) * 9 + movement
-                        let p = CGPoint(x: center.x + cos(angle) * radius * 1.25, y: center.y + sin(angle) * radius * 0.78)
+                    for point in 0...200 {
+                        let fraction = Double(point) / 200
+                        let angle = fraction * .pi * 2
+                        let p: CGPoint
+                        if store.preferences.visualizerStyle == "ribbons" {
+                            p = CGPoint(x: fraction * size.width, y: center.y + Double(layer-7)*10 + sin(fraction*7+time*0.5+Double(layer)*0.2) * (25+energy*75) + cos(fraction*11-time*0.3)*energy*20)
+                        } else {
+                            let motion = store.preferences.visualizerStyle == "orbit" ? sin(angle*2+time*0.35)*energy*20 : sin(angle*3+time*0.55+Double(layer)*0.23)*(12+energy*45)+cos(angle*5-time*0.4)*energy*20
+                            let r = radius + Double(layer)*5 + motion
+                            p = CGPoint(x: center.x+cos(angle)*r*1.18, y:center.y+sin(angle)*r*(store.preferences.visualizerStyle == "orbit" ? 0.48 : 0.8))
+                        }
                         if point == 0 { path.move(to: p) } else { path.addLine(to: p) }
                     }
-                    path.closeSubpath()
-                    var glow = context; glow.addFilter(.blur(radius: layer < 3 ? 14 : 2))
+                    if store.preferences.visualizerStyle != "ribbons" { path.closeSubpath() }
                     let tint = layer % 3 == 0 ? color : layer % 3 == 1 ? Color.cyan : Color.pink
-                    glow.stroke(path, with: .color(tint.opacity(0.20 + energy * 0.20)), lineWidth: layer < 3 ? 6 : 1.5)
+                    if layer % 4 == 0 { var glow = context; glow.addFilter(.blur(radius: 6)); glow.stroke(path, with: .color(tint.opacity(0.40)), lineWidth: 5) }
+                    context.stroke(path, with: .linearGradient(Gradient(colors: [tint.opacity(0.05), tint.opacity(0.65+energy*0.3), .white.opacity(0.5), tint.opacity(0.15)]), startPoint: .zero, endPoint: CGPoint(x:size.width,y:size.height)), lineWidth: layer % 3 == 0 ? 1.8 : 0.8)
                 }
-                for dot in 0..<55 {
-                    let x = (Double(dot) * 137.5).truncatingRemainder(dividingBy: max(1, size.width))
-                    let y = (Double(dot) * 71.1 + (playing && !reduceMotion ? time * Double(dot % 3 + 1) * 2 : 0)).truncatingRemainder(dividingBy: max(1, size.height))
-                    context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1.5, height: 1.5)), with: .color(.white.opacity(0.15 + energy * 0.3)))
+                for dot in 0..<45 {
+                    let x = (Double(dot)*137.5).truncatingRemainder(dividingBy:max(1,size.width))
+                    let y = (Double(dot)*71.1+time*Double(dot%3+1)*1.5).truncatingRemainder(dividingBy:max(1,size.height))
+                    context.fill(Path(ellipseIn:CGRect(x:x,y:y,width:1.5,height:1.5)),with:.color(.white.opacity(0.12+energy*0.35)))
                 }
             }
-        }.accessibilityLabel("Audio reactive visualizer").accessibilityHidden(true)
+        }.accessibilityHidden(true)
     }
 }
 struct LyricsView: View {
@@ -114,16 +154,16 @@ struct LyricsView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack { Text(store.t("lyrics")).font(.headline); Spacer(); Button { store.showLyrics = false } label: { Image(systemName: "xmark") }.buttonStyle(.plain) }
             if let track = store.current {
-                ArtworkView(track: track).aspectRatio(1, contentMode: .fit)
+                ArtworkView(track: track).aspectRatio(1.6, contentMode: .fit)
                 Text(track.title).font(.title3.bold()); Text(track.artist).font(.caption).foregroundStyle(.secondary)
                 if let lyrics = track.lyrics, !lyrics.isEmpty {
                     let lines = LyricLine.parse(lyrics)
-                    if lines.isEmpty { ScrollView { Text(lyrics).font(.system(size: 17, weight: .medium, design: .rounded)).lineSpacing(9).frame(maxWidth: .infinity, alignment: .leading) } }
+                    if lines.isEmpty { ScrollView { Text(lyrics).font(.system(size: store.preferences.lyricsFontSize, weight: .medium, design: .rounded)).lineSpacing(9).frame(maxWidth: .infinity, alignment: .leading) } }
                     else {
-                        let active = lines.last { $0.time <= store.position }?.id
+                        let active = lines.last { $0.time <= store.position + store.preferences.lyricsOffset }?.id
                         ScrollViewReader { proxy in
-                            ScrollView { VStack(alignment: .leading, spacing: 20) { ForEach(lines) { line in Button { store.seek(line.time) } label: { Text(line.text.isEmpty ? "♪" : line.text).font(.system(size: 20, weight: .semibold, design: .rounded)).foregroundStyle(line.id == active ? store.accent.color : Color.secondary.opacity(0.65)).frame(maxWidth: .infinity, alignment: .leading) }.buttonStyle(.plain).id(line.id) } }.padding(.vertical, 12) }
-                                .onChange(of: active) { _, value in withAnimation { proxy.scrollTo(value, anchor: .center) } }
+                            ScrollView { VStack(alignment: .leading, spacing: 20) { ForEach(lines) { line in Button { store.seek(line.time) } label: { Text(line.text.isEmpty ? "♪" : line.text).font(.system(size: store.preferences.lyricsFontSize, weight: .semibold, design: .rounded)).foregroundStyle(line.id == active ? store.accent.color : Color.secondary.opacity(0.65)).frame(maxWidth: .infinity, alignment: .leading) }.buttonStyle(.plain).id(line.id) } }.padding(.vertical, 12) }
+                                .onChange(of: active) { _, value in if store.preferences.autoScrollLyrics { withAnimation { proxy.scrollTo(value, anchor: .center) } } }
                         }
                     }
                     HStack { Text(track.lyricsCredit ?? "Archivo local"); Spacer(); if track.lyricsCredit == "LRCLIB" { Link("LRCLIB ↗", destination: URL(string: "https://lrclib.net")!) } }.font(.system(size: 9)).foregroundStyle(.tertiary)
@@ -131,7 +171,7 @@ struct LyricsView: View {
                 if !track.isDemo { Button { Task { await store.enrich(track) } } label: { if store.fetching { ProgressView().controlSize(.small) } else { Label(store.t("fetch"), systemImage: "sparkle.magnifyingglass") } }.disabled(store.fetching).font(.caption) }
                 if let credit = track.artworkCredit, let url = URL(string: credit), url.scheme == "https" { Link("Artwork · iTunes ↗", destination: url).font(.system(size: 9)).foregroundStyle(.secondary) }
             } else { Spacer(); Text(store.t("choose")).foregroundStyle(.secondary); Spacer() }
-        }.padding(22).padding(.top, 26)
+        }.padding(20).padding(.top, 5)
     }
 }
 
@@ -144,7 +184,7 @@ struct TrackInfoView: View {
             if let track {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 17) {
-                        ArtworkView(track: track).aspectRatio(1, contentMode: .fit)
+                        ArtworkView(track: track).aspectRatio(1.6, contentMode: .fit)
                         VStack(alignment: .leading, spacing: 5) { Text(track.title).font(.title3.bold()); Text(track.artist).font(.caption).foregroundStyle(.secondary) }
                         Divider()
                         detail("format", track.format)
@@ -163,7 +203,7 @@ struct TrackInfoView: View {
                     }.padding(.bottom, 15)
                 }
             } else { Spacer(); Text(store.t("choose")).foregroundStyle(.secondary); Spacer() }
-        }.padding(22).padding(.top, 26)
+        }.padding(20).padding(.top, 5)
     }
     private func detail(_ key: String, _ value: String?) -> some View {
         VStack(alignment: .leading, spacing: 5) { Text(store.t(key)).font(.system(size: 10)).foregroundStyle(.secondary); Text(value ?? store.t("unavailable")).font(.system(size: 13, weight: .medium, design: .rounded)).textSelection(.enabled) }.frame(maxWidth: .infinity, alignment: .leading)
