@@ -2,6 +2,8 @@
 
 Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.5.0** para probar e iterar.
 
+[Descargar la versión 0.5.0 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.5.0) · [Ver el código](https://github.com/josue758/PrismaMusic)
+
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
@@ -125,13 +127,18 @@ Las pruebas ordinarias no necesitan internet. También verifican la migración d
 
 ## GitHub
 
-El código se entrega como repositorio Git local con `.gitignore`, pruebas y licencia MIT, preparado para publicar como beta. No se ha creado ningún repositorio remoto. Cuando decidas publicarlo, conecta tu cuenta y elige el nombre y la visibilidad. No publiques archivos de tu biblioteca (`library.sqlite`, `library.json`, `Artwork/`) ni tu música personal; no forman parte del proyecto.
+Repositorio público: [josue758/PrismaMusic](https://github.com/josue758/PrismaMusic), bajo licencia MIT. Las descargas están en [Releases](https://github.com/josue758/PrismaMusic/releases).
+
+Para descargar el código y ejecutar las pruebas en un Mac con las herramientas indicadas arriba:
 
 ```bash
-# Si partiste del ZIP, primero: git init -b main; git add .; git commit -m "Initial version"
-git remote add origin https://github.com/TU_USUARIO/PrismaMusic.git
-git push -u origin main
+git clone https://github.com/josue758/PrismaMusic.git
+cd PrismaMusic
+swift test
+./scripts/build.sh
 ```
+
+Los archivos personales de biblioteca (`library.sqlite`, `library.json`, `Artwork/`) y tu música no forman parte del proyecto y no deben agregarse al repositorio.
 
 Los binarios de instalación deben adjuntarse a una Release, no al historial de código. El proyecto incluye únicamente las tres piezas demo originales, que se pueden redistribuir bajo la licencia del proyecto.
 
