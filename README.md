@@ -1,19 +1,37 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.5.1** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.7.0** para probar e iterar.
 
-[Descargar la versión 0.5.1 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.5.1) · [Ver el código](https://github.com/josue758/PrismaMusic)
+[Descargar la versión 0.7.0 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.7.0) · [Ver el código](https://github.com/josue758/PrismaMusic)
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.5.1.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
-2. Abre la aplicación. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
+1. Abre `Prisma-Music-0.7.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+2. Abre la aplicación y sigue la bienvenida para elegir idioma, biblioteca y estilo. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
 
-En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.5. La actualización conserva tus datos.
+En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.7. La actualización conserva tus datos.
+
+## Novedades de la versión 0.7
+
+La nueva bienvenida permite elegir español, inglés o portugués, añadir música local o conectar un NAS, leer/editar etiquetas de biblioteca, probar tres estilos de cristal y ajustar la pantalla inicial, la recuperación de sesión y las búsquedas online. Se puede reabrir desde el menú de Prisma Music o Ajustes. Los estilos conservan el ecualizador y los ajustes de sonido.
+
+**Reintentar archivos con error**, en Ajustes → Biblioteca, vuelve a leer los fallos del último informe sin eliminar canciones ajenas al reintento.
+
+La importación de colecciones grandes en NAS usa un recorrido de directorios que evita consultas repetidas por cada nombre de archivo. La comprobación de fechas/tamaños y la lectura de etiquetas se distribuyen entre un máximo configurable de dos, cuatro u ocho archivos simultáneos (cuatro por defecto). Los resultados se guardan por lotes y las canciones sin cambios se omiten al volver a escanear.
+
+Los FLAC se leen mediante sus cabeceras STREAMINFO, comentarios Vorbis y bloques de imagen, con límites de tamaño y validación de longitudes. Se extraen título, artista, álbum, género, fecha, letras, carátula, duración, canales y profundidad, sin decodificar ni copiar el audio completo. El bitrate mostrado es una estimación del flujo comprimido. Los casos no compatibles conservan la vía de AVFoundation. Esto valida la lectura de metadatos y cabeceras; no acredita cada muestra de audio de cada archivo.
+
+El recorrido identifica una sola vez por carpeta los archivos `cover.jpg`, `folder.jpg`, `cover.png`, `.lrc` y `.txt`, sin distinguir mayúsculas. Se comprueba el tamaño de las imágenes externas antes de cargarlas. La importación conserva favoritos, historial y etiquetas editadas incluso cuando se actualizan durante el escaneo.
+
+La validación de una colección real encontró los 7.854 archivos de su inventario independiente: 7.813 importados y 41 incidencias identificadas, sin omisiones fuera del informe. El reintento confirmó archivos con cabecera a cero, lecturas vacías y rutas que el NAS listaba pero no permitía abrir. Los originales se conservaron.
+
+**Ajustes → Biblioteca** muestra el progreso y el resumen de lectura. **Mostrar informe de lectura** revela `scan-report.json` en la carpeta de datos, con los totales y las rutas de los archivos que dieron error. El informe se conserva entre sesiones. Es un archivo personal y no debe publicarse junto al código.
+
+Al restaurar un bookmark cuya ruta cambia, se trasladan también las referencias de canciones, playlists, etiquetas editadas y sesión. La cancelación conserva los lotes ya leídos y espera el guardado pendiente.
 
 ## Novedades de la versión 0.5.1
 

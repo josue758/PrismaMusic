@@ -14,6 +14,9 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var level = 0.0
     @Published private(set) var loading = true
     @Published private(set) var scanning = false
+    @Published private(set) var scanDiscovered=0
+    @Published private(set) var scanProcessed=0
+    @Published private(set) var scanAudit:ScanAudit?
     @Published private(set) var sourceStates:[UUID:String]=[:]
     @Published var status = ""
     @Published var error: String?
@@ -41,6 +44,8 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var peak = 0.0
     @Published var preferences = ListeningPreferences() { didSet { preferencesChanged() } }
     @Published var settingsPage = "sound"
+    @Published var showWelcome = false
+    private var welcomeAfterSettings = false
     @Published var showSettings = false
     @Published var shuffle = false { didSet { if shuffle { let rest = queue.filter { $0 != currentID }.shuffled(); queue = currentID.map { [$0] + rest } ?? rest } } }
     @Published var repeatMode = 0 // 0 off, 1 all, 2 one
@@ -53,8 +58,11 @@ final class LibraryStore: NSObject, ObservableObject {
     private var paletteTask: Task<Void, Never>?
     private var paletteTrackID: String?
     private var paletteArtworkID:String?
+    private let scanWorkerOverride:Int?
+    private var maximumScanWorkers:Int { min(8,max(1,scanWorkerOverride ?? preferences.scanWorkers)) }
     private let persistence:LibraryPersistence
     private var saveBlocked=false
+    private var quitting=false
     private var readyTask:Task<Void,Never>?
     private var scanTask:Task<Void,Never>?
     private var scanCancellation=ScanCancellation()
@@ -140,8 +148,9 @@ final class LibraryStore: NSObject, ObservableObject {
     var groupedArtists:[(key:String,value:[Track])] { results.artists }
     func displayIndex(_ id:String) -> Int { results.indices[id] ?? 0 }
     func t(_ key: String) -> String { translations[key]?[language == .es ? 0 : language == .en ? 1 : 2] ?? key }
-    init(directory: URL? = nil, autoStart: Bool = true) {
+    init(directory: URL? = nil, autoStart: Bool = true, scanWorkers:Int? = nil) {
         dataDirectory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("PrismaMusic")
+        scanWorkerOverride=scanWorkers
         persistence=LibraryPersistence(directory:dataDirectory)
         super.init()
         let defaults = UserDefaults.standard
@@ -152,6 +161,7 @@ final class LibraryStore: NSObject, ObservableObject {
         scanOnLaunch = defaults.object(forKey: "scanOnLaunch") as? Bool ?? true
         volume = defaults.object(forKey: "volume") as? Float ?? 0.7
         if let data=try? Data(contentsOf:dataDirectory.appendingPathComponent("preferences.json")),var prefs=try? JSONDecoder().decode(ListeningPreferences.self,from:data) { prefs.sanitize(); preferences=prefs }
+        if let data=try? Data(contentsOf:dataDirectory.appendingPathComponent("scan-report.json")) { scanAudit=try? JSONDecoder().decode(ScanAudit.self,from:data) }
         section=preferences.startSection == "immersive" ? "home" : preferences.startSection
         showImmersive=preferences.startSection == "immersive"
         if preferences.rememberPosition,let data=try? Data(contentsOf:dataDirectory.appendingPathComponent("playback.json")),let saved=try? JSONDecoder().decode(PlaybackBookmark.self,from:data) { savedPlayback=(saved.id,saved.position) }
@@ -167,7 +177,9 @@ final class LibraryStore: NSObject, ObservableObject {
                     applyLoaded(snapshot,includeDemo:true)
                 } catch { saveBlocked=true; self.error=error.localizedDescription }
                 loading=false
+                guard !quitting else { return }
                 restorePlaybackIfNeeded()
+                if !preferences.hasCompletedWelcome { showWelcome=true; return }
                 if !saveBlocked && (scanOnLaunch || tracks.isEmpty) { await scan() }
                 restorePlaybackIfNeeded()
             }
@@ -200,12 +212,31 @@ final class LibraryStore: NSObject, ObservableObject {
             if let data=sources[index].bookmark {
                 var stale=false
                 if let url=try? URL(resolvingBookmarkData:data,options:[.withSecurityScope,.withoutUI,.withoutMounting],relativeTo:nil,bookmarkDataIsStale:&stale) {
+                    let previous=sources[index].url
                     sources[index].url=url
+                    if previous.path != url.path { remapSource(previous,to:url) }
                     if url.startAccessingSecurityScopedResource() { scopeURLs.append(url) }
                     if stale { sources[index].bookmark=try? url.bookmarkData(options:.withSecurityScope,includingResourceValuesForKeys:nil,relativeTo:nil) }
                 }
             }
         }
+    }
+    private func remapSource(_ old:URL,to new:URL) {
+        let prefix=old.path.hasSuffix("/") ? old.path : old.path+"/"
+        func relocated(_ url:URL) -> URL? {
+            if url.path == old.path { return new }
+            guard url.path.hasPrefix(prefix) else { return nil }
+            return new.appendingPathComponent(String(url.path.dropFirst(prefix.count)))
+        }
+        var ids:[String:String]=[:]
+        tracks=tracks.map { track in
+            guard let url=relocated(track.url) else { return track }
+            var value=track; value.url=url; ids[track.id]=value.id; return value
+        }
+        playlists=playlists.map { list in var value=list; value.trackIDs=value.trackIDs.map { ids[$0] ?? $0 }; return value }
+        edited=Set(edited.map { ids[$0] ?? $0 }); queue=queue.map { ids[$0] ?? $0 }
+        if let id=currentID { currentID=ids[id] ?? id }
+        if let (id,time)=savedPlayback { savedPlayback=(ids[id] ?? id,time) }
     }
     func save() {
         guard !saveBlocked else { return }
@@ -213,6 +244,7 @@ final class LibraryStore: NSObject, ObservableObject {
     }
     func flushSaving() async throws { try await persistence.flush() }
     func prepareForTermination() async throws {
+        quitting=true; defer { quitting=false }
         cancelScan()
         if loading { await readyTask?.value }
         await scanTask?.value
@@ -245,67 +277,149 @@ final class LibraryStore: NSObject, ObservableObject {
         await addSources([url])
         if let track=track(for:url.path) { let list=filtered; play(track,in:list.contains(where:{ $0.id == track.id }) ? list : [track]+list) }
     }
-    func cancelScan() { scanCancellation.cancel(); scanTask?.cancel() }
-    func scan(force:Bool = false) async {
+    func cancelScan() { if scanning { status=t("cancellingScan") }; scanCancellation.cancel(); scanTask?.cancel() }
+    func openWelcome() {
+        if showSettings { welcomeAfterSettings=true; showSettings=false }
+        else { showWelcome=true }
+    }
+    func settingsDismissed() {
+        if welcomeAfterSettings { welcomeAfterSettings=false; showWelcome=true }
+    }
+    func finishWelcome(scanAfter:Bool = true) {
+        preferences.hasCompletedWelcome=true
+        showWelcome=false
+        section=preferences.startSection == "immersive" ? "home" : preferences.startSection
+        showImmersive=preferences.startSection == "immersive"
+        if scanAfter && scanOnLaunch && !scanning { Task { await scan() } }
+    }
+    func retryFailedScan() async {
+        guard let audit=scanAudit,!audit.issues.isEmpty else { return }
+        await scan(force:true,retrying:audit)
+    }
+    func scan(force:Bool = false, retrying:ScanAudit? = nil) async {
         if loading { await readyTask?.value }
         guard !scanning,!saveBlocked else { return }
-        scanning=true; scanCancellation=ScanCancellation()
-        let task=Task { await performScan(force:force) }; scanTask=task
+        scanning=true; scanDiscovered=0; scanProcessed=0; scanCancellation=ScanCancellation()
+        let task=Task { await performScan(force:force,retrying:retrying) }; scanTask=task
         await task.value
         scanTask=nil; scanning=false
     }
-    private func performScan(force:Bool) async {
+    private func performScan(force:Bool,retrying:ScanAudit?) async {
         var failures=0; var unavailable=0
+        var audit=ScanAudit()
+        var recovered=Set<URL>()
         let cancellation=scanCancellation
         for source in sources {
             if Task.isCancelled || cancellation.isCancelled { break }
             sourceStates[source.id]="reading"
             status="\(t("discovering")) · \(source.name)"
+            scanDiscovered=0; scanProcessed=0
             let recursive=preferences.recursiveScan
-            let report=await Task.detached(priority:.utility) { [weak self] in SourceScanner.enumerate(source.url,recursive:recursive,cancellation:cancellation) { [weak self] count in
+            let report:SourceScanReport
+            if let retrying {
+                let root=source.url
+                let selected=retrying.issues.map(\.url).filter { MetadataReader.extensions.contains($0.pathExtension.lowercased()) && SourceScanner.isWithin($0,source:root,recursive:recursive) }
+                if selected.isEmpty { continue }
+                report=await Task.detached(priority:.utility) {
+                    let identity=SourceIdentity.read(root)
+                    return SourceScanReport(source:root,identity:identity,files:identity == nil ? [] : Array(Set(selected)).map { ScannedAudioFile(url:$0,modified:nil) },complete:identity != nil,errors:[])
+                }.value
+            } else {
+            report=await Task.detached(priority:.utility) { [weak self] in SourceScanner.enumerate(source.url,recursive:recursive,cancellation:cancellation,readModificationDates:false) { [weak self] count in
                 Task { @MainActor in
                     guard let self,self.scanning,self.scanCancellation === cancellation,!cancellation.isCancelled else { return }
+                    self.scanDiscovered=count
                     self.status="\(self.t("discovering")) · \(source.name) · \(count) \(self.t("count"))"
                 }
             } }.value
-            if !report.complete { unavailable += 1 }
+            }
+            audit.discovered += report.files.count
+            if !report.complete { unavailable += 1; for message in report.errors where audit.issues.count < 500 { audit.issues.append(.init(url:source.url,message:message)) } }
+            scanDiscovered=report.files.count
+            let files=report.files
+            scanProcessed=0
             var pending:[Track]=[]; pending.reserveCapacity(32)
             var lastBatch=Date()
-            for (index,file) in report.files.enumerated() {
-                if Task.isCancelled || cancellation.isCancelled { break }
-                if index % 16 == 0 { status="\(t("reading")) \(index+1)/\(report.files.count) · \(source.name)" }
-                if !force,let cached=track(for:file.url.path),cached.modified == file.modified,cached.format != nil,cached.bitrate != nil,(!cached.isLossless || cached.bitDepth != nil) { continue }
-                do {
-                    var value=try await MetadataReader.read(file.url)
-                    if Task.isCancelled || cancellation.isCancelled { break }
-                    if let old=track(for:value.id) {
-                        value.favorite=old.favorite; value.lastPlayed=old.lastPlayed; value.playCount=old.playCount
-                        if edited.contains(old.id) { value.title=old.title; value.artist=old.artist; value.album=old.album; value.genre=old.genre; value.year=old.year }
-                        if value.artwork == nil { value.artworkURL=old.artworkURL; value.artworkCredit=old.artworkCredit }
-                        if value.lyrics == nil { value.lyrics=old.lyrics; value.lyricsCredit=old.lyricsCredit }
+            await withTaskGroup(of:ScannedTrackResult.self) { group in
+                var next=0; var running=0
+                @MainActor func submit() {
+                    guard next < files.count,!cancellation.isCancelled,!Task.isCancelled else { return }
+                    let file=files[next]; next += 1; running += 1
+                    let cached=track(for:file.url.path)
+                    group.addTask { await ScannedTrackResult.read(file,cached:cached,force:force) }
+                }
+                @MainActor func fillSlots() {
+                    while next < files.count,running < maximumScanWorkers,!cancellation.isCancelled,!Task.isCancelled { submit() }
+                }
+                fillSlots()
+                var processed=0
+                while let result=await group.next() {
+                    if Task.isCancelled || cancellation.isCancelled { group.cancelAll(); break }
+                    running -= 1; processed += 1
+                    if result.unchanged { audit.unchanged += 1; recovered.insert(result.file.url) }
+                    else if var value=result.track {
+                        do { value=try await persistence.normalized(value); pending.append(value); audit.imported += 1; recovered.insert(result.file.url) }
+                        catch { failures += 1; if audit.issues.count < 500 { audit.issues.append(.init(url:result.file.url,message:error.localizedDescription)) } }
+                    } else {
+                        failures += 1
+                        if audit.issues.count < 500 { audit.issues.append(.init(url:result.file.url,message:result.error ?? t("unavailable"))) }
+                        let expected=report.identity; let root=source.url
+                        let sameSource=await Task.detached(priority:.utility) { expected != nil && SourceIdentity.read(root) == expected }.value
+                        if !sameSource { group.cancelAll(); break }
                     }
-                    value=try await persistence.normalized(value)
-                    pending.append(value)
-                    if pending.count >= 32 || Date().timeIntervalSince(lastBatch) >= 1 { upsertTracks(pending); pending.removeAll(keepingCapacity:true); save(); lastBatch=Date() }
-                } catch { if !Task.isCancelled { failures += 1 } }
+                    if pending.count >= 32 || Date().timeIntervalSince(lastBatch) >= 1 {
+                        if !pending.isEmpty { upsertTracks(pending); pending.removeAll(keepingCapacity:true); save() }
+                        scanProcessed=processed; status="\(t("reading")) \(processed)/\(report.files.count) · \(source.name)"
+                        lastBatch=Date()
+                    }
+                    fillSlots()
+                }
+                scanProcessed=processed
             }
+            if !pending.isEmpty { upsertTracks(pending); save() }
             guard !Task.isCancelled,!cancellation.isCancelled else { sourceStates[source.id]="scanCancelled"; break }
-            if !pending.isEmpty { upsertTracks(pending) }
             let reconciled=await Task.detached(priority:.utility) { SourceScanner.canReconcile(report,cancelled:cancellation.isCancelled) }.value
-            if reconciled && !Task.isCancelled {
+            if retrying != nil { sourceStates[source.id]=reconciled ? "ready" : "offline"; if !reconciled && report.complete { unavailable += 1 } }
+            else if reconciled && !Task.isCancelled {
                 let found=Set(report.files.map { $0.url.path })
                 tracks.removeAll { SourceScanner.isWithin($0.url,source:source.url,recursive:recursive) && !found.contains($0.id) }
                 sourceStates[source.id]="ready"
             } else { sourceStates[source.id]="offline"; if report.complete { unavailable += 1 } }
             save()
         }
-        if !Task.isCancelled { save(); do { try await persistence.flush() } catch { self.error=error.localizedDescription } }
+        save()
+        do { try await persistence.flush() } catch { self.error=error.localizedDescription }
+        audit.failed=failures; audit.unavailableSources=unavailable; audit.cancelled=cancellation.isCancelled || Task.isCancelled; audit.finishedAt=Date()
+        if var previous=retrying {
+            let messages=Dictionary(audit.issues.map { ($0.url,$0.message) },uniquingKeysWith:{ _,last in last })
+            previous.issues=previous.issues.filter { !recovered.contains($0.url) }.map { .init(url:$0.url,message:messages[$0.url] ?? $0.message) }
+            previous.imported += recovered.count
+            previous.failed=max(0,previous.failed-recovered.count)
+            previous.finishedAt=audit.finishedAt
+            previous.unavailableSources=max(previous.unavailableSources,audit.unavailableSources)
+            previous.cancelled=audit.cancelled
+            audit=previous
+            failures=audit.failed
+        }
+        scanAudit=audit
+        let reportURL=dataDirectory.appendingPathComponent("scan-report.json")
+        do { try await Task.detached(priority:.utility) { try JSONEncoder().encode(audit).write(to:reportURL,options:.atomic) }.value }
+        catch { self.error=error.localizedDescription }
         status=cancellation.isCancelled ? t("scanCancelled") : unavailable > 0 ? t("offline") : failures > 0 ? "\(t("scanErrors")): \(failures)" : t("ready")
     }
     private func upsertTracks(_ values:[Track]) {
         var updated=tracks
         var indices=Dictionary(updated.indices.map { (updated[$0].id,$0) },uniquingKeysWith:{ _,last in last })
-        for track in values { if let index=indices[track.id] { updated[index]=track } else { indices[track.id]=updated.count; updated.append(track) } }
+        for var track in values {
+            if let index=indices[track.id] {
+                let old=updated[index]
+                track.favorite=old.favorite; track.lastPlayed=old.lastPlayed; track.playCount=old.playCount
+                if edited.contains(old.id) { track.title=old.title; track.artist=old.artist; track.album=old.album; track.genre=old.genre; track.year=old.year }
+                if !track.hasArtwork { track.artworkURL=old.artworkURL; track.artworkCredit=old.artworkCredit }
+                if track.lyrics == nil { track.lyrics=old.lyrics; track.lyricsCredit=old.lyricsCredit }
+                updated[index]=track
+            } else { indices[track.id]=updated.count; updated.append(track) }
+        }
         tracks=updated
     }
     func removeSource(_ source: MusicSource) {
@@ -382,7 +496,7 @@ final class LibraryStore: NSObject, ObservableObject {
         guard !tracks.isEmpty else { return }
         if automatic && (stopAfterCurrent || !preferences.continueQueue) { stopAfterCurrent = false; pausePlayback(); return }
         if back && position > 3 { seek(0); return }
-        let list = queue.compactMap { id in tracks.first { $0.id == id } }
+        let list = queue.compactMap { track(for:$0) }
         guard !list.isEmpty else { return }
         if automatic && repeatMode == 2, let current { play(current); return }
         let i = list.firstIndex { $0.id == currentID } ?? -1
@@ -472,6 +586,7 @@ final class LibraryStore: NSObject, ObservableObject {
             }
         }
     }
+    func showScanReport() { NSWorkspace.shared.activateFileViewerSelecting([dataDirectory.appendingPathComponent("scan-report.json")]) }
     func showDataFolder() { NSWorkspace.shared.open(dataDirectory) }
     private func setupRemoteCommands() {
         let commands = MPRemoteCommandCenter.shared()

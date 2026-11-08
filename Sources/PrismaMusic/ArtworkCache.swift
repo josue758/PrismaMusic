@@ -12,6 +12,7 @@ final class ArtworkCache: @unchecked Sendable {
     init() { bytes.totalCostLimit=8*1024*1024; bytes.countLimit=128; images.totalCostLimit=32*1024*1024; images.countLimit=160 }
     func data(at url:URL) -> Data? {
         if let cached=bytes.object(forKey:url as NSURL) { return cached as Data }
+        guard let size=try? url.resourceValues(forKeys:[.fileSizeKey]).fileSize,size <= 16*1024*1024 else { return nil }
         guard let value=try? Data(contentsOf:url),value.count <= 16*1024*1024 else { return nil }
         bytes.setObject(value as NSData,forKey:url as NSURL,cost:value.count); return value
     }

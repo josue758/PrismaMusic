@@ -21,7 +21,8 @@ struct SettingsView: View {
                             }
                         }
                         Spacer()
-                        VStack(alignment: .leading, spacing: 7) { HStack(spacing: 5) { Circle().fill(.mint).frame(width: 5, height: 5); Text("PRISMA ENGINE").font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(1) }; Text("0.5 / macOS").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary) }.padding(10)
+                        Button(store.t("welcome")) { store.openWelcome(); dismiss() }.buttonStyle(.glass)
+                        VStack(alignment: .leading, spacing: 7) { HStack(spacing: 5) { Circle().fill(.mint).frame(width: 5, height: 5); Text("PRISMA ENGINE").font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(1) }; Text("0.7 / macOS").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary) }.padding(10)
                     }.padding(14).frame(width: 203).prismaGlass(24)
                     VStack(alignment: .leading, spacing: 20) {
                         HStack(alignment: .top) {
@@ -42,7 +43,7 @@ struct SettingsView: View {
                                 }
                             }.padding(2).padding(.bottom, 16)
                         }.scrollIndicators(.hidden).clipped()
-                        HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint); Text(store.t("settingsSaved")); Spacer(); Text("PRISMA / 05").font(.system(size: 8, design: .monospaced)).tracking(1) }.font(.system(size: 10)).foregroundStyle(.secondary)
+                        HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint); Text(store.t("settingsSaved")); Spacer(); Text("PRISMA / 07").font(.system(size: 8, design: .monospaced)).tracking(1) }.font(.system(size: 10)).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity)
                 }.padding(20)
             }
@@ -105,8 +106,13 @@ struct SettingsView: View {
                     HStack(spacing: 10) { Image(systemName: source.url.path.hasPrefix("/Volumes") ? "externaldrive.connected.to.line.below" : "folder").foregroundStyle(store.effectiveAccent); VStack(alignment: .leading, spacing: 4) { Text(source.name).font(.system(size: 12, weight: .medium)); Text(store.t(store.sourceStates[source.id] ?? "ready")).font(.system(size:9)).foregroundStyle(.secondary); Text(source.url.path).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }; Spacer(); Button { NSWorkspace.shared.activateFileViewerSelecting([source.url]) } label: { Image(systemName: "arrow.up.forward") }.buttonStyle(.plain).help(store.t("reveal")); Button { store.removeSource(source) } label: { Image(systemName: "minus.circle") }.buttonStyle(.plain).foregroundStyle(.secondary).disabled(store.scanning).help(store.t("removeSource")) }.padding(.vertical, 4)
                 }
                 Divider(); toggle("startScan", $store.scanOnLaunch); toggle("recursive", $store.preferences.recursiveScan)
+                Text(store.t("scanWorkers")).font(.caption)
+                Picker(store.t("scanWorkers"),selection:$store.preferences.scanWorkers) { Text("2").tag(2); Text("4").tag(4); Text("8").tag(8) }.pickerStyle(.segmented)
+                Text(store.t("scanWorkersNote")).font(.caption).foregroundStyle(.secondary)
                 Button { Task { await store.scan(force: true) } } label: { Label(store.scanning ? store.t("reading") : store.t("rescan"), systemImage: "arrow.clockwise") }.buttonStyle(.glass).disabled(store.scanning)
                 if store.scanning { Button { store.cancelScan() } label: { Label(store.t("cancel"),systemImage:"stop.circle") }.buttonStyle(.glass) }
+                if store.scanning && store.scanDiscovered > 0 { ProgressView(value:Double(store.scanProcessed),total:Double(store.scanDiscovered)); Text("\(store.scanProcessed) / \(store.scanDiscovered)").font(.caption.monospacedDigit()) }
+                if !store.scanning,let audit=store.scanAudit { HStack(spacing:24) { metric(String(audit.discovered),store.t("scanSummary")); metric(String(audit.imported+audit.unchanged),store.t("processedFiles")); metric(String(audit.failed),store.t("failedFiles")) }; Text(audit.cancelled ? store.t("scanCancelled") : audit.unavailableSources > 0 ? store.t("offline") : audit.failed > 0 ? store.t("scanErrors") : store.t("finished")).font(.caption).foregroundStyle(.secondary); HStack { Button(store.t("scanReport")) { store.showScanReport() }.buttonStyle(.glass); if !audit.issues.isEmpty { Button(store.t("retryFailed")) { Task { await store.retryFailedScan() } }.buttonStyle(.glass) } } }
                 Text(store.t("rescanNote")).font(.caption).foregroundStyle(.secondary)
             }
             card {

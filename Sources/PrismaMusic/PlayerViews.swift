@@ -179,7 +179,7 @@ struct LyricsView: View {
 
 struct TrackInfoView: View {
     @EnvironmentObject var store: LibraryStore
-    private var track: Track? { store.inspectedID.flatMap { id in store.tracks.first { $0.id == id } } ?? store.current }
+    private var track: Track? { store.inspectedID.flatMap { store.track(for:$0) } ?? store.current }
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack { Text(store.t("fileInfo")).font(.headline); Spacer(); Button { store.showInfo = false } label: { Image(systemName: "xmark") }.buttonStyle(.plain) }

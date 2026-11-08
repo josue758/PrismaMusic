@@ -8,3 +8,5 @@ library.sqlite*
 library.json
 library-v*-backup.json
 Artwork/
+
+scan-report.json

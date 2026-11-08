@@ -49,7 +49,8 @@ struct ContentView: View {
             }
         }.animation(motion ? .spring(duration:0.34,bounce:0.13) : nil,value:store.feedback?.id)
         .frame(minWidth: inspectorVisible ? 1230 : 1060, minHeight: 720)
-        .sheet(isPresented: $store.showSettings) { SettingsView().environmentObject(store) }
+        .sheet(isPresented: $store.showWelcome) { WelcomeView().environmentObject(store) }
+        .sheet(isPresented: $store.showSettings, onDismiss: { store.settingsDismissed() }) { SettingsView().environmentObject(store) }
         .sheet(isPresented: $nas) { NASView().environmentObject(store) }
         .sheet(item: $editing) { track in TagEditor(track: track).environmentObject(store) }
         .sheet(isPresented: $newPlaylist) {
@@ -94,7 +95,7 @@ struct ContentView: View {
                 }.padding(13).background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14)).contentShape(Rectangle()).onTapGesture { store.openSettings("sound") }
                 HStack { Button { store.openSettings("appearance") } label: { Label(store.t("settings"), systemImage: "gearshape").font(.system(size: 11)) }.buttonStyle(.plain); Spacer(); HStack(spacing: 4) { Circle().fill(.mint).frame(width: 4, height: 4); Text(store.current?.sourceIsNetwork == true ? "NAS" : "LOCAL").font(.system(size: 8, weight: .medium, design: .monospaced)).tracking(1) }.foregroundStyle(.secondary) }.padding(.horizontal, 7)
             }
-        }.padding(14).frame(width: 202).frame(maxHeight: .infinity).prismaGlass(24)
+        }.padding(14).frame(width: 224).frame(maxHeight: .infinity).prismaGlass(24)
     }
     private func sidebarLabel(_ key: String) -> some View { Text(store.t(key).uppercased()).font(.system(size: 8, weight: .semibold)).tracking(1.5).foregroundStyle(.tertiary).padding(.horizontal, 12).padding(.bottom, 4) }
     private func nav(_ key: String, _ icon: String) -> some View {
@@ -138,7 +139,7 @@ struct ContentView: View {
                             songList(Array(store.filtered.prefix(8)))
                         } else {
                             HStack(alignment: .bottom) {
-                                VStack(alignment: .leading, spacing: 8) { Text(sectionTitle).font(.system(size: 30, weight: .semibold, design: .rounded)); Text("\(store.filtered.count) \(store.t("count")) · \(clockText(store.filtered.reduce(0) { $0 + $1.duration }))").font(.system(size: 11)).foregroundStyle(.secondary) }
+                                VStack(alignment: .leading, spacing: 8) { Text(sectionTitle).font(.system(size: 30, weight: .semibold, design: .rounded)); Text("\(store.filtered.count) \(store.t("count")) · \(collectionTimeText(store.filtered.reduce(0) { $0 + $1.duration }))").font(.system(size: 11)).foregroundStyle(.secondary) }
                                 Spacer(); Button { store.pickMusic() } label: { Label(store.t("add"), systemImage: "plus").font(.system(size: 11)).padding(.vertical, 3) }.buttonStyle(.glassProminent).disabled(store.scanning)
                             }.padding(.top, 10)
                             filterBar
@@ -151,7 +152,7 @@ struct ContentView: View {
                     }.padding(3).padding(.bottom, 20)
                 }.scrollIndicators(.hidden).clipped()
             }
-            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini); Button { store.cancelScan() } label: { Image(systemName:"stop.circle") }.buttonStyle(.plain).help(store.t("cancel")) }; Text(store.status.isEmpty ? store.t("ready") : store.status).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 05").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
+            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini); Button { store.cancelScan() } label: { Image(systemName:"stop.circle") }.buttonStyle(.plain).help(store.t("cancel")) }; Text(store.status.isEmpty ? store.t("ready") : store.status).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 07").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     private var hero: some View {
@@ -175,7 +176,7 @@ struct ContentView: View {
         HStack(spacing: 12) {
             stat("square.stack", "\(store.albumCount)", store.t("albums"))
             stat("person.2", "\(store.artistCount)", store.t("artists"))
-            stat("waveform", clockText(store.totalDuration), store.t("duration"))
+            stat("waveform", collectionTimeText(store.totalDuration), store.t("duration"))
             stat("externaldrive", ByteCountFormatter.string(fromByteCount: store.libraryBytes, countStyle: .file), store.t("fileSize"))
         }
     }
@@ -215,7 +216,8 @@ struct ContentView: View {
     private func songList(_ list: [Track]) -> some View {
         LazyVStack(spacing: 3) {
             HStack(spacing: 10) { Text("#").frame(width: 22); Text(store.t("title")).frame(maxWidth: .infinity, alignment: .leading); if !inspectorVisible { Text(store.t("album")).frame(width: 140, alignment: .leading); Text(store.t("year")).frame(width: 38) }; Image(systemName: "clock").frame(width: 38); Text("").frame(width: 22) }.font(.system(size: 9, weight: .medium)).foregroundStyle(.tertiary).padding(.horizontal, 12).padding(.bottom, 9)
-            ForEach(Array(list.enumerated()), id: \.element.id) { i, track in
+            ForEach(list) { track in
+                let i=store.displayIndex(track.id)
                 HStack(spacing: 10) {
                     Button { store.play(track, in: list) } label: { Group { if store.currentID == track.id && store.isPlaying { Image(systemName: "waveform").foregroundStyle(store.effectiveAccent) } else { Text(String(format: "%02d", i + 1)).foregroundStyle(.tertiary) } }.font(.system(size: 10, design: .monospaced)).frame(width: 22, height: 32) }.buttonStyle(.plain).help(store.t("play"))
                     ArtworkView(track: track).frame(width: store.preferences.compactRows ? 30 : 40, height: store.preferences.compactRows ? 30 : 40).clipShape(RoundedRectangle(cornerRadius: 8))
@@ -249,8 +251,8 @@ struct TrackContextMenu: View {
     var edit: () -> Void
     var body: some View {
         Button(store.t("play")) { store.play(track, in: store.filtered) }
-        Button(store.t("playNext")) { store.enqueue(track, next: true) }
-        Button(store.t("addQueue")) { store.enqueue(track) }
+        Button(store.t("playNext")) { store.enqueue(track, next: true) }.disabled(track.id == store.currentID)
+        Button(store.t("addQueue")) { store.enqueue(track) }.disabled(track.id == store.currentID)
         Divider()
         Menu(store.t("addToPlaylist")) { ForEach(store.playlists) { playlist in Button(playlist.name) { store.add(track, to: playlist) } }; if store.playlists.isEmpty { Text(store.t("playlistEmpty")) } }
         if store.section.hasPrefix("playlist:") { Button(store.t("removeFromPlaylist")) { store.removeFromPlaylist(track) } }
@@ -270,11 +272,13 @@ struct QueueView: View {
             HStack { Text(store.t("upNext")).font(.system(size: 8, weight: .medium)).tracking(1.5); Spacer(); Text("\(store.queue.count)").font(.system(size: 10, design: .monospaced)) }.foregroundStyle(.secondary)
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(Array(store.queuedTracks.enumerated()), id: \.offset) { index, track in
+                    ForEach(store.queue,id: \.self) { id in
+                        if let track=store.track(for:id),let index=store.queueIndex(id) {
                         VStack(spacing: 9) {
                             HStack(spacing: 10) { ArtworkView(track: track).frame(width: 38, height: 38); VStack(alignment: .leading, spacing: 5) { Text(track.title).font(.system(size: 11, weight: .medium)).foregroundStyle(track.id == store.currentID ? store.effectiveAccent : .primary); Text(track.artist).font(.system(size: 9)).foregroundStyle(.secondary) }.lineLimit(1); Spacer(minLength: 0); Button { store.play(track) } label: { Image(systemName: track.id == store.currentID && store.isPlaying ? "waveform" : "play.fill").font(.system(size: 10)) }.buttonStyle(.plain).help(store.t("play")) }
                             HStack(spacing: 15) { Text(String(format: "%02d / %@", index+1, clockText(track.duration))).font(.system(size: 8, design: .monospaced)).foregroundStyle(.tertiary); Spacer(); Button { store.moveQueued(track, direction: -1) } label: { Image(systemName: "arrow.up") }.disabled(index == 0).help(store.t("moveUp")); Button { store.moveQueued(track, direction: 1) } label: { Image(systemName: "arrow.down") }.disabled(index == store.queue.count - 1).help(store.t("moveDown")); Button { store.removeQueued(track) } label: { Image(systemName: "xmark") }.disabled(track.id == store.currentID).help(store.t("remove")) }.buttonStyle(.plain).font(.system(size: 9))
                         }.padding(12).background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 15))
+                        }
                     }
                 }
             }.scrollIndicators(.hidden).clipped()

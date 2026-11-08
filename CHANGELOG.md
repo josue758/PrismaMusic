@@ -1,5 +1,17 @@
 # Cambios
 
+## 0.7.0 — 8 de noviembre de 2026
+
+Bienvenida en cuatro pasos y tres idiomas: colección local/NAS, etiquetas, estilos Cristal vivo/Calma/Contraste y preferencias de escucha. Se guarda la finalización y se puede reabrir desde Ajustes o el menú. Los estilos no modifican el ecualizador.
+
+Reintento selectivo de los archivos con error del último informe, conservando las demás entradas. Configuración de dos, cuatro u ocho lecturas simultáneas, ajustable durante el escaneo. Se corrige el cierre durante la carga inicial para que no arranque una exploración al salir.
+
+Importación de bibliotecas grandes en SMB con recorrido POSIX, consultas de cambios y metadatos con concurrencia limitada y configurable, lectura directa de cabeceras y etiquetas FLAC, y detección de carátulas/letras por carpeta. Se evitan consultas repetidas a archivos auxiliares inexistentes y se comprueba el tamaño de las imágenes antes de cargarlas.
+
+Informe persistente de lectura con totales y errores, progreso en Ajustes y conservación de lo importado al cancelar. Restaurar una ruta mediante bookmark remapea canciones, playlists, etiquetas editadas y sesión. Los lotes combinan el estado de usuario más reciente al incorporarse a la biblioteca.
+
+Se añaden pruebas de importación paralela, escaneo incremental, rutas restauradas, paquetes/enlaces ocultos, comentarios Vorbis, límites y archivos auxiliares. La validación de toda la colección se documenta en VALIDACION.md.
+
 ## 0.5.1 — 7 de noviembre de 2026
 
 Prueba real de streaming desde SMB: FLAC de 24 bits/96 kHz, decodificación, seek y pausa/reanudación. 29 pruebas aprobadas con red y NAS activados.

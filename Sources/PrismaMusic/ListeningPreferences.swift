@@ -1,6 +1,7 @@
 import Foundation
 
 struct ListeningPreferences: Codable, Equatable {
+    var hasCompletedWelcome = false
     var eqEnabled = false
     var eqGains: [Float] = Array(repeating: 0, count: 10)
     var eqPreset = "flat"
@@ -27,6 +28,7 @@ struct ListeningPreferences: Codable, Equatable {
     var autoArtwork = true
     var autoLyrics = true
     var recursiveScan = true
+    var scanWorkers = 4
     var lyricsFontSize = 21.0
     var lyricsOffset = 0.0
     var autoScrollLyrics = true
@@ -37,9 +39,10 @@ struct ListeningPreferences: Codable, Equatable {
     var miniAlwaysOnTop = true
     var miniAllSpaces = true
     init() {}
-    private enum CodingKeys: String, CodingKey { case eqEnabled, eqGains, eqPreset, preamp, autoHeadroom, balance, playbackRate, continueQueue, keepAwake, rememberPosition, startSection, glassStyle, atmosphere, adaptiveArtwork, ambientMotion, artworkPulse, glassTransparency, microInteractions, hoverDepth, showFeedback, compactRows, showQuality, albumSize, autoArtwork, autoLyrics, recursiveScan, lyricsFontSize, lyricsOffset, autoScrollLyrics, visualizerStyle, visualizerSensitivity, visualizerFPS, animateVisualizer, miniAlwaysOnTop, miniAllSpaces }
+    private enum CodingKeys: String, CodingKey { case hasCompletedWelcome, eqEnabled, eqGains, eqPreset, preamp, autoHeadroom, balance, playbackRate, continueQueue, keepAwake, rememberPosition, startSection, glassStyle, atmosphere, adaptiveArtwork, ambientMotion, artworkPulse, glassTransparency, microInteractions, hoverDepth, showFeedback, compactRows, showQuality, albumSize, autoArtwork, autoLyrics, recursiveScan, scanWorkers, lyricsFontSize, lyricsOffset, autoScrollLyrics, visualizerStyle, visualizerSensitivity, visualizerFPS, animateVisualizer, miniAlwaysOnTop, miniAllSpaces }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        hasCompletedWelcome = try values.decodeIfPresent(Bool.self, forKey: .hasCompletedWelcome) ?? false
         eqEnabled = try values.decodeIfPresent(Bool.self, forKey: .eqEnabled) ?? eqEnabled
         eqGains = try values.decodeIfPresent([Float].self, forKey: .eqGains) ?? eqGains
         eqPreset = try values.decodeIfPresent(String.self, forKey: .eqPreset) ?? eqPreset
@@ -66,6 +69,7 @@ struct ListeningPreferences: Codable, Equatable {
         autoArtwork = try values.decodeIfPresent(Bool.self, forKey: .autoArtwork) ?? autoArtwork
         autoLyrics = try values.decodeIfPresent(Bool.self, forKey: .autoLyrics) ?? autoLyrics
         recursiveScan = try values.decodeIfPresent(Bool.self, forKey: .recursiveScan) ?? recursiveScan
+        scanWorkers = try values.decodeIfPresent(Int.self,forKey:.scanWorkers) ?? scanWorkers
         lyricsFontSize = try values.decodeIfPresent(Double.self, forKey: .lyricsFontSize) ?? lyricsFontSize
         lyricsOffset = try values.decodeIfPresent(Double.self, forKey: .lyricsOffset) ?? lyricsOffset
         autoScrollLyrics = try values.decodeIfPresent(Bool.self, forKey: .autoScrollLyrics) ?? autoScrollLyrics
@@ -76,6 +80,16 @@ struct ListeningPreferences: Codable, Equatable {
         miniAlwaysOnTop = try values.decodeIfPresent(Bool.self, forKey: .miniAlwaysOnTop) ?? miniAlwaysOnTop
         miniAllSpaces = try values.decodeIfPresent(Bool.self, forKey: .miniAllSpaces) ?? miniAllSpaces
         sanitize()
+    }
+    mutating func applyAppearancePreset(_ preset: String) {
+        glassStyle = preset == "contrast" ? "regular" : "clear"
+        glassTransparency = preset == "contrast" ? 0.15 : preset == "calm" ? 0.55 : 0.85
+        atmosphere = preset == "contrast" ? 0.25 : preset == "calm" ? 0.45 : 0.9
+        adaptiveArtwork = true
+        ambientMotion = preset == "glass"
+        artworkPulse = preset == "glass"
+        microInteractions = preset != "calm"
+        hoverDepth = preset == "glass"
     }
     static let frequencies: [Float] = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
     static let presets: [String: [Float]] = [
@@ -89,6 +103,7 @@ struct ListeningPreferences: Codable, Equatable {
     var effectivePreamp: Float { eqEnabled ? preamp - (autoHeadroom ? max(0, eqGains.max() ?? 0) : 0) : 0 }
     mutating func selectPreset(_ name: String) { eqGains = Self.presets[name] ?? Self.presets["flat"]!; eqPreset = name }
     mutating func sanitize() {
+        scanWorkers=min(8,max(1,scanWorkers))
         if eqGains.count != 10 { eqGains = Array(repeating: 0, count: 10) }
         eqGains = eqGains.map { $0.isFinite ? min(12, max(-12, $0)) : 0 }
         preamp = preamp.isFinite ? min(6, max(-12, preamp)) : 0

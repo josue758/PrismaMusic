@@ -79,17 +79,25 @@ enum MetadataReader {
         guard let enumerator = FileManager.default.enumerator(at: source, includingPropertiesForKeys: [.isRegularFileKey], options: recursive ? [.skipsHiddenFiles, .skipsPackageDescendants] : [.skipsHiddenFiles, .skipsPackageDescendants, .skipsSubdirectoryDescendants]) else { return [] }
         return enumerator.compactMap { $0 as? URL }.filter { extensions.contains($0.pathExtension.lowercased()) && ((try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true) }.sorted { $0.path < $1.path }
     }
-    static func read(_ url: URL) async throws -> Track {
-        let asset = AVURLAsset(url: url)
+    static func read(_ url: URL,sidecars:ScannedAudioFile? = nil) async throws -> Track {
+        if url.pathExtension.lowercased() == "flac",let track=try NativeFLACMetadata.read(url,sidecars:sidecars) { return track }
+        let asset=AVURLAsset(url:url)
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await read(asset,url:url,sidecars:sidecars)
+        } onCancel: { asset.cancelLoading() }
+    }
+    private static func read(_ asset:AVURLAsset,url:URL,sidecars:ScannedAudioFile?) async throws -> Track {
         let duration = try await asset.load(.duration).seconds
         guard duration.isFinite, duration > 0 else { throw NSError(domain: "Prisma", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid audio: \(url.lastPathComponent)"]) }
         let metadata = (try? await asset.load(.metadata)) ?? []
         var values: [String: String] = [:]
         var artwork: Data?
         for item in metadata {
+            try Task.checkCancellation()
             let key = item.commonKey?.rawValue ?? item.identifier?.rawValue ?? ""
             if key.lowercased().contains("artwork") || key.contains("APIC") || key.contains("covr") {
-                if let data = try? await item.load(.dataValue) { artwork = data }
+                if let data = try? await item.load(.dataValue) { artwork = data }; continue
             }
             if let value = try? await item.load(.stringValue), !value.isEmpty {
                 values[key] = value
@@ -103,14 +111,12 @@ enum MetadataReader {
         var lyrics = try? await asset.load(.lyrics)
         if lyrics?.isEmpty != false { lyrics = value(["id3/USLT", "itsk/©lyr"]) }
         if lyrics?.isEmpty != false {
-            for ext in ["lrc", "txt"] {
-                if let local = try? String(contentsOf: url.deletingPathExtension().appendingPathExtension(ext), encoding: .utf8) { lyrics = local; break }
-            }
+            if let sidecars,sidecars.sidecarsKnown { if let url=sidecars.lyricsURL { lyrics=try? String(contentsOf:url,encoding:.utf8) } }
+            else { for ext in ["lrc","txt"] { if let local=try? String(contentsOf:url.deletingPathExtension().appendingPathExtension(ext),encoding:.utf8) { lyrics=local; break } } }
         }
         if artwork == nil {
-            for name in ["cover.jpg", "folder.jpg", "cover.png", "Folder.jpg"] {
-                if let data = try? Data(contentsOf: url.deletingLastPathComponent().appendingPathComponent(name)) { artwork = data; break }
-            }
+            if let sidecars,sidecars.sidecarsKnown { if let cover=sidecars.coverURL { artwork=ArtworkCache.shared.data(at:cover) } }
+            else { for name in ["cover.jpg","folder.jpg","cover.png","Folder.jpg"] { if let data=ArtworkCache.shared.data(at:url.deletingLastPathComponent().appendingPathComponent(name,isDirectory:false)) { artwork=data; break } } }
         }
         let date = value(["creationDate", "year", "id3/TDRC", "id3/TYER", "itsk/©day"]) ?? ""
         let audio = try? AVAudioFile(forReading: url)
@@ -138,7 +144,7 @@ enum MetadataReader {
                      format: format, bitrate: rate.flatMap { $0 > 0 ? Double($0) : nil } ?? facts.bitrate, fileSize: size.map(Int64.init),
                      sampleRate: stream?.mSampleRate, channels: stream.map { Int($0.mChannelsPerFrame) },
                      bitDepth: stream.flatMap { $0.mBitsPerChannel > 0 ? Int($0.mBitsPerChannel) : nil } ?? facts.bitDepth,
-                     sourceIsNetwork: (try? url.resourceValues(forKeys:[.volumeIsLocalKey]).volumeIsLocal).map { !$0 })
+                     sourceIsNetwork: sidecars?.sourceIsNetwork ?? (try? url.resourceValues(forKeys:[.volumeIsLocalKey]).volumeIsLocal).map { !$0 })
     }
 }
 func clockText(_ seconds: Double) -> String {
@@ -160,4 +166,10 @@ struct AudioFileFacts {
         if AudioFileGetProperty(file,kAudioFilePropertyBitRate,&size,&rate) == noErr,rate > 0 { facts.bitrate=Double(rate) }
         return facts
     }
+}
+
+func collectionTimeText(_ seconds:Double) -> String {
+    guard seconds.isFinite,seconds >= 3600 else { return clockText(seconds) }
+    let hours=Int(seconds/3600); let minutes=Int(seconds.truncatingRemainder(dividingBy:3600)/60)
+    return "\(hours) h \(minutes) min"
 }

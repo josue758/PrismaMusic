@@ -15,7 +15,7 @@ struct PrismaMusicApp: App {
         .defaultSize(width: 1360, height: 900)
         .windowStyle(.hiddenTitleBar)
         .commands {
-            CommandGroup(replacing: .appSettings) { Button(store.t("settings")) { store.openSettings() }.keyboardShortcut(",") }
+            CommandGroup(replacing: .appSettings) { Button(store.t("welcome")) { store.openWelcome() }; Button(store.t("settings")) { store.openSettings() }.keyboardShortcut(",") }
             CommandGroup(after: .newItem) {
                 Button(store.t("add")) { store.pickMusic() }.keyboardShortcut("o")
                 Button(store.t("fileInfo")) { store.inspectedID = nil; store.showInfo.toggle(); store.showLyrics = false; store.showQueue = false }.keyboardShortcut("i")
