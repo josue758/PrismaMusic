@@ -1,19 +1,29 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.7.0** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.7.1** para probar e iterar.
 
-[Descargar la versión 0.7.0 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.7.0) · [Ver el código](https://github.com/josue758/PrismaMusic)
+[Descargar la versión 0.7.1 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.7.1) · [Ver el código](https://github.com/josue758/PrismaMusic)
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.7.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.7.1.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación y sigue la bienvenida para elegir idioma, biblioteca y estilo. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
 
 En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.7. La actualización conserva tus datos.
+
+## Novedades de la versión 0.7.1
+
+La apertura del audio se realiza en segundo plano, con una sola apertura simultánea y cancelación de solicitudes que ya no interesan. Si el NAS tarda, la interfaz sigue disponible y muestra la canción pendiente. Puedes cancelar desde el botón de reproducción. Una respuesta antigua no reemplaza la selección más reciente, y pulsar Siguiente varias veces avanza desde la canción pendiente.
+
+Los archivos con extensión FLAC cuyo contenido corresponde a otro formato se identifican por sus datos y se entregan a AVFoundation con el tipo correcto. Se muestra el códec real y se evita clasificar AAC como sin pérdida por el nombre del archivo.
+
+La restauración de sesión recupera selección y posición sin abrir el archivo hasta que se solicita reproducir. Los errores de apertura distinguen el fallo del audio sin etiquetar todos los errores como desconexiones. La barra, el minirreproductor, la escucha inmersiva y la fila pendiente muestran el estado de carga. Se acorta el nombre de Recientes en la barra lateral para evitar recortes.
+
+Las llamadas de apertura del sistema pueden tardar en terminar aunque se cancele: Prisma descarta el resultado y limita la concurrencia, pero no interrumpe por la fuerza la operación SMB. La construcción y el control del motor permanecen en el hilo principal.
 
 ## Novedades de la versión 0.7
 

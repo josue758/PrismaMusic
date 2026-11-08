@@ -9,6 +9,10 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var tracks: [Track] = [] { didSet { invalidateLibraryCaches(); refreshArtworkPalette() } }
     @Published var sources: [MusicSource] = []
     @Published var currentID: String? { didSet { refreshArtworkPalette() } }
+    @Published private(set) var loadingTrackID:String?
+    private var playbackLoadTask:Task<Void,Never>?
+    private var playbackRequest=UUID()
+    private let openAudioFile:@Sendable (URL) async throws -> OpenedAudioFile
     @Published var isPlaying = false
     @Published var position = 0.0
     @Published var level = 0.0
@@ -148,8 +152,9 @@ final class LibraryStore: NSObject, ObservableObject {
     var groupedArtists:[(key:String,value:[Track])] { results.artists }
     func displayIndex(_ id:String) -> Int { results.indices[id] ?? 0 }
     func t(_ key: String) -> String { translations[key]?[language == .es ? 0 : language == .en ? 1 : 2] ?? key }
-    init(directory: URL? = nil, autoStart: Bool = true, scanWorkers:Int? = nil) {
+    init(directory: URL? = nil, autoStart: Bool = true, scanWorkers:Int? = nil, openAudioFile:(@Sendable (URL) async throws -> OpenedAudioFile)? = nil) {
         dataDirectory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("PrismaMusic")
+        self.openAudioFile=openAudioFile ?? { url in try await AudioFileLoader.shared.open(url) }
         scanWorkerOverride=scanWorkers
         persistence=LibraryPersistence(directory:dataDirectory)
         super.init()
@@ -190,11 +195,10 @@ final class LibraryStore: NSObject, ObservableObject {
     }
     private func restorePlaybackIfNeeded() {
         guard player == nil,currentID == nil,!isPlaying,let (id,time)=savedPlayback,let track=track(for:id) else { return }
-        do {
-            let audio=try makePlayer(track); audio.currentTime=time; player=audio; currentID=id
-            position=min(track.duration,audio.currentTime); queue=filtered.map(\.id); updateNowPlaying()
-        } catch { status=t("offline") }
+        // Restoring the selection must not contact a sleeping or unavailable NAS.
+        currentID=id; position=min(track.duration,max(0,time)); queue=filtered.map(\.id); updateNowPlaying()
     }
+
     private func applyLoaded(_ snapshot:LibrarySnapshot?,includeDemo:Bool) {
         if let snapshot { tracks=snapshot.tracks; sources=snapshot.sources; edited=Set(snapshot.edited); playlists=snapshot.playlists ?? [] }
         else if includeDemo,let demo=Bundle.module.url(forResource:"Demo",withExtension:nil) { sources=[MusicSource(url:demo)] }
@@ -424,6 +428,7 @@ final class LibraryStore: NSObject, ObservableObject {
     }
     func removeSource(_ source: MusicSource) {
         guard !scanning else { return }
+        if let id=loadingTrackID,SourceScanner.isWithin(URL(fileURLWithPath:id),source:source.url) { cancelPlaybackLoad() }
         sources.removeAll { $0.id == source.id }
         let prefix = source.url.path.hasSuffix("/") ? source.url.path : source.url.path + "/"
         tracks.removeAll { track in
@@ -469,37 +474,77 @@ final class LibraryStore: NSObject, ObservableObject {
         }
         postFeedback("undone",icon:"arrow.uturn.backward")
     }
-    func play(_ track: Track, in list: [Track]? = nil) {
+    var playbackLoading:Bool { loadingTrackID != nil }
+    var playbackControlLabel:String { t(playbackLoading ? "cancelAudioLoad" : isPlaying ? "pause" : "play") }
+    func waitForPlaybackLoad() async { await playbackLoadTask?.value }
+    private func cancelPlaybackLoad() {
+        playbackRequest=UUID(); playbackLoadTask?.cancel(); playbackLoadTask=nil; loadingTrackID=nil
+    }
+    func play(_ track: Track, in list: [Track]? = nil, from start:Double = 0) {
         if let list { queue = shuffle ? [track.id] + list.filter { $0.id != track.id }.map(\.id).shuffled() : list.map(\.id) }
         if queue.isEmpty { queue = filtered.map(\.id) }
-        do {
-            let audio = try makePlayer(track)
-            guard audio.play() else { throw NSError(domain: "Prisma", code: 2, userInfo: [NSLocalizedDescriptionKey: "Cannot play \(track.url.lastPathComponent)"]) }
-            player?.stop(); player = audio; currentID = track.id; isPlaying = true; position = 0
-            if let i = tracks.firstIndex(where: { $0.id == track.id }) { tracks[i].lastPlayed = Date(); tracks[i].playCount = (tracks[i].playCount ?? 0) + 1; save() }
-            updateActivity()
-            updateNowPlaying()
-            if online && !track.isDemo && !attempted.contains(track.id) && (track.lyrics == nil || !track.hasArtwork) {
-                attempted.insert(track.id)
-                enrichmentTask?.cancel()
-                enrichmentTask = Task { await enrich(track) }
+        cancelPlaybackLoad()
+        let token=playbackRequest
+        loadingTrackID=track.id
+        let opener=openAudioFile
+        playbackLoadTask=Task { [weak self] in
+            defer {
+                if let self,self.playbackRequest == token { self.loadingTrackID=nil; self.playbackLoadTask=nil }
             }
-        } catch { self.error = "\(error.localizedDescription)\n\(t("offline"))" }
+            do {
+                let opened=try await opener(track.url)
+                try Task.checkCancellation()
+                guard let self,self.playbackRequest == token,!self.quitting,self.track(for:track.id) != nil else { return }
+                let audio=try self.makePlayer(track,file:opened.file)
+                audio.currentTime=start.isFinite ? max(0,start) : 0
+                // Stop the old output before starting the new engine to avoid overlapping songs.
+                let previous=self.player; let wasPlaying=self.isPlaying
+                previous?.pause()
+                guard audio.play() else {
+                    if wasPlaying { self.isPlaying=previous?.play() ?? false }
+                    throw NSError(domain:"Prisma",code:2,userInfo:[NSLocalizedDescriptionKey:self.t("audioLoadFailed")])
+                }
+                previous?.stop(); self.player=audio; self.currentID=track.id; self.isPlaying=true; self.position=audio.currentTime
+                self.loadingTrackID=nil; self.playbackLoadTask=nil
+                if let i=self.tracks.firstIndex(where:{ $0.id == track.id }) { self.tracks[i].lastPlayed=Date(); self.tracks[i].playCount=(self.tracks[i].playCount ?? 0)+1; self.save() }
+                self.updateActivity(); self.updateNowPlaying(); self.rememberPlayback()
+                if self.online && !track.isDemo && !self.attempted.contains(track.id) && (track.lyrics == nil || !track.hasArtwork) {
+                    self.attempted.insert(track.id); self.enrichmentTask?.cancel()
+                    self.enrichmentTask=Task { await self.enrich(track) }
+                }
+            } catch {
+                guard let self,self.playbackRequest == token,!Task.isCancelled else { return }
+                self.loadingTrackID=nil; self.playbackLoadTask=nil
+                self.error="\(self.t("audioLoadFailed")) · \(track.title)\n\(error.localizedDescription)"
+                self.updateActivity(); self.updateNowPlaying()
+            }
+        }
     }
     func togglePlay() {
-        guard let player else { if let first = queuedTracks.first ?? filtered.first { play(first, in: queue.isEmpty ? filtered : nil) }; return }
-        if isPlaying { player.pause(); isPlaying = false } else { isPlaying = player.play() }
+        if playbackLoading { cancelPlaybackLoad(); return }
+        guard let player else {
+            if let first=current ?? queuedTracks.first ?? filtered.first { play(first,in:queue.isEmpty ? filtered : nil,from:currentID == first.id ? position : 0) }
+            return
+        }
+        if isPlaying { player.pause(); isPlaying=false } else { isPlaying=player.play() }
         updateNowPlaying(); updateActivity(); rememberPlayback()
     }
-    func seek(_ seconds: Double) { player?.currentTime = min(max(0, seconds), player?.duration ?? 0); position = player?.currentTime ?? 0; updateNowPlaying(); rememberPlayback() }
+    func seek(_ seconds: Double) {
+        guard seconds.isFinite else { return }
+        cancelPlaybackLoad()
+        let target=min(max(0,seconds),player?.duration ?? current?.duration ?? 0)
+        if let player { player.currentTime=target; position=player.currentTime } else { position=target }
+        updateNowPlaying(); rememberPlayback()
+    }
     func next(back: Bool = false, automatic: Bool = false) {
         guard !tracks.isEmpty else { return }
         if automatic && (stopAfterCurrent || !preferences.continueQueue) { stopAfterCurrent = false; pausePlayback(); return }
-        if back && position > 3 { seek(0); return }
+        if back && !playbackLoading && position > 3 { seek(0); return }
         let list = queue.compactMap { track(for:$0) }
         guard !list.isEmpty else { return }
         if automatic && repeatMode == 2, let current { play(current); return }
-        let i = list.firstIndex { $0.id == currentID } ?? -1
+        let selected=loadingTrackID ?? currentID
+        let i = list.firstIndex { $0.id == selected } ?? -1
         let nextIndex = i + (back ? -1 : 1)
         if nextIndex >= list.count && automatic && repeatMode == 0 { isPlaying = false; position = min(current?.duration ?? player?.duration ?? 0,player?.duration ?? 0); player?.pause(); updateNowPlaying(); updateActivity(); rememberPlayback(); return }
         play(list[(nextIndex + list.count) % list.count])
@@ -520,14 +565,22 @@ final class LibraryStore: NSObject, ObservableObject {
         else { if level != 0 { level=level < 0.0001 ? 0 : level * 0.85 }; if peak != 0 { peak=peak < 0.0001 ? 0 : peak * 0.85 } }
         if Int(position) % 5 == 0 && Int(position) != lastRememberedSecond { lastRememberedSecond = Int(position); rememberPlayback() }
     }
-    private func makePlayer(_ track: Track) throws -> AudioPlayback {
-        let audio = try AudioPlayback(contentsOf: track.url)
+    private func makePlayer(_ track: Track,file:AVAudioFile) throws -> AudioPlayback {
+        let audio = try AudioPlayback(file:file)
         audio.volume = volume; audio.apply(preferences)
-        audio.onFinish = { [weak self] in self?.next(automatic: true) }
-        audio.onError = { [weak self] error in self?.isPlaying = false; self?.error = error.localizedDescription; self?.updateActivity() }
+        audio.onFinish = { [weak self] in self?.playbackDidFinish() }
+        audio.onError = { [weak self,weak audio] error in
+            guard let self,let audio,self.player === audio else { return }
+            self.isPlaying=false; self.error=error.localizedDescription; self.updateActivity(); self.updateNowPlaying()
+        }
         return audio
     }
-    func pausePlayback() { player?.pause(); isPlaying = false; updateNowPlaying(); updateActivity(); rememberPlayback() }
+    func playbackDidFinish() {
+        isPlaying=false; position=player?.duration ?? current?.duration ?? position
+        updateActivity(); updateNowPlaying(); rememberPlayback()
+        if !playbackLoading { next(automatic:true) }
+    }
+    func pausePlayback() { cancelPlaybackLoad(); player?.pause(); isPlaying = false; updateNowPlaying(); updateActivity(); rememberPlayback() }
     private struct PlaybackBookmark: Codable { var id: String; var position: Double }
     private func rememberPlayback() {
         guard preferences.rememberPosition, let currentID else { return }
@@ -590,8 +643,8 @@ final class LibraryStore: NSObject, ObservableObject {
     func showDataFolder() { NSWorkspace.shared.open(dataDirectory) }
     private func setupRemoteCommands() {
         let commands = MPRemoteCommandCenter.shared()
-        commands.playCommand.addTarget { [weak self] _ in Task { @MainActor in if self?.isPlaying == false { self?.togglePlay() } }; return .success }
-        commands.pauseCommand.addTarget { [weak self] _ in Task { @MainActor in if self?.isPlaying == true { self?.togglePlay() } }; return .success }
+        commands.playCommand.addTarget { [weak self] _ in Task { @MainActor in if self?.isPlaying == false && self?.playbackLoading == false { self?.togglePlay() } }; return .success }
+        commands.pauseCommand.addTarget { [weak self] _ in Task { @MainActor in self?.pausePlayback() }; return .success }
         commands.togglePlayPauseCommand.addTarget { [weak self] _ in Task { @MainActor in self?.togglePlay() }; return .success }
         commands.nextTrackCommand.addTarget { [weak self] _ in Task { @MainActor in self?.next() }; return .success }
         commands.previousTrackCommand.addTarget { [weak self] _ in Task { @MainActor in self?.next(back: true) }; return .success }

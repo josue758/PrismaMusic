@@ -45,9 +45,9 @@ struct ImmersivePlayerView: View {
         ReactiveArtwork(track:track)
             .frame(width:size,height:size)
             .overlay(alignment:.bottomTrailing) {
-                Button { if store.currentID == track.id { store.togglePlay() } else { store.play(track,in:store.filtered) } } label: {
-                    Image(systemName:store.currentID == track.id && store.isPlaying ? "pause.fill" : "play.fill").font(.system(size:18,weight:.medium)).foregroundStyle(.white).frame(width:52,height:52)
-                }.buttonStyle(.plain).glassEffect(.clear.interactive(),in:Circle()).padding(18).help(store.t(store.isPlaying ? "pause" : "play"))
+                Button { if store.playbackLoading || store.currentID == track.id { store.togglePlay() } else { store.play(track,in:store.filtered) } } label: {
+                    PlaybackControlSymbol().font(.system(size:18,weight:.medium)).foregroundStyle(.white).frame(width:52,height:52)
+                }.buttonStyle(.plain).glassEffect(.clear.interactive(),in:Circle()).padding(18).help(store.playbackControlLabel).accessibilityLabel(store.playbackControlLabel)
             }
     }
     private func details(_ track: Track) -> some View {

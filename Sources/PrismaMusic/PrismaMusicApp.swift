@@ -22,7 +22,7 @@ struct PrismaMusicApp: App {
                 Button(store.t("scan")) { Task { await store.scan() } }.keyboardShortcut("r").disabled(store.scanning)
             }
             CommandMenu(store.t("play")) {
-                Button(store.t(store.isPlaying ? "pause" : "play")) { store.togglePlay() }.keyboardShortcut("p", modifiers: [.command, .shift])
+                Button(store.playbackControlLabel) { store.togglePlay() }.keyboardShortcut("p", modifiers: [.command, .shift])
                 Button(store.t("next")) { store.next() }.keyboardShortcut(.rightArrow, modifiers: .command)
                 Button(store.t("previous")) { store.next(back: true) }.keyboardShortcut(.leftArrow, modifiers: .command)
                 Button(store.t("mini")) { store.miniPlayer() }.keyboardShortcut("m", modifiers: [.command, .shift])

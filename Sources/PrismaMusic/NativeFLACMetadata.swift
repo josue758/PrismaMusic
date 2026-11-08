@@ -64,8 +64,9 @@ enum NativeFLACMetadata {
         }
         guard let magic=try read(0,4) else { throw CocoaError(.fileReadCorruptFile) }
         guard magic == Data([0x66,0x4c,0x61,0x43]) else {
-            if magic.starts(with:Data([0x49,0x44,0x33])) { return nil }
-            throw CocoaError(.fileReadCorruptFile)
+            if magic.allSatisfy({ $0 == 0 }) { throw CocoaError(.fileReadCorruptFile) }
+            // An extension can be wrong: let AVFoundation identify other encoded audio.
+            return nil
         }
         var offset:UInt64=4
         var result:Header?

@@ -127,7 +127,11 @@ final class ListeningTests: XCTestCase {
         XCTAssertGreaterThan(track.duration,10)
         XCTAssertGreaterThan(track.fileSize ?? 0,1000)
         XCTAssertGreaterThan(track.bitrate ?? 0,0)
-        let player=try AudioPlayback(contentsOf:url)
+        let openedAt=Date()
+        let opened=try await AudioFileLoader.shared.open(url)
+        XCTAssertFalse(opened.openedOnMainThread)
+        let openSeconds=Date().timeIntervalSince(openedAt)
+        let player=try AudioPlayback(file:opened.file)
         let format=AVAudioFormat(standardFormatWithSampleRate:48000,channels:2)!
         try player.engine.enableManualRenderingMode(.offline,format:format,maximumFrameCount:1024)
         let buffer=AVAudioPCMBuffer(pcmFormat:format,frameCapacity:1024)!
@@ -150,7 +154,7 @@ final class ListeningTests: XCTestCase {
         XCTAssertTrue(player.play())
         XCTAssertGreaterThan(try renderEnergy(),0.01)
         player.stop()
-        print("PRISMA_NAS format=\(track.format ?? "?") rate=\(track.sampleRate ?? 0) bits=\(track.bitDepth ?? 0) bitrate=\(track.bitrate ?? 0) decoded-and-seeked=true")
+        print("PRISMA_NAS format=\(track.format ?? "?") rate=\(track.sampleRate ?? 0) bits=\(track.bitDepth ?? 0) bitrate=\(track.bitrate ?? 0) decoded-and-seeked=true background-open-seconds=\(openSeconds)")
     }
 
 }

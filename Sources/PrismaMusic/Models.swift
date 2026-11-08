@@ -30,7 +30,8 @@ struct Track: Identifiable, Codable, Equatable, Sendable {
     var lastPlayed: Date? = nil
     var playCount: Int? = nil
     var sourceIsNetwork: Bool? = nil
-    var isLossless: Bool { ["FLAC", "ALAC", "PCM"].contains { format?.contains($0) == true } }
+    var codecLabel:String { format?.components(separatedBy:"·").last?.trimmingCharacters(in:.whitespacesAndNewlines).uppercased() ?? url.pathExtension.uppercased() }
+    var isLossless: Bool { format != nil && ["FLAC", "ALAC", "PCM"].contains(codecLabel) }
     var qualitySummary: String { [format, bitrate.map { "≈\(Int(($0 / 1000).rounded())) kb/s" }].compactMap { $0 }.joined(separator: " · ") }
     var isDemo: Bool { url.path.contains("/Demo/") }
 }
@@ -80,8 +81,14 @@ enum MetadataReader {
         return enumerator.compactMap { $0 as? URL }.filter { extensions.contains($0.pathExtension.lowercased()) && ((try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true) }.sorted { $0.path < $1.path }
     }
     static func read(_ url: URL,sidecars:ScannedAudioFile? = nil) async throws -> Track {
-        if url.pathExtension.lowercased() == "flac",let track=try NativeFLACMetadata.read(url,sidecars:sidecars) { return track }
-        let asset=AVURLAsset(url:url)
+        var options:[String:Any]?
+        if url.pathExtension.lowercased() == "flac" {
+            if let track=try NativeFLACMetadata.read(url,sidecars:sidecars) { return track }
+            let actual=AudioFileFacts.read(url).container
+            let mime=["M4A":"audio/mp4","MP4":"audio/mp4","MP3":"audio/mpeg","WAV":"audio/wav","AIFF":"audio/aiff","CAF":"audio/x-caf","AAC":"audio/aac","FLAC":"audio/flac"]
+            if let actual,let type=mime[actual] { options=[AVURLAssetOverrideMIMETypeKey:type] }
+        }
+        let asset=AVURLAsset(url:url,options:options)
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             return try await read(asset,url:url,sidecars:sidecars)
@@ -133,7 +140,7 @@ enum MetadataReader {
         case kAudioFormatFLAC: codec = "FLAC"
         default: codec = ""
         }
-        let container = url.pathExtension.uppercased()
+        let container = facts.container ?? (codec.isEmpty ? url.pathExtension.uppercased() : codec)
         let format = codec.isEmpty || codec == container ? container : container + " · " + codec
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
         return Track(url: url, title: value(["title", "id3/TIT2", "itsk/©nam"]) ?? url.deletingPathExtension().lastPathComponent,
@@ -153,6 +160,7 @@ func clockText(_ seconds: Double) -> String {
 }
 
 struct AudioFileFacts {
+    var container:String?
     var bitDepth:Int?
     var bitrate:Double?
     static func read(_ url:URL) -> Self {
@@ -160,6 +168,20 @@ struct AudioFileFacts {
         var file:AudioFileID?
         guard AudioFileOpenURL(url as CFURL,.readPermission,0,&file) == noErr,let file else { return facts }
         defer { AudioFileClose(file) }
+        var type:AudioFileTypeID=0; var typeSize=UInt32(MemoryLayout<AudioFileTypeID>.size)
+        if AudioFileGetProperty(file,kAudioFilePropertyFileFormat,&typeSize,&type) == noErr {
+            switch type {
+            case kAudioFileM4AType: facts.container="M4A"
+            case kAudioFileMPEG4Type: facts.container="MP4"
+            case kAudioFileMP3Type: facts.container="MP3"
+            case kAudioFileFLACType: facts.container="FLAC"
+            case kAudioFileWAVEType: facts.container="WAV"
+            case kAudioFileAIFFType,kAudioFileAIFCType: facts.container="AIFF"
+            case kAudioFileCAFType: facts.container="CAF"
+            case kAudioFileAAC_ADTSType: facts.container="AAC"
+            default: break
+            }
+        }
         var depth:Int32=0; var size=UInt32(MemoryLayout<Int32>.size)
         if AudioFileGetProperty(file,kAudioFilePropertySourceBitDepth,&size,&depth) == noErr,depth != 0,depth >= -64,depth <= 64 { facts.bitDepth=abs(Int(depth)) }
         var rate:UInt32=0; size=UInt32(MemoryLayout<UInt32>.size)

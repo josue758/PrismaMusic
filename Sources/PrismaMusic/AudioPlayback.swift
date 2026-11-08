@@ -39,9 +39,12 @@ final class AudioPlayback {
         }
     }
     var levels: (rms: Float, peak: Float) { meter.read() }
-    init(contentsOf url: URL) throws {
+    convenience init(contentsOf url: URL) throws {
+        try self.init(file:AVAudioFile(forReading:url))
+    }
+    init(file:AVAudioFile) throws {
         balanceEffect = AVAudioUnitEffect(audioComponentDescription: StereoBalanceUnit.component)
-        file = try AVAudioFile(forReading: url)
+        self.file = file
         engine.attach(node); engine.attach(equalizer); engine.attach(speed); engine.attach(balanceMixer); engine.attach(balanceEffect)
         for (index, frequency) in ListeningPreferences.frequencies.enumerated() {
             let band = equalizer.bands[index]

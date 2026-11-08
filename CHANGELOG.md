@@ -1,5 +1,15 @@
 # Cambios
 
+## 0.7.1 — 8 de noviembre de 2026
+
+Apertura de audio serializada fuera de la interfaz, estado de carga cancelable y protección frente a respuestas de solicitudes anteriores. Siguiente usa la selección pendiente; pausar, buscar y salir cancelan la carga. Restaurar la sesión no abre el archivo hasta solicitar reproducir. Se evita solapar dos canciones al cambiar y se conservan los controles del audio actual si falla el nuevo. Indicadores de carga y etiqueta Recientes más breve.
+
+Se corrige además la lectura de M4A/AAC guardado con extensión FLAC: detección del contenedor real, indicación MIME para AVFoundation y clasificación de calidad por códec.
+
+Se corrige el estado al terminar una canción si la siguiente no se puede abrir, y se sincronizan los controles del sistema después de un fallo de apertura.
+
+Seis regresiones nuevas: interfaz disponible durante una apertura suspendida, última solicitud propietaria del error, rechazo de respuestas tardías al cancelar/salir, navegación rápida y restauración sin abrir el audio. La prueba SMB usa el nuevo cargador en segundo plano y comprueba su hilo de ejecución.
+
 ## 0.7.0 — 8 de noviembre de 2026
 
 Bienvenida en cuatro pasos y tres idiomas: colección local/NAS, etiquetas, estilos Cristal vivo/Calma/Contraste y preferencias de escucha. Se guarda la finalización y se puede reabrir desde Ajustes o el menú. Los estilos no modifican el ecualizador.

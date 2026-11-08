@@ -11,6 +11,10 @@ enum Accent: String, CaseIterable, Identifiable {
     var color: Color { switch self { case .violet: Color(red: 0.62, green: 0.48, blue: 1); case .ocean: .cyan; case .rose: .pink; case .mint: .mint; case .amber: .orange; case .indigo: .indigo; case .emerald: .green; case .sunset: .red } }
 }
 let translations: [String: [String]] = [
+ "cancelAudioLoad": ["Cancelar carga de audio", "Cancel audio loading", "Cancelar carregamento de áudio"],
+ "audioLoadFailed": ["No se pudo abrir el audio", "Could not open the audio", "Não foi possível abrir o áudio"],
+ "recentNav": ["Recientes", "Recent", "Recentes"],
+ "loadingAudio": ["Abriendo audio…", "Opening audio…", "Abrindo áudio…"],
  "welcome": ["Bienvenida", "Welcome", "Boas-vindas"],
  "welcomeNote": ["Tu música. Tu espacio.\nA tu manera.", "Your music. Your space.\nYour way.", "Sua música. Seu espaço.\nDo seu jeito."],
  "welcomeLanguage": ["Elige tu idioma", "Choose your language", "Escolha seu idioma"],
@@ -195,7 +199,7 @@ let translations: [String: [String]] = [
  "done": ["Listo", "Done", "Concluído"],
  "name": ["Nombre", "Name", "Nome"],
  "keyboard": ["Teclado", "Keyboard", "Teclado"],
- "versionNew": ["Versión 0.7.0 · Swift + SwiftUI · macOS", "Version 0.7.0 · Swift + SwiftUI · macOS", "Versão 0.7.0 · Swift + SwiftUI · macOS"],
+ "versionNew": ["Versión 0.7.1 · Swift + SwiftUI · macOS", "Version 0.7.1 · Swift + SwiftUI · macOS", "Versão 0.7.1 · Swift + SwiftUI · macOS"],
  "engine": ["Motor AVAudioEngine · EQ → velocidad → salida", "AVAudioEngine · EQ → rate → output", "AVAudioEngine · EQ → velocidade → saída"],
  "settingsSaved": ["Los cambios se guardan automáticamente.", "Changes save automatically.", "As alterações são salvas automaticamente."],
  "formatFilter": ["Todos los formatos", "All formats", "Todos os formatos"],

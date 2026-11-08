@@ -59,7 +59,7 @@ struct PlayerBar: View {
                 HStack(spacing: 22) {
                     transport("shuffle", "shuffle", active: store.shuffle) { store.shuffle.toggle() }
                     transport("backward.end.fill", "previous") { store.next(back: true) }
-                    Button { store.togglePlay() } label: { Image(systemName: store.isPlaying ? "pause.fill" : "play.fill").contentTransition(reduceMotion || !store.preferences.microInteractions ? .identity : .symbolEffect(.replace)).animation(reduceMotion || !store.preferences.microInteractions ? nil : .smooth(duration:0.2),value:store.isPlaying).font(.system(size: 15, weight: .semibold)).frame(width: 43, height: 36) }.buttonStyle(.glassProminent).buttonBorderShape(.circle).help(store.t(store.isPlaying ? "pause" : "play"))
+                    Button { store.togglePlay() } label: { PlaybackControlSymbol().contentTransition(reduceMotion || !store.preferences.microInteractions ? .identity : .symbolEffect(.replace)).animation(reduceMotion || !store.preferences.microInteractions ? nil : .smooth(duration:0.2),value:store.isPlaying).font(.system(size: 15, weight: .semibold)).frame(width: 43, height: 36) }.buttonStyle(.glassProminent).buttonBorderShape(.circle).help(store.playbackControlLabel).accessibilityLabel(store.playbackControlLabel)
                     transport("forward.end.fill", "next") { store.next() }
                     transport(store.repeatMode == 2 ? "repeat.1" : "repeat", "repeat", active: store.repeatMode > 0) { store.repeatMode = (store.repeatMode + 1) % 3 }
                 }
@@ -86,7 +86,7 @@ struct MiniPlayerView: View {
             ChangingArtwork(track:store.current).aspectRatio(1.2,contentMode:.fit)
             VStack(spacing: 5) { Text(store.current?.title ?? store.t("choose")).font(.system(size: 19, weight: .medium, design: .rounded)); Text(store.current?.artist ?? "Prisma Music").font(.caption).foregroundStyle(.secondary); if store.preferences.showQuality { Text(store.current?.qualitySummary ?? "").font(.system(size: 9, design: .monospaced)).foregroundStyle(store.effectiveAccent) } }.lineLimit(1)
             ScrubTimeline(value:Binding(get:{store.position},set:{store.seek($0)}),duration:store.current?.duration ?? 0,enabled:store.current != nil)
-            HStack(spacing: 30) { Button { store.next(back: true) } label: { Image(systemName: "backward.end.fill") }; Button { store.togglePlay() } label: { Image(systemName: store.isPlaying ? "pause.fill" : "play.fill").contentTransition(reduceMotion || !store.preferences.microInteractions ? .identity : .symbolEffect(.replace)).animation(reduceMotion || !store.preferences.microInteractions ? nil : .smooth(duration:0.2),value:store.isPlaying).frame(width: 40, height: 34) }.buttonStyle(.glassProminent).buttonBorderShape(.circle); Button { store.next() } label: { Image(systemName: "forward.end.fill") } }.buttonStyle(.plain)
+            HStack(spacing: 30) { Button { store.next(back: true) } label: { Image(systemName: "backward.end.fill") }; Button { store.togglePlay() } label: { PlaybackControlSymbol().contentTransition(reduceMotion || !store.preferences.microInteractions ? .identity : .symbolEffect(.replace)).animation(reduceMotion || !store.preferences.microInteractions ? nil : .smooth(duration:0.2),value:store.isPlaying).frame(width: 40, height: 34) }.buttonStyle(.glassProminent).buttonBorderShape(.circle); Button { store.next() } label: { Image(systemName: "forward.end.fill") } }.buttonStyle(.plain)
         }.padding(22).padding(.top, 14) }.tint(store.effectiveAccent).preferredColorScheme(store.colorScheme)
     }
 }
@@ -222,5 +222,15 @@ private struct BitmapArtwork: View {
                 let value=await Task.detached(priority:.utility) { ArtworkCache.shared.image(for:track,pixels:pixels) }.value
                 guard !Task.isCancelled else { return }; image=value
             }.onDisappear { image=nil }
+    }
+}
+
+struct PlaybackControlSymbol:View {
+    @EnvironmentObject var store:LibraryStore
+    var body:some View {
+        Group {
+            if store.playbackLoading { ProgressView().controlSize(.small) }
+            else { Image(systemName:store.isPlaying ? "pause.fill" : "play.fill") }
+        }.accessibilityLabel(store.playbackControlLabel)
     }
 }

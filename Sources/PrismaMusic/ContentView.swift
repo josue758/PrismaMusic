@@ -106,7 +106,7 @@ struct ContentView: View {
                 if key != "immersive" { store.section=key; store.clearFilters() }
             }
         } label: {
-            HStack(spacing:11) { Image(systemName:icon).font(.system(size:13)).frame(width:18); Text(store.t(key)).font(.system(size:12,weight:selected ? .semibold : .regular)).lineLimit(1); Spacer(minLength:0); if key == "songs" { Text("\(store.tracks.count)").font(.system(size:9)).foregroundStyle(.tertiary) } }.padding(.horizontal,12).padding(.vertical,10).background { if selected { RoundedRectangle(cornerRadius:11).fill(store.effectiveAccent.opacity(0.16)).matchedGeometryEffect(id:"navigationSelection",in:navigationSelection) } }.foregroundStyle(selected ? store.effectiveAccent : .primary.opacity(0.65))
+            HStack(spacing:11) { Image(systemName:icon).font(.system(size:13)).frame(width:18); Text(store.t(key == "recent" ? "recentNav" : key)).font(.system(size:12,weight:selected ? .semibold : .regular)).lineLimit(1); Spacer(minLength:0); if key == "songs" { Text("\(store.tracks.count)").font(.system(size:9)).foregroundStyle(.tertiary) } }.padding(.horizontal,12).padding(.vertical,10).background { if selected { RoundedRectangle(cornerRadius:11).fill(store.effectiveAccent.opacity(0.16)).matchedGeometryEffect(id:"navigationSelection",in:navigationSelection) } }.foregroundStyle(selected ? store.effectiveAccent : .primary.opacity(0.65))
         }.buttonStyle(.plain)
     }
     private var toolbar: some View {
@@ -152,7 +152,7 @@ struct ContentView: View {
                     }.padding(3).padding(.bottom, 20)
                 }.scrollIndicators(.hidden).clipped()
             }
-            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini); Button { store.cancelScan() } label: { Image(systemName:"stop.circle") }.buttonStyle(.plain).help(store.t("cancel")) }; Text(store.status.isEmpty ? store.t("ready") : store.status).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 07").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
+            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini); Button { store.cancelScan() } label: { Image(systemName:"stop.circle") }.buttonStyle(.plain).help(store.t("cancel")) }; Text(store.loadingTrackID.flatMap { store.track(for:$0) }.map { store.t("loadingAudio") + " " + $0.title } ?? (store.status.isEmpty ? store.t("ready") : store.status)).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 07").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     private var hero: some View {
@@ -219,7 +219,7 @@ struct ContentView: View {
             ForEach(list) { track in
                 let i=store.displayIndex(track.id)
                 HStack(spacing: 10) {
-                    Button { store.play(track, in: list) } label: { Group { if store.currentID == track.id && store.isPlaying { Image(systemName: "waveform").foregroundStyle(store.effectiveAccent) } else { Text(String(format: "%02d", i + 1)).foregroundStyle(.tertiary) } }.font(.system(size: 10, design: .monospaced)).frame(width: 22, height: 32) }.buttonStyle(.plain).help(store.t("play"))
+                    Button { store.play(track, in: list) } label: { Group { if store.loadingTrackID == track.id { ProgressView().controlSize(.mini) } else if store.currentID == track.id && store.isPlaying { Image(systemName: "waveform").foregroundStyle(store.effectiveAccent) } else { Text(String(format: "%02d", i + 1)).foregroundStyle(.tertiary) } }.font(.system(size: 10, design: .monospaced)).frame(width: 22, height: 32) }.buttonStyle(.plain).help(store.t("play"))
                     ArtworkView(track: track).frame(width: store.preferences.compactRows ? 30 : 40, height: store.preferences.compactRows ? 30 : 40).clipShape(RoundedRectangle(cornerRadius: 8))
                     VStack(alignment: .leading, spacing: 5) { HStack(spacing: 7) { Text(track.title).font(.system(size: 12, weight: .medium)).foregroundStyle(store.currentID == track.id ? store.effectiveAccent : .primary); if store.preferences.showQuality && !inspectorVisible { QualityBadge(track: track) } }; Text(track.artist + (store.preferences.showQuality && !track.qualitySummary.isEmpty ? " · " + track.qualitySummary : "")).font(.system(size: 9)).foregroundStyle(.secondary) }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                     if !inspectorVisible { Text(track.album).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1).frame(width: 140, alignment: .leading); Text(track.year).font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary).frame(width: 38) }

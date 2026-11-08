@@ -69,7 +69,7 @@ struct GlassIconButton: View {
 struct QualityBadge: View {
     var track: Track
     var body: some View {
-        HStack(spacing: 4) { Image(systemName: track.isLossless ? "waveform.badge.magnifyingglass" : "waveform"); Text(track.isLossless ? "LOSSLESS" : track.url.pathExtension.uppercased()) }.font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(0.5).padding(.horizontal, 7).padding(.vertical, 4).background(.primary.opacity(0.06), in: Capsule()).foregroundStyle(.secondary)
+        HStack(spacing: 4) { Image(systemName: track.isLossless ? "waveform.badge.magnifyingglass" : "waveform"); Text(track.isLossless ? "LOSSLESS" : track.codecLabel) }.font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(0.5).padding(.horizontal, 7).padding(.vertical, 4).background(.primary.opacity(0.06), in: Capsule()).foregroundStyle(.secondary)
     }
 }
 struct SectionHeading: View {
