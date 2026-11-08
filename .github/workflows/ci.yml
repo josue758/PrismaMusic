@@ -27,6 +27,7 @@ jobs:
         run: |
           mkdir -p artifacts
           ./scripts/verify.sh 2>&1 | tee artifacts/verification.log
+          cp ../Prisma-Music-*.dmg artifacts/
       - name: Keep verification log and installer
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -34,6 +35,6 @@ jobs:
           name: PrismaMusic-macOS-arm64
           path: |
             artifacts/verification.log
-            ../Prisma-Music-*.dmg
+            artifacts/Prisma-Music-*.dmg
           if-no-files-found: error
           retention-days: 14
