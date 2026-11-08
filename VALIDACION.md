@@ -1,4 +1,14 @@
-# Validación de Prisma Music 0.9.0
+# Validación de Prisma Music 0.10.0
+
+8 de noviembre de 2026. **66 pruebas, sin omisiones ni fallos**, con internet, NAS SMB, inventario independiente y dispositivos Core Audio activados. El recorrido encontró los 7.854 archivos esperados, sin errores de exploración. Las 66 pruebas locales también pasan con seis omisiones intencionales al no habilitar recursos externos.
+
+Se verificó la nueva selección por teclado, sus límites y los resultados que cambian al filtrar; solicitar foco de búsqueda conserva inspección y estado de reproducción. En la app instalada se comprobó que ↓ avanza a la siguiente canción sin reproducir, ⌘I abre esa selección, ⌘F enfoca la búsqueda y Esc la vacía y abandona. Intro solicitó reproducir la selección con volumen silenciado: la salida guardada no estaba disponible y se mostró el motivo, conservando la canción anterior. Se restauró el volumen original. Esto acredita el manejo de la acción y el error, no una reproducción física mediante ese DAC.
+
+El script de verificación ejecutó pruebas, compiló en release, generó el DMG y comprobó firma ad hoc, coincidencia de versión del paquete e integridad de la imagen. No hubo advertencias del compilador Swift; las pruebas externas siguen emitiendo mensajes del servicio de Contactos de macOS descritos en la validación anterior.
+
+La corrección de Reducir transparencia usa un color opaco del sistema en las superficies comunes. No se realizó una auditoría completa con VoiceOver ni de todos los ajustes de accesibilidad del sistema; las acciones y la selección se observaron en el árbol de accesibilidad.
+
+## Validación previa de Prisma Music 0.9.0
 
 8 de noviembre de 2026. **64 pruebas, sin omisiones ni fallos**, con internet, NAS SMB, inventario completo y dispositivos Core Audio habilitados. El recorrido volvió a encontrar exactamente los 7.854 archivos del inventario independiente, sin errores de exploración. Se decodificó y se buscó dentro de un FLAC real del NAS; se verificaron cuatro salidas y la preparación para AVPlayer. Se mantienen los límites de las pruebas físicas de DAC y AirPlay descritos abajo.
 

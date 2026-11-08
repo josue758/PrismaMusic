@@ -1,5 +1,13 @@
 # Cambios
 
+## 0.10.0 — 8 de noviembre de 2026
+
+Navegación por teclado en listas compartidas, selección sin reproducción automática, Intro para reproducir, ⌘F para buscar y Esc para salir. Acciones y selección expuestas a accesibilidad. ⌘I conserva la canción inspeccionada.
+
+Superficies opacas con Reducir transparencia. Versión y build centralizados en un manifiesto compartido por interfaz, peticiones y empaquetado. Script de verificación de pruebas, compilación, firma e integridad del DMG.
+
+GitHub Actions en macOS 26 arm64 con permisos de lectura, acciones fijadas por SHA y conservación del instalador/log. README en inglés, guía española, arquitectura, contribuciones y roadmap con límites explícitos. Dos regresiones nuevas de selección y foco de búsqueda. Formato Swift consistente en fuentes y pruebas, con configuración y script del formatter incluido en el toolchain.
+
 ## 0.9.0 — 8 de noviembre de 2026
 
 Página de álbum con lista ordenada por disco y pista, duración, portada y reproducción independiente de la apertura. Lectura de numeración FLAC/ID3/MP4 bajo demanda, con fallback al nombre del archivo. Agrupación de colaboraciones bajo el artista principal.

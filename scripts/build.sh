@@ -2,6 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 BUILD_MODE="${1:-release}"
+VERSION_FILE="Sources/PrismaMusic/Resources/Version.plist"
+PRISMA_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :version' "$VERSION_FILE")"
+PRISMA_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :build' "$VERSION_FILE")"
 swift build -c "$BUILD_MODE"
 BIN_DIR="$(swift build -c "$BUILD_MODE" --show-bin-path)"
 APP="build/Prisma Music.app"
@@ -10,7 +13,7 @@ cp "$BIN_DIR/PrismaMusic" "$APP/Contents/MacOS/PrismaMusic"
 RESOURCE_BUNDLE="$(find "$BIN_DIR" -maxdepth 1 -name '*.bundle' -print -quit)"
 if [ -n "$RESOURCE_BUNDLE" ]; then cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"; fi
 if [ -f scripts/AppIcon.icns ]; then cp scripts/AppIcon.icns "$APP/Contents/Resources/"; fi
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -19,8 +22,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>Prisma Music</string>
 <key>CFBundleDisplayName</key><string>Prisma Music</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.9.0</string>
-<key>CFBundleVersion</key><string>11</string>
+<key>CFBundleShortVersionString</key><string>${PRISMA_VERSION}</string>
+<key>CFBundleVersion</key><string>${PRISMA_BUILD}</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>LSMinimumSystemVersion</key><string>26.0</string>
 <key>NSHighResolutionCapable</key><true/>

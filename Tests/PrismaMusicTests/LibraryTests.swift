@@ -1,14 +1,22 @@
-import XCTest
 import AVFoundation
+import XCTest
+
 @testable import PrismaMusic
 
 final class LibraryTests: XCTestCase {
     func track(_ title: String, artist: String, genre: String, year: String) -> Track {
-        Track(url: URL(fileURLWithPath: "/\(title).m4a"), title: title, artist: artist, album: "Colección", genre: genre, year: year, duration: 120)
+        Track(
+            url: URL(fileURLWithPath: "/\(title).m4a"), title: title, artist: artist, album: "Colección", genre: genre,
+            year: year, duration: 120)
     }
     func testFiltersCombineAndIgnoreAccents() {
-        let tracks = [track("Órbita", artist: "Prisma", genre: "Ambient", year: "2026"), track("Horizonte", artist: "Prisma", genre: "Electronic", year: "2025")]
-        XCTAssertEqual(LibraryQuery.filter(tracks, search: "orbita prisma", artist: "Prisma", genre: "Ambient", year: "2026").map(\.title), ["Órbita"])
+        let tracks = [
+            track("Órbita", artist: "Prisma", genre: "Ambient", year: "2026"),
+            track("Horizonte", artist: "Prisma", genre: "Electronic", year: "2025"),
+        ]
+        XCTAssertEqual(
+            LibraryQuery.filter(tracks, search: "orbita prisma", artist: "Prisma", genre: "Ambient", year: "2026").map(
+                \.title), ["Órbita"])
         XCTAssertTrue(LibraryQuery.filter(tracks, search: "orbita", year: "2025").isEmpty)
         XCTAssertTrue(LibraryQuery.filter(tracks, favorites: true).isEmpty)
         XCTAssertEqual(LibraryQuery.filter(tracks, search: "2025 colección").count, 1)
@@ -24,7 +32,9 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(files.count, 3)
         let tracks = try await withThrowingTaskGroup(of: Track.self) { group in
             for file in files { group.addTask { try await MetadataReader.read(file) } }
-            var result: [Track] = []; for try await t in group { result.append(t) }; return result
+            var result: [Track] = []
+            for try await t in group { result.append(t) }
+            return result
         }
         XCTAssertEqual(Set(tracks.map(\.title)), Set(["Órbita", "Horizonte", "Luz de agua"]))
         XCTAssertEqual(Set(tracks.map(\.year)), Set(["2026", "2025", "2024"]))
@@ -56,8 +66,12 @@ final class LibraryTests: XCTestCase {
         await store.addSources([audio])
         XCTAssertEqual(store.tracks.count, 1)
         store.favorite(store.tracks[0])
-        var edited = store.tracks[0]; edited.title = "Mi edición"; edited.genre = "Jazz"; store.update(edited)
-        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(3)], ofItemAtPath: file.path)
+        var edited = store.tracks[0]
+        edited.title = "Mi edición"
+        edited.genre = "Jazz"
+        store.update(edited)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(3)], ofItemAtPath: file.path)
         await store.scan()
         XCTAssertEqual(store.tracks[0].title, "Mi edición")
         XCTAssertEqual(store.tracks[0].genre, "Jazz")
@@ -74,15 +88,20 @@ final class LibraryTests: XCTestCase {
         XCTAssertTrue(restored.tracks.isEmpty, "Deleted files should disappear from available sources")
     }
     func testProviderQueryEncodesSpecialCharacters() {
-        let url = OnlineMetadata.url("https://lrclib.net/api/get", ["artist_name": "A & B", "track_name": "¿Canción? #1"])
+        let url = OnlineMetadata.url(
+            "https://lrclib.net/api/get", ["artist_name": "A & B", "track_name": "¿Canción? #1"])
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
         XCTAssertEqual(items.first { $0.name == "artist_name" }?.value, "A & B")
         XCTAssertEqual(items.first { $0.name == "track_name" }?.value, "¿Canción? #1")
         XCTAssertEqual(OnlineMetadata.normalized("ÓRBITA"), "orbita")
     }
     func testLiveProvidersWhenRequested() async throws {
-        guard ProcessInfo.processInfo.environment["PRISMA_LIVE_NETWORK"] == "1" else { throw XCTSkip("Opt-in live provider check") }
-        let song = Track(url: URL(fileURLWithPath: "/test.m4a"), title: "Yellow", artist: "Coldplay", album: "Parachutes", genre: "Alternative", year: "2000", duration: 266)
+        guard ProcessInfo.processInfo.environment["PRISMA_LIVE_NETWORK"] == "1" else {
+            throw XCTSkip("Opt-in live provider check")
+        }
+        let song = Track(
+            url: URL(fileURLWithPath: "/test.m4a"), title: "Yellow", artist: "Coldplay", album: "Parachutes",
+            genre: "Alternative", year: "2000", duration: 266)
         let artwork = try await OnlineMetadata.artwork(for: song)
         XCTAssertNotNil(artwork)
         XCTAssertTrue((artwork?.0.count ?? 0) > 100)
@@ -90,6 +109,7 @@ final class LibraryTests: XCTestCase {
         XCTAssertFalse(lyrics?.isEmpty ?? true)
     }
     private var demoDirectory: URL {
-        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources/PrismaMusic/Resources/Demo", isDirectory: true)
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Sources/PrismaMusic/Resources/Demo", isDirectory: true)
     }
 }
