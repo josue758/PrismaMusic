@@ -9,6 +9,9 @@ struct ArtistProfile:Codable,Equatable,Sendable {
     var photoPageURL:URL?
     var photoCredit:String?
     var photoLicense:String?
+    var wikidataID:String?
+    var photos:[ArtistPhotoChoice]?
+    mutating func usePhoto(_ photo:ArtistPhotoChoice) { photoURL=photo.url; photoPageURL=photo.pageURL; photoCredit=photo.credit; photoLicense=photo.license }
 }
 enum ArtistIdentity {
     static func names(_ raw:String)->[String] {
@@ -36,6 +39,7 @@ actor ArtistProfileService {
         return intro.range(of:"\\b(musician|singer|songwriter|composer|rapper|band|cantante|cantautor|cantautora|musico|compositor|compositora|cantor|cantora|banda|grupo musical|duo musical)\\b",options:.regularExpression) != nil
     }
     func profile(name:String,language:String) async throws -> ArtistProfile? {
+        guard !OnlineMetadata.normalized(name).isEmpty else { return nil }
         let key=language+":"+OnlineMetadata.normalized(name)
         if let cached=cache[key] { return cached }
         for lang in language == "en" ? ["en"] : [language,"en"] {
@@ -44,7 +48,15 @@ actor ArtistProfileService {
             if found == nil { found=try await query(name:name,language:lang,search:true) }
             if var value=found {
                 try Task.checkCancellation()
-                if let photo=value.1 { try? await attachPhoto(photo,to:&value.0) }
+                var candidates:[ArtistPhotoChoice]=[]
+                if let photo=value.1 { candidates=(try? await photoChoices(filename:photo)) ?? [] }
+                if let entity=value.0.wikidataID,entity.range(of:"^Q[0-9]+$",options:.regularExpression) != nil {
+                    let extra=(try? await photoChoices(entity:entity)) ?? []
+                    for photo in extra where !candidates.contains(where:{ $0.id == photo.id }) { candidates.append(photo) }
+                }
+                candidates=candidates.filter { $0.score >= 0 }.sorted { $0.score > $1.score }
+                value.0.photos=candidates
+                if let photo=candidates.first { value.0.usePhoto(photo) }
                 try Task.checkCancellation()
                 if cache.count >= 64 { cache.removeAll(keepingCapacity:true) }
                 cache[key]=value.0; return value.0
@@ -65,30 +77,14 @@ actor ArtistProfileService {
         let pages=try JSONDecoder().decode(Response.self,from:data).query?.pages ?? []
         guard let page=pages.first(where:{ ArtistIdentity.titleMatches($0.title,name:name) && $0.pageprops?["disambiguation"] == nil && Self.isMusical($0.extract ?? "") }),
               let extract=page.extract,!extract.isEmpty,let raw=page.fullurl,let url=URL(string:raw),url.scheme == "https",url.host == "\(language).wikipedia.org" else { return nil }
-        return (.init(name:page.title,biography:extract,pageURL:url,language:language),page.pageimage)
+        return (.init(name:page.title,biography:extract,pageURL:url,language:language,wikidataID:page.pageprops?["wikibase_item"]),page.pageimage)
     }
-    private func attachPhoto(_ filename:String,to profile:inout ArtistProfile) async throws {
-        let (data,code)=try await OnlineMetadata.request(OnlineMetadata.url("https://commons.wikimedia.org/w/api.php",["action":"query","format":"json","formatversion":"2","prop":"imageinfo","titles":"File:"+filename,"iiprop":"url|extmetadata","iiurlwidth":"600"]))
-        guard code == 200 else { return }
-        struct ImageResponse:Decodable {
-            var query:Query?
-            struct Query:Decodable { var pages:[Page] }
-            struct Page:Decodable { var imageinfo:[Info]? }
-            struct Info:Decodable { var thumburl:String?; var descriptionurl:String?; var extmetadata:[String:Value]? }
-            struct Value:Decodable {
-                var value:String
-                enum CodingKeys:String,CodingKey { case value }
-                init(from decoder:Decoder) throws {
-                    let values=try decoder.container(keyedBy:CodingKeys.self)
-                    value=(try? values.decode(String.self,forKey:.value)) ?? ""
-                }
-            }
-        }
-        guard let info=try JSONDecoder().decode(ImageResponse.self,from:data).query?.pages.first?.imageinfo?.first,
-              let raw=info.thumburl,let url=URL(string:raw),url.scheme == "https",["upload.wikimedia.org","thumb.wikimedia.org"].contains(url.host ?? ""),
-              let credit=info.descriptionurl.flatMap(URL.init(string:)),credit.scheme == "https",credit.host == "commons.wikimedia.org",
-              let license=info.extmetadata?["LicenseShortName"]?.value,!license.isEmpty else { return }
-        profile.photoURL=url; profile.photoPageURL=credit; profile.photoLicense=license
-        profile.photoCredit=info.extmetadata?["Artist"]?.value.replacingOccurrences(of:"<[^>]+>",with:"",options:.regularExpression).replacingOccurrences(of:"&amp;",with:"&")
+    private func photoChoices(filename:String? = nil,entity:String? = nil) async throws ->[ArtistPhotoChoice] {
+        var values=["action":"query","format":"json","formatversion":"2","prop":"imageinfo","iiprop":"url|size|mime|extmetadata","iiurlwidth":"1400"]
+        if let filename { values["titles"]="File:"+filename }
+        if let entity { values["generator"]="search"; values["gsrnamespace"]="6"; values["gsrlimit"]="12"; values["gsrsearch"]="haswbstatement:P180="+entity+" filetype:bitmap" }
+        let (data,code)=try await OnlineMetadata.request(OnlineMetadata.url("https://commons.wikimedia.org/w/api.php",values))
+        guard code == 200 else { return [] }
+        return try JSONDecoder().decode(WikimediaPhotoResponse.self,from:data).choices(preferred:filename != nil)
     }
 }

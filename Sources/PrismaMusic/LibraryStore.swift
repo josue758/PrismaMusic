@@ -17,12 +17,15 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published private(set) var usingAirPlay=false
     @Published private(set) var playbackBuffering=false
     @Published private(set) var preparedOutput:OutputPreparation?
+    @Published var selectedAlbumID:String?
     @Published var selectedArtist:String?
     @Published var tracks: [Track] = [] { didSet { invalidateLibraryCaches(); refreshArtworkPalette() } }
     @Published var sources: [MusicSource] = []
     @Published var currentID: String? { didSet { refreshArtworkPalette() } }
     @Published private(set) var loadingTrackID:String?
     private var playbackLoadTask:Task<Void,Never>?
+    private var albumPlayTask:Task<Void,Never>?
+    @Published private(set) var preparingAlbumID:String?
     private var playbackRequest=UUID()
     private let openAudioFile:@Sendable (URL) async throws -> OpenedAudioFile
     @Published var isPlaying = false
@@ -86,6 +89,47 @@ final class LibraryStore: NSObject, ObservableObject {
     private var queueIndexCache:[String:Int]?
     private var statisticsCache:LibraryStatistics?
     private var queryCache:LibraryQueryCache?
+    private var albumCollectionCache:(revision:Int,id:String,value:AlbumCollection)?
+    func albumCollection(_ id:String)->AlbumCollection? {
+        if let cached=albumCollectionCache,cached.revision == revision,cached.id == id { return cached.value }
+        guard let seed=track(for:id) else { return nil }
+        let value=AlbumCollection(seed:seed,library:tracks); albumCollectionCache=(revision,id,value); return value
+    }
+    func navigateTo(_ destination:String) {
+        selectedAlbumID=nil; selectedArtist=nil; showVisualizer=false; showImmersive=destination == "immersive"
+        if destination != "immersive" { section=destination; clearFilters() }
+    }
+    func openAlbum(_ track:Track) {
+        selectedAlbumID=track.id; inspectedID=track.id; showImmersive=false; showVisualizer=false
+        if section != "artists" || selectedArtist == nil { section="albums"; selectedArtist=nil }
+    }
+    func openArtist(_ name:String) { selectedAlbumID=nil; selectedArtist=name; section="artists"; showImmersive=false; showVisualizer=false }
+    func readAlbumOrder(_ id:String) async {
+        guard let album=albumCollection(id) else { return }
+        let pending=album.tracks.filter { $0.albumOrderRead != true }
+        var positions:[String:(Int?,Int?)]=[:]
+        await withTaskGroup(of:(String,Int?,Int?)?.self) { group in
+            var next=0
+            func submit() {
+                guard next < pending.count,!Task.isCancelled else { return }
+                let file=pending[next].url; next += 1
+                group.addTask {
+                    guard let value=try? await MetadataReader.read(file,sidecars:ScannedAudioFile(url:file,modified:nil,sidecarsKnown:true)),!Task.isCancelled else { return nil }
+                    return (file.path,value.trackNumber,value.discNumber)
+                }
+            }
+            for _ in 0..<min(2,pending.count) { submit() }
+            while let value=await group.next() {
+                if Task.isCancelled { group.cancelAll(); break }
+                if let value { positions[value.0]=(value.1,value.2) }
+                submit()
+            }
+        }
+        guard !positions.isEmpty,!Task.isCancelled else { return }
+        var updated=tracks
+        for i in updated.indices { if let value=positions[updated[i].id] { updated[i].trackNumber=value.0; updated[i].discNumber=value.1; updated[i].albumOrderRead=true } }
+        tracks=updated; save()
+    }
     private var artistCollectionCache:(revision:Int,name:String,value:ArtistCollection)?
     func artistCollection(_ name:String)->ArtistCollection {
         if let cached=artistCollectionCache,cached.revision == revision,cached.name == name { return cached.value }
@@ -104,6 +148,7 @@ final class LibraryStore: NSObject, ObservableObject {
     private var attempted: Set<String> = []
     private var enrichmentTask: Task<Void, Never>?
     private var edited: Set<String> = []
+    lazy var artistPhotoStore=ArtistPhotoStore(directory:dataDirectory)
     private let dataDirectory: URL
     func track(for id:String) -> Track? {
         if trackIndex == nil { trackIndex=Dictionary(tracks.indices.map { (tracks[$0].id,$0) },uniquingKeysWith:{ _,last in last }) }
@@ -140,6 +185,13 @@ final class LibraryStore: NSObject, ObservableObject {
         if let statisticsCache { return statisticsCache }
         let value=LibraryStatistics(tracks:tracks); statisticsCache=value; return value
     }
+    var hasActiveFilters:Bool { !search.isEmpty || !artist.isEmpty || !genre.isEmpty || !year.isEmpty }
+    var sectionSummary:String {
+        let songs=songCountText(filtered.count)
+        if section == "albums" { return "\(groupedAlbums.count) \(t(groupedAlbums.count == 1 ? "albumSingular" : "albums").lowercased()) · \(songs)" }
+        if section == "artists" { return "\(groupedArtists.count) \(t(groupedArtists.count == 1 ? "artistSingular" : "artists").lowercased()) · \(songs)" }
+        return songs+" · "+collectionTimeText(results.duration)
+    }
     var albumCount:Int { statistics.albumCount }
     var artistCount:Int { statistics.artists.count }
     var libraryBytes:Int64 { statistics.bytes }
@@ -168,6 +220,8 @@ final class LibraryStore: NSObject, ObservableObject {
     var groupedAlbums:[(key:String,value:[Track])] { results.albums }
     var groupedArtists:[(key:String,value:[Track])] { results.artists }
     func displayIndex(_ id:String) -> Int { results.indices[id] ?? 0 }
+    func displayArtist(_ value:String)->String { value.isEmpty || value == "—" ? t("unknownArtist") : ArtistIdentity.names(value).joined(separator:" · ") }
+    func displayAlbum(_ value:String)->String { value.isEmpty || value == "—" ? t("unknownAlbum") : value }
     func songCountText(_ count:Int)->String { "\(count) \(t(count == 1 ? "songSingular" : "count"))" }
     func t(_ key: String) -> String { translations[key]?[language == .es ? 0 : language == .en ? 1 : 2] ?? key }
     init(directory: URL? = nil, autoStart: Bool = true, scanWorkers:Int? = nil, openAudioFile:(@Sendable (URL) async throws -> OpenedAudioFile)? = nil) {
@@ -542,11 +596,26 @@ final class LibraryStore: NSObject, ObservableObject {
             self.updateNowPlaying(); self.updateActivity()
         }
     }
-    var playbackLoading:Bool { loadingTrackID != nil }
+    func playAlbum(_ seed:Track,shuffled:Bool = false) {
+        cancelPlaybackLoad()
+        let token=playbackRequest
+        preparingAlbumID=seed.id
+        albumPlayTask=Task { [weak self] in
+            defer { if let self,self.playbackRequest == token { self.albumPlayTask=nil; self.preparingAlbumID=nil } }
+            guard let self else { return }
+            await self.readAlbumOrder(seed.id)
+            guard !Task.isCancelled,self.playbackRequest == token,let album=self.albumCollection(seed.id),!album.tracks.isEmpty else { return }
+            self.albumPlayTask=nil; self.preparingAlbumID=nil
+            self.shuffle=shuffled
+            if let first=shuffled ? album.tracks.randomElement() : album.tracks.first { self.play(first,in:album.tracks) }
+        }
+    }
+    var playbackLoading:Bool { loadingTrackID != nil || preparingAlbumID != nil }
     var playbackControlLabel:String { t(playbackLoading ? "cancelAudioLoad" : isPlaying ? "pause" : "play") }
-    func waitForPlaybackLoad() async { await playbackLoadTask?.value }
+    func waitForPlaybackLoad() async { await albumPlayTask?.value; await playbackLoadTask?.value }
     private func cancelPlaybackLoad() {
         outputResumeIntent=false
+        albumPlayTask?.cancel(); albumPlayTask=nil; preparingAlbumID=nil
         playbackRequest=UUID(); playbackLoadTask?.cancel(); playbackLoadTask=nil; loadingTrackID=nil
     }
     func play(_ track: Track, in list: [Track]? = nil, from start:Double = 0) {

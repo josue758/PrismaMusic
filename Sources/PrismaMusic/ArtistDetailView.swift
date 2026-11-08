@@ -11,11 +11,11 @@ struct ArtistDetailView:View {
     @State private var fetching=false
     @State private var failed=false
     @State private var retry=0
-    @State private var selectedAlbum:String?
+    @State private var changingPhoto=false
     private var collection:ArtistCollection { store.artistCollection(name) }
     private var tracks:[Track] { collection.tracks }
     private var albums:[(key:String,value:[Track])] { collection.albums }
-    private var songs:[Track] { selectedAlbum.map { title in tracks.filter { $0.album == title } } ?? tracks }
+    private var songs:[Track] { tracks }
     private var requestKey:String { name+":"+store.language.rawValue+":"+String(store.online)+":"+String(retry) }
     var body:some View {
         ScrollViewReader { reader in
@@ -25,6 +25,7 @@ struct ArtistDetailView:View {
                     Button { store.selectedArtist=nil } label: { Label(store.t("backArtists"),systemImage:"chevron.left") }.buttonStyle(.glass)
                     Spacer()
                     if fetching { ProgressView().controlSize(.small) }
+                    if (profile?.photos?.count ?? 0) > 1 { Button { changingPhoto=true } label: { Label(store.t("changePhoto"),systemImage:"photo.on.rectangle.angled") }.buttonStyle(.glass) }
                 }
                 hero
                 HStack(spacing:12) {
@@ -38,48 +39,31 @@ struct ArtistDetailView:View {
                     LazyVGrid(columns:[GridItem(.adaptive(minimum:150),spacing:16)],spacing:16) {
                         ForEach(albums,id:\.key) { album in
                             VStack(alignment:.leading,spacing:10) {
-                                Button {
-                                    selectedAlbum=selectedAlbum == album.key ? nil : album.key
-                                    withAnimation(reduceMotion || !store.preferences.microInteractions ? nil : .easeInOut(duration:0.3)) { reader.scrollTo("artist-songs",anchor:.top) }
+                                Button { if let first=album.value.first { store.openAlbum(first) }
                                 } label: {
                                     ArtworkView(track:album.value.first).aspectRatio(1,contentMode:.fit)
-                                }.buttonStyle(.plain).help(store.t("viewAlbumSongs")).accessibilityLabel(store.t("viewAlbumSongs")+": "+album.key)
+                                }.buttonStyle(.plain).help(store.t("viewAlbumSongs")).accessibilityLabel(store.t("viewAlbumSongs")+": "+store.displayAlbum(album.value.first?.album ?? ""))
                                 HStack {
                                     VStack(alignment:.leading,spacing:4) {
-                                        Text(album.key).font(.system(size:12,weight:.semibold)).lineLimit(2)
+                                        Button { if let first=album.value.first { store.openAlbum(first) } } label: { Text(store.displayAlbum(album.value.first?.album ?? "")).font(.system(size:12,weight:.semibold)).lineLimit(2) }.buttonStyle(.plain)
                                         Text([album.value.first?.year ?? "",store.songCountText(album.value.count)].filter { !$0.isEmpty }.joined(separator:" · ")).font(.caption2).foregroundStyle(.secondary)
                                     }
                                     Spacer(minLength:0)
-                                    Button { if let first=album.value.first { store.play(first,in:album.value) } } label: { Image(systemName:"play.fill").frame(width:24,height:24) }.buttonStyle(.glass).help(store.t("play"))
+                                    Button { if let first=album.value.first { store.playAlbum(first) } } label: { Image(systemName:"play.fill").frame(width:24,height:24) }.buttonStyle(.glass).help(store.t("play"))
                                 }
-                            }.padding(12).prismaGlass(20).overlay { if selectedAlbum == album.key { RoundedRectangle(cornerRadius:20).strokeBorder(store.effectiveAccent.opacity(0.7)) } }
+                            }.padding(12).prismaGlass(20)
                         }
                     }
                 }
                 HStack {
-                    SectionHeading(title:selectedAlbum ?? store.t("artistSongs"))
-                    Spacer()
-                    if selectedAlbum != nil { Button(store.t("allSongs")) { selectedAlbum=nil }.buttonStyle(.glass) }
+                    SectionHeading(title:store.t("artistSongs"))
                 }.id("artist-songs")
-                ForEach(songs) { track in
-                    HStack(spacing:12) {
-                        Button { store.play(track,in:songs) } label: {
-                            HStack(spacing:12) {
-                                ArtworkView(track:track).frame(width:42,height:42)
-                                VStack(alignment:.leading,spacing:4) { Text(track.title).font(.system(size:12,weight:.medium)); Text(track.album).font(.caption2).foregroundStyle(.secondary) }.lineLimit(1)
-                                Spacer()
-                                if store.loadingTrackID == track.id { ProgressView().controlSize(.small) }
-                                else if store.currentID == track.id && store.isPlaying { Image(systemName:"waveform").foregroundStyle(store.effectiveAccent) }
-                                Text(clockText(track.duration)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                            }.contentShape(Rectangle())
-                        }.buttonStyle(.plain).help(store.t("play"))
-                        FavoriteControl(track:track)
-                        Button { store.inspectedID=track.id; store.showInfo=true; store.showLyrics=false; store.showQueue=false } label: { Image(systemName:"info.circle") }.buttonStyle(.plain).help(store.t("fileInfo"))
-                    }.padding(12).prismaGlass(16)
-                }
+                LibrarySongList(tracks:songs,showAlbum:false,subtitleAlbum:true) { track in (collection.indices[track.id] ?? 0)+1 }
+
             }.padding(4).padding(.bottom,20)
         }.scrollIndicators(.hidden)
         .task(id:requestKey) { await load() }
+        .sheet(isPresented:$changingPhoto) { ArtistPhotoPicker(name:name,photos:profile?.photos ?? [],selected:profile?.photoURL) { await choosePhoto($0) }.environmentObject(store) }
         }
     }
     private var hero:some View {
@@ -90,8 +74,8 @@ struct ArtistDetailView:View {
                     Image(nsImage:portrait).resizable().scaledToFill().frame(width:geo.size.width,height:320).blur(radius:24).opacity(0.6).clipped().accessibilityHidden(true)
                     HStack(spacing:0) {
                         Spacer(minLength:0)
-                        Image(nsImage:portrait).resizable().aspectRatio(contentMode:portrait.size.width < portrait.size.height ? .fit : .fill)
-                            .frame(width:portrait.size.width < portrait.size.height ? min(max(260,geo.size.width*0.54),320*portrait.size.width/max(1,portrait.size.height)) : max(260,geo.size.width*0.54),height:320).clipped()
+                        Image(nsImage:portrait).resizable().aspectRatio(contentMode:.fit)
+                            .frame(width:min(max(260,geo.size.width*0.54),320*portrait.size.width/max(1,portrait.size.height)),height:320).clipped()
                             .mask(LinearGradient(stops:[.init(color:.clear,location:0),.init(color:.white,location:0.2),.init(color:.white,location:0.85),.init(color:.clear,location:1)],startPoint:.leading,endPoint:.trailing))
                     }.accessibilityLabel(name)
                 } else {
@@ -101,7 +85,7 @@ struct ArtistDetailView:View {
                 LinearGradient(colors:[.clear,.black.opacity(0.55)],startPoint:.top,endPoint:.bottom)
                 VStack(alignment:.leading,spacing:16) {
                     Text(store.t("artistProfile").uppercased()).font(.system(size:9,weight:.semibold,design:.monospaced)).tracking(2).foregroundStyle(.white.opacity(0.75))
-                    Text(name).font(.system(size:44,weight:.bold,design:.rounded)).foregroundStyle(.white).lineLimit(2).minimumScaleFactor(0.65)
+                    Text(store.displayArtist(name)).font(.system(size:44,weight:.bold,design:.rounded)).foregroundStyle(.white).lineLimit(2).minimumScaleFactor(0.65)
                     Text(collection.genres).font(.callout).foregroundStyle(.white.opacity(0.75)).lineLimit(2)
                     HStack(spacing:12) {
                         Button { store.shuffle=false; if let first=tracks.first { store.play(first,in:tracks) } } label: { Label(store.t("play"),systemImage:"play.fill").padding(.horizontal,6).padding(.vertical,4) }.buttonStyle(.glassProminent).disabled(tracks.isEmpty)
@@ -144,18 +128,25 @@ struct ArtistDetailView:View {
         fetching=true
         defer { if requestKey == request { fetching=false } }
         do {
-            let result=try await ArtistProfileService.shared.profile(name:name,language:store.language.rawValue)
+            var result=try await ArtistProfileService.shared.profile(name:name,language:store.language.rawValue)
+            if let saved=await store.artistPhotoStore.choice(for:name) { result?.usePhoto(saved) }
             try Task.checkCancellation(); profile=result
-            if let url=result?.photoURL {
-                let (data,status)=try await OnlineMetadata.request(url)
-                try Task.checkCancellation()
-                if status == 200,data.count <= 4*1024*1024 {
-                    let fallback=ArtworkPalette.fallback(album:name)
-                    let palette=await Task.detached(priority:.utility) { ArtworkPalette.extract(data,fallback:fallback) }.value
-                    try Task.checkCancellation()
-                    portrait=NSImage(data:data); artistPalette=palette
-                }
-            }
+            if let url=result?.photoURL { try await renderPhoto(url) }
         } catch { if !Task.isCancelled { failed=true } }
     }
+    @MainActor private func renderPhoto(_ url:URL,source:URL? = nil) async throws {
+        let data=try await ArtistPhotoNetwork.data(url)
+        let album=name
+        let result=await Task.detached(priority:.utility) { ArtistPortraitRenderer.prepare(data,album:album) }.value
+        try Task.checkCancellation()
+        if let result { portrait=result.image; artistPalette=result.palette; ArtistPortraitCache.shared.remember(name,image:result.thumbnail,source:source ?? profile?.photoPageURL) }
+    }
+    @MainActor private func choosePhoto(_ photo:ArtistPhotoChoice) async {
+        do {
+            try await renderPhoto(photo.url,source:photo.pageURL)
+            profile?.usePhoto(photo)
+            try await store.artistPhotoStore.select(photo,for:name)
+        } catch { if !Task.isCancelled { store.error=error.localizedDescription } }
+    }
+
 }

@@ -6,15 +6,15 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var navigationSelection
     private var motion:Bool { store.preferences.microInteractions && !reduceMotion }
-    private var pageKey:String { store.showImmersive ? "immersive" : store.showVisualizer ? "visualizer" : (store.section == "artists" ? store.selectedArtist.map { "artist:"+$0 } ?? store.section : store.section) }
+    private var pageKey:String { if let id=store.selectedAlbumID,!store.showImmersive,!store.showVisualizer { return "album:"+id }; return store.showImmersive ? "immersive" : store.showVisualizer ? "visualizer" : (store.section == "artists" ? store.selectedArtist.map { "artist:"+$0 } ?? store.section : store.section) }
     @State private var nas = false
     @State private var editing: Track?
     @State private var newPlaylist = false
     @State private var playlistName = ""
-    @State private var selectedID: String?
     private var inspectorVisible: Bool { store.showInfo || store.showLyrics || store.showQueue }
     private var sectionTitle: String {
         if store.section.hasPrefix("playlist:"), let playlist = store.playlists.first(where: { store.section == "playlist:\($0.id)" }) { return playlist.name }
+        if let id=store.selectedAlbumID,let album=store.albumCollection(id) { return store.displayAlbum(album.title) }
         return store.section == "artists" ? store.selectedArtist ?? store.t("artists") : store.t(store.section)
     }
     var body: some View {
@@ -28,7 +28,8 @@ struct ContentView: View {
                             toolbar
                             ZStack(alignment:.topLeading) {
                                 Group {
-                                    if let name=store.selectedArtist,store.section == "artists",!store.showImmersive,!store.showVisualizer { ArtistDetailView(name:name) }
+                                    if let id=store.selectedAlbumID,!store.showImmersive,!store.showVisualizer { AlbumDetailView(id:id) }
+                                    else if let name=store.selectedArtist,store.section == "artists",!store.showImmersive,!store.showVisualizer { ArtistDetailView(name:name) }
                                     else if store.showImmersive { ImmersivePlayerView() }
                                     else if store.showVisualizer { VisualizerView() }
                                     else { library }
@@ -50,6 +51,11 @@ struct ContentView: View {
             }
         }.animation(motion ? .spring(duration:0.34,bounce:0.13) : nil,value:store.feedback?.id)
         .frame(minWidth: inspectorVisible ? 1230 : 1060, minHeight: 720)
+        .onChange(of:store.search) { _,text in
+            if !text.isEmpty && (store.selectedAlbumID != nil || store.selectedArtist != nil || store.showImmersive || store.showVisualizer) {
+                store.selectedAlbumID=nil; store.selectedArtist=nil; store.showImmersive=false; store.showVisualizer=false; store.section="songs"; store.artist=""; store.genre=""; store.year=""
+            }
+        }
         .sheet(isPresented: $store.showWelcome) { WelcomeView().environmentObject(store) }
         .sheet(isPresented: $store.showSettings, onDismiss: { store.settingsDismissed() }) { SettingsView().environmentObject(store) }
         .sheet(isPresented: $nas) { NASView().environmentObject(store) }
@@ -76,7 +82,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack { sidebarLabel("playlists"); Spacer(); Button { newPlaylist = true } label: { Image(systemName: "plus").font(.system(size: 11)) }.buttonStyle(.plain).help(store.t("newPlaylist")) }.padding(.trailing, 10)
                         ForEach(store.playlists) { playlist in
-                            Button { store.section = "playlist:\(playlist.id)"; store.showVisualizer = false; store.showImmersive = false; store.clearFilters() } label: { HStack(spacing: 10) { Image(systemName: "music.note").foregroundStyle(store.effectiveAccent.opacity(0.7)); Text(playlist.name).lineLimit(1); Spacer(); Text("\(playlist.trackIDs.count)").foregroundStyle(.tertiary) }.font(.system(size: 11)).padding(.horizontal, 12).padding(.vertical, 7).background(store.section == "playlist:\(playlist.id)" ? store.effectiveAccent.opacity(0.13) : .clear, in: RoundedRectangle(cornerRadius: 9)) }.buttonStyle(.plain).contextMenu { Button(store.t("deletePlaylist"), role: .destructive) { store.removePlaylist(playlist) } }
+                            Button { store.navigateTo("playlist:\(playlist.id)") } label: { HStack(spacing: 10) { Image(systemName: "music.note").foregroundStyle(store.effectiveAccent.opacity(0.7)); Text(playlist.name).lineLimit(1); Spacer(); Text("\(playlist.trackIDs.count)").foregroundStyle(.tertiary) }.font(.system(size: 11)).padding(.horizontal, 12).padding(.vertical, 7).background(store.section == "playlist:\(playlist.id)" ? store.effectiveAccent.opacity(0.13) : .clear, in: RoundedRectangle(cornerRadius: 9)) }.buttonStyle(.plain).contextMenu { Button(store.t("deletePlaylist"), role: .destructive) { store.removePlaylist(playlist) } }
                         }
                         if store.playlists.isEmpty { Text(store.t("playlistEmpty")).font(.system(size: 10)).foregroundStyle(.tertiary).lineSpacing(4).padding(.horizontal, 12) }
                     }
@@ -103,8 +109,7 @@ struct ContentView: View {
         let selected = key == "immersive" ? store.showImmersive : store.section == key && !store.showVisualizer && !store.showImmersive
         return Button {
             withAnimation(motion ? .smooth(duration:0.3) : nil) {
-                store.showImmersive = key == "immersive"; store.showVisualizer = false
-                if key != "immersive" { store.section=key; store.selectedArtist=nil; store.clearFilters() }
+                store.navigateTo(key)
             }
         } label: {
             HStack(spacing:11) { Image(systemName:icon).font(.system(size:13)).frame(width:18); Text(store.t(key == "recent" ? "recentNav" : key)).font(.system(size:12,weight:selected ? .semibold : .regular)).lineLimit(1); Spacer(minLength:0); if key == "songs" { Text("\(store.tracks.count)").font(.system(size:9)).foregroundStyle(.tertiary) } }.padding(.horizontal,12).padding(.vertical,10).background { if selected { RoundedRectangle(cornerRadius:11).fill(store.effectiveAccent.opacity(0.16)).matchedGeometryEffect(id:"navigationSelection",in:navigationSelection) } }.foregroundStyle(selected ? store.effectiveAccent : .primary.opacity(0.65))
@@ -120,7 +125,7 @@ struct ContentView: View {
                 GlassIconButton(icon: "waveform.path", label: store.t("visualizer"), active: store.showVisualizer) { store.showVisualizer.toggle(); store.showImmersive=false }
                 GlassIconButton(icon: "quote.bubble", label: store.t("lyrics"), active: store.showLyrics) { store.showLyrics.toggle(); store.showInfo = false; store.showQueue = false }
                 GlassIconButton(icon: "list.bullet", label: store.t("queue"), active: store.showQueue) { store.showQueue.toggle(); store.showLyrics = false; store.showInfo = false }
-                GlassIconButton(icon: "info", label: store.t("fileInfo"), active: store.showInfo) { store.inspectedID = selectedID; store.showInfo.toggle(); store.showLyrics = false; store.showQueue = false }
+                GlassIconButton(icon: "info", label: store.t("fileInfo"), active: store.showInfo) { store.showInfo.toggle(); store.showLyrics = false; store.showQueue = false }
             }
         }.padding(.horizontal, 2).frame(height: 42)
     }
@@ -134,18 +139,18 @@ struct ContentView: View {
                         if store.section == "home" && store.search.isEmpty {
                             hero
                             collectionStats
-                            HStack { SectionHeading(title: store.t("featured")); Spacer(); Button(store.t("seeAll") + " ↗") { store.section = "albums" }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(.secondary) }
+                            HStack { SectionHeading(title: store.t("featured")); Spacer(); Button(store.t("seeAll") + " ↗") { store.navigateTo("albums") }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(.secondary) }
                             albumGrid(limit: 3)
-                            HStack { SectionHeading(title: store.t("songs"), subtitle: store.tracks.allSatisfy(\.isDemo) ? store.t("demoNote") : nil); Spacer(); Button(store.t("allSongs") + " ↗") { store.section = "songs" }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(.secondary) }
+                            HStack { SectionHeading(title: store.t("songs"), subtitle: store.tracks.allSatisfy(\.isDemo) ? store.t("demoNote") : nil); Spacer(); Button(store.t("allSongs") + " ↗") { store.navigateTo("songs") }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(.secondary) }
                             songList(Array(store.filtered.prefix(8)))
                         } else {
                             HStack(alignment: .bottom) {
-                                VStack(alignment: .leading, spacing: 8) { Text(sectionTitle).font(.system(size: 30, weight: .semibold, design: .rounded)); Text("\(store.songCountText(store.filtered.count)) · \(collectionTimeText(store.filtered.reduce(0) { $0 + $1.duration }))").font(.system(size: 11)).foregroundStyle(.secondary) }
+                                VStack(alignment: .leading, spacing: 8) { Text(sectionTitle).font(.system(size: 30, weight: .semibold, design: .rounded)); Text(store.sectionSummary).font(.system(size: 11)).foregroundStyle(.secondary) }
                                 Spacer(); Button { store.pickMusic() } label: { Label(store.t("add"), systemImage: "plus").font(.system(size: 11)).padding(.vertical, 3) }.buttonStyle(.glassProminent).disabled(store.scanning)
                             }.padding(.top, 10)
                             filterBar
                             if store.filtered.isEmpty {
-                                ContentUnavailableView { Label(store.t("noResults"), systemImage: "music.note") } description: { Text(store.section.hasPrefix("playlist:") ? store.t("playlistEmpty") : "") } actions: { Button(store.t("clear")) { store.clearFilters() } }.frame(minHeight: 240)
+                                ContentUnavailableView { Label(store.t("noResults"), systemImage: "music.note") } description: { Text(store.section.hasPrefix("playlist:") ? store.t("playlistEmpty") : "") } actions: { if store.hasActiveFilters { Button(store.t("clear")) { store.clearFilters() } } else { Button(store.t("browseSongs")) { store.section="songs"; store.selectedArtist=nil; store.selectedAlbumID=nil } } }.frame(minHeight:240)
                             } else if store.section == "albums" { albumGrid(limit: nil) }
                             else if store.section == "artists" { artistGrid }
                             else { songList(store.filtered) }
@@ -153,7 +158,7 @@ struct ContentView: View {
                     }.padding(3).padding(.bottom, 20)
                 }.scrollIndicators(.hidden).clipped()
             }
-            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini); Button { store.cancelScan() } label: { Image(systemName:"stop.circle") }.buttonStyle(.plain).help(store.t("cancel")) }; Text(store.loadingTrackID.flatMap { store.track(for:$0) }.map { store.t("loadingAudio") + " " + $0.title } ?? (store.status.isEmpty ? store.t("ready") : store.status)).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 08").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
+            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini); Button { store.cancelScan() } label: { Image(systemName:"stop.circle") }.buttonStyle(.plain).help(store.t("cancel")) }; Text(store.loadingTrackID.flatMap { store.track(for:$0) }.map { store.t("loadingAudio") + " " + $0.title } ?? (store.status.isEmpty ? store.t("ready") : store.status)).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 09").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     private var hero: some View {
@@ -202,7 +207,11 @@ struct ContentView: View {
         let width: CGFloat = store.preferences.albumSize == "small" ? 140 : store.preferences.albumSize == "large" ? 240 : 185
         return LazyVGrid(columns: limit == nil ? [GridItem(.adaptive(minimum: width), spacing: 16)] : Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 18) {
             ForEach(Array(groups.prefix(limit ?? groups.count)), id: \.key) { group in
-                if let track = group.value.first { AlbumCard(track: track, wide: limit != nil) { store.play(track, in: group.value) }.contextMenu { TrackContextMenu(track: track) { editing = track } } }
+                if let track = group.value.first { AlbumCard(track:track,wide:limit != nil,action:{ store.openAlbum(track) },play:{ store.playAlbum(track) }).contextMenu {
+                    Button(store.t("openAlbum")) { store.openAlbum(track) }
+                    Button(store.t("play")) { store.playAlbum(track) }
+                    Button(store.t("reveal")) { NSWorkspace.shared.activateFileViewerSelecting([track.url.deletingLastPathComponent()]) }
+                } }
             }
         }
     }
@@ -210,40 +219,27 @@ struct ContentView: View {
         let groups = store.groupedArtists
         return LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 18) {
             ForEach(groups, id: \.key) { group in
-                Button { store.selectedArtist=group.key } label: { VStack(spacing: 14) { ArtworkView(track: group.value.first).frame(width: 105, height: 105).clipShape(Circle()); Text(group.key).font(.system(size: 13, weight: .medium)).lineLimit(1); Text(store.songCountText(group.value.count)).font(.system(size: 10)).foregroundStyle(.secondary) }.padding(22).frame(maxWidth: .infinity).prismaGlass(22) }.buttonStyle(.plain)
+                ArtistGridTile(name:group.key,count:group.value.count)
             }
         }
     }
-    private func songList(_ list: [Track]) -> some View {
-        LazyVStack(spacing: 3) {
-            HStack(spacing: 10) { Text("#").frame(width: 22); Text(store.t("title")).frame(maxWidth: .infinity, alignment: .leading); if !inspectorVisible { Text(store.t("album")).frame(width: 140, alignment: .leading); Text(store.t("year")).frame(width: 38) }; Image(systemName: "clock").frame(width: 38); Text("").frame(width: 22) }.font(.system(size: 9, weight: .medium)).foregroundStyle(.tertiary).padding(.horizontal, 12).padding(.bottom, 9)
-            ForEach(list) { track in
-                let i=store.displayIndex(track.id)
-                HStack(spacing: 10) {
-                    Button { store.play(track, in: list) } label: { Group { if store.loadingTrackID == track.id { ProgressView().controlSize(.mini) } else if store.currentID == track.id && store.isPlaying { Image(systemName: "waveform").foregroundStyle(store.effectiveAccent) } else { Text(String(format: "%02d", i + 1)).foregroundStyle(.tertiary) } }.font(.system(size: 10, design: .monospaced)).frame(width: 22, height: 32) }.buttonStyle(.plain).help(store.t("play"))
-                    ArtworkView(track: track).frame(width: store.preferences.compactRows ? 30 : 40, height: store.preferences.compactRows ? 30 : 40).clipShape(RoundedRectangle(cornerRadius: 8))
-                    VStack(alignment: .leading, spacing: 5) { HStack(spacing: 7) { Text(track.title).font(.system(size: 12, weight: .medium)).foregroundStyle(store.currentID == track.id ? store.effectiveAccent : .primary); if store.preferences.showQuality && !inspectorVisible { QualityBadge(track: track) } }; Text(track.artist + (store.preferences.showQuality && !track.qualitySummary.isEmpty ? " · " + track.qualitySummary : "")).font(.system(size: 9)).foregroundStyle(.secondary) }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-                    if !inspectorVisible { Text(track.album).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1).frame(width: 140, alignment: .leading); Text(track.year).font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary).frame(width: 38) }
-                    Text(clockText(track.duration)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary).frame(width: 38)
-                    FavoriteControl(track:track).frame(width:22)
-                }.padding(.horizontal, 12).padding(.vertical, store.preferences.compactRows ? 5 : 9).background(selectedID == track.id ? store.effectiveAccent.opacity(0.10) : i % 2 == 0 ? .primary.opacity(0.025) : .clear, in: RoundedRectangle(cornerRadius: 12)).contentShape(Rectangle()).onTapGesture(count: 2) { store.play(track, in: list) }.onTapGesture { selectedID = track.id; store.inspectedID = track.id }.contextMenu { TrackContextMenu(track: track) { editing = track } }
-            }
-        }
+    private func songList(_ list:[Track])->some View {
+        LibrarySongList(tracks:list,showAlbum:!inspectorVisible) { store.displayIndex($0.id)+1 }
     }
+
 }
-struct AlbumCard: View {
-    @EnvironmentObject var store: LibraryStore
-    var track: Track
-    var wide = false
-    var action: () -> Void
-    @State private var hover = false
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 12) {
-                ArtworkView(track: track).aspectRatio(wide ? 1.65 : 1, contentMode: .fit).overlay(alignment: .bottomTrailing) { Image(systemName: "play.fill").font(.system(size: 12)).frame(width: 34, height: 34).glassEffect(.regular, in: Circle()).padding(10).opacity(hover ? 1 : 0.8) }
-                VStack(alignment: .leading, spacing: 5) { Text(track.album).font(.system(size: 12, weight: .semibold)); HStack { Text(track.artist).font(.system(size: 10)).foregroundStyle(.secondary); Spacer(minLength: 2); Text(track.year).font(.system(size: 8, design: .monospaced)).foregroundStyle(.tertiary) } }.lineLimit(1).padding(.horizontal, 3).padding(.bottom, 3)
-            }.padding(9).prismaGlass(20).interactiveDepth()
-        }.buttonStyle(PrismaPressStyle()).onHover { hover = $0 }
+struct AlbumCard:View {
+    @EnvironmentObject var store:LibraryStore
+    var track:Track
+    var wide=false
+    var action:()->Void
+    var play:()->Void
+    var body:some View {
+        VStack(alignment:.leading,spacing:12) {
+            Button(action:action) { ArtworkView(track:track).aspectRatio(1,contentMode:.fit) }.buttonStyle(.plain).help(store.t("openAlbum"))
+                .overlay(alignment:.bottomTrailing) { Button(action:play) { Image(systemName:"play.fill").font(.system(size:12)).frame(width:34,height:34) }.buttonStyle(.glass).buttonBorderShape(.circle).padding(10).help(store.t("play")) }
+            Button(action:action) { VStack(alignment:.leading,spacing:5) { Text(store.displayAlbum(track.album)).font(.system(size:12,weight:.semibold)); HStack { Text(store.displayArtist(track.artist)).font(.system(size:10)).foregroundStyle(.secondary); Spacer(minLength:2); Text(track.year).font(.system(size:9,design:.monospaced)).foregroundStyle(.secondary) } }.lineLimit(1).frame(maxWidth:.infinity,alignment:.leading).contentShape(Rectangle()) }.buttonStyle(.plain)
+        }.padding(10).prismaGlass(20).interactiveDepth()
     }
 }
 struct TrackContextMenu: View {

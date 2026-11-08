@@ -1,19 +1,29 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.8.0** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.9.0** para probar e iterar.
 
-[Descargar la versión 0.8.0 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.8.0) · [Ver el código](https://github.com/josue758/PrismaMusic)
+[Descargar la versión 0.9.0 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.9.0) · [Ver el código](https://github.com/josue758/PrismaMusic)
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.8.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.9.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación y sigue la bienvenida para elegir idioma, biblioteca y estilo. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
 
-En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.8. La actualización conserva tus datos.
+En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.9. La actualización conserva tus datos.
+
+## Novedades de la versión 0.9
+
+**Álbumes con su propia página.** Pulsar una carátula o su título abre sus canciones; el botón de reproducción es independiente. La ficha muestra portada cuadrada, artista, año, duración y controles para reproducir o mezclar el álbum. Lee números de disco y pista de FLAC, ID3 y MP4; si faltan, utiliza el prefijo numérico del archivo y su nombre. Los álbumes de artistas distintos conservan su identidad y las colaboraciones separadas por `;` se reúnen bajo su primer artista.
+
+**Fotografías de artistas.** La cuadrícula utiliza retratos reales cuando están disponibles y unas iniciales cuando no hay foto. Las fichas priorizan fotografías de Wikimedia vinculadas al artista por Wikidata, resolución, encuadre y fecha. Incluyen encuadre que considera los rostros, fondo difuminado y colores de la fotografía. **Cambiar foto** permite elegir entre las imágenes encontradas y guardar la elección en este Mac; cada opción enlaza a su autor y licencia. No se garantiza que Wikimedia tenga una fotografía adecuada para todos los artistas.
+
+**Navegación coherente.** Canciones, favoritos, recientes, playlists y fichas comparten filas y controles. Se corrigen títulos, recuentos, filtros y la salida de una ficha al navegar o buscar. Las fotos se cargan de forma progresiva, con descargas serializadas y cachés limitadas; la nueva lectura del orden se limita al álbum abierto y conserva tus favoritos y etiquetas editadas.
+
+Con internet activado, la sección Artistas consulta nombres en Wikipedia/Wikimedia al mostrar sus fichas e imágenes. No envía archivos de audio ni la biblioteca completa. Las elecciones se guardan en `artist-photo-choices.json`, dentro de los datos personales de Prisma, fuera del repositorio y del instalador.
 
 ## Novedades de la versión 0.8
 
@@ -23,7 +33,7 @@ En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba a
 
 **AirPlay.** Botón nativo de selección de destinos, conectado a un reproductor AVPlayer real. Esta ruta usa el transporte del sistema; no aplica el EQ, balance ni la salida directa del motor Core Audio. El panel permite volver a la salida local. La aparición y funcionamiento de receptores depende de macOS, la red y los dispositivos disponibles.
 
-**Artistas.** Pulsar un artista abre su ficha con biografía, fotografía atribuida cuando está disponible, álbumes, canciones, géneros y duración de tu colección. Puedes reproducir todo, mezclar, seleccionar un álbum, consultar una canción o marcar favoritos. Las colaboraciones etiquetadas con `;` aparecen en las fichas de cada participante. Wikipedia y Wikimedia se consultan solo al abrir una ficha con internet activado; se envía el nombre del artista, no tu colección. Las coincidencias ambiguas o no musicales se omiten y la biblioteca local sigue disponible.
+**Artistas.** Pulsar un artista abre su ficha con biografía, fotografía atribuida cuando está disponible, álbumes, canciones, géneros y duración de tu colección. Puedes reproducir todo, mezclar, seleccionar un álbum, consultar una canción o marcar favoritos. Las colaboraciones etiquetadas con `;` aparecen en las fichas de cada participante. Desde la versión 0.9, Wikipedia y Wikimedia se consultan al mostrar artistas o abrir una ficha con internet activado; se envía el nombre del artista, no tu colección. Las coincidencias ambiguas o no musicales se omiten y la biblioteca local sigue disponible.
 
 ## Novedades de la versión 0.7.1
 

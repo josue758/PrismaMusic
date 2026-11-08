@@ -30,6 +30,9 @@ struct Track: Identifiable, Codable, Equatable, Sendable {
     var lastPlayed: Date? = nil
     var playCount: Int? = nil
     var sourceIsNetwork: Bool? = nil
+    var trackNumber:Int? = nil
+    var discNumber:Int? = nil
+    var albumOrderRead:Bool? = nil
     var codecLabel:String { format?.components(separatedBy:"·").last?.trimmingCharacters(in:.whitespacesAndNewlines).uppercased() ?? url.pathExtension.uppercased() }
     var isLossless: Bool { format != nil && ["FLAC", "ALAC", "PCM"].contains(codecLabel) }
     var qualitySummary: String { [format, bitrate.map { "≈\(Int(($0 / 1000).rounded())) kb/s" }].compactMap { $0 }.joined(separator: " · ") }
@@ -100,11 +103,15 @@ enum MetadataReader {
         let metadata = (try? await asset.load(.metadata)) ?? []
         var values: [String: String] = [:]
         var artwork: Data?
+        var embeddedTrack:Int?; var embeddedDisc:Int?
         for item in metadata {
             try Task.checkCancellation()
             let key = item.commonKey?.rawValue ?? item.identifier?.rawValue ?? ""
             if key.lowercased().contains("artwork") || key.contains("APIC") || key.contains("covr") {
                 if let data = try? await item.load(.dataValue) { artwork = data }; continue
+            }
+            if key.contains("trkn") || key.contains("disk"),let data=try? await item.load(.dataValue),let number=AlbumOrdering.mp4Number(data) {
+                if key.contains("trkn") { embeddedTrack=number } else { embeddedDisc=number }
             }
             if let value = try? await item.load(.stringValue), !value.isEmpty {
                 values[key] = value
@@ -151,7 +158,7 @@ enum MetadataReader {
                      format: format, bitrate: rate.flatMap { $0 > 0 ? Double($0) : nil } ?? facts.bitrate, fileSize: size.map(Int64.init),
                      sampleRate: stream?.mSampleRate, channels: stream.map { Int($0.mChannelsPerFrame) },
                      bitDepth: stream.flatMap { $0.mBitsPerChannel > 0 ? Int($0.mBitsPerChannel) : nil } ?? facts.bitDepth,
-                     sourceIsNetwork: sidecars?.sourceIsNetwork ?? (try? url.resourceValues(forKeys:[.volumeIsLocalKey]).volumeIsLocal).map { !$0 })
+                     sourceIsNetwork: sidecars?.sourceIsNetwork ?? (try? url.resourceValues(forKeys:[.volumeIsLocalKey]).volumeIsLocal).map { !$0 },trackNumber:embeddedTrack ?? AlbumOrdering.number(value(["id3/TRCK","trackNumber","itsk/trkn"])),discNumber:embeddedDisc ?? AlbumOrdering.number(value(["id3/TPOS","discNumber","itsk/disk"])),albumOrderRead:true)
     }
 }
 func clockText(_ seconds: Double) -> String {

@@ -11,6 +11,21 @@ enum Accent: String, CaseIterable, Identifiable {
     var color: Color { switch self { case .violet: Color(red: 0.62, green: 0.48, blue: 1); case .ocean: .cyan; case .rose: .pink; case .mint: .mint; case .amber: .orange; case .indigo: .indigo; case .emerald: .green; case .sunset: .red } }
 }
 let translations: [String: [String]] = [
+ "albumOrderFallback": ["Si no hay número de pista en las etiquetas, se utiliza el orden del nombre de archivo.", "When track numbers are missing, songs use filename order.", "Quando faltam números de faixa, as músicas usam a ordem dos nomes dos arquivos."],
+ "unknownArtist": ["Artista desconocido", "Unknown artist", "Artista desconhecido"],
+ "unknownAlbum": ["Álbum sin título", "Untitled album", "Álbum sem título"],
+ "openAlbum": ["Ver álbum y canciones", "View album and songs", "Ver álbum e músicas"],
+ "albumInLibrary": ["Álbum en tu biblioteca", "Album in your library", "Álbum na sua biblioteca"],
+ "readingAlbumOrder": ["Leyendo orden de pistas…", "Reading track order…", "Lendo ordem das faixas…"],
+ "albumUnavailable": ["Este álbum ya no está en la biblioteca", "This album is no longer in the library", "Este álbum não está mais na biblioteca"],
+ "albumSingular": ["álbum", "album", "álbum"],
+ "artistSingular": ["artista", "artist", "artista"],
+ "browseSongs": ["Explorar canciones", "Browse songs", "Explorar músicas"],
+ "chooseArtistPhoto": ["Elegir fotografía", "Choose a photo", "Escolher fotografia"],
+ "changePhoto": ["Cambiar foto", "Change photo", "Mudar foto"],
+ "usePhoto": ["Usar esta foto", "Use this photo", "Usar esta foto"],
+ "artistPhotoChoicesNote": ["Fotografías vinculadas a este artista en Wikimedia Commons. Se priorizan resolución, encuadre y fecha; tu elección se guarda en este Mac.", "Photos linked to this artist in Wikimedia Commons. Ranked by resolution, framing and date; your choice is saved on this Mac.", "Fotos vinculadas a este artista no Wikimedia Commons. Priorizadas por resolução, enquadramento e data; sua escolha fica salva neste Mac."],
+
  "songSingular": ["canción", "song", "música"],
  "airPlayConnected": ["AirPlay externo activo", "External AirPlay active", "AirPlay externo ativo"],
  "exclusiveUnavailable": ["El dispositivo no permite adquirir acceso exclusivo. Desactívalo o prueba otra salida.", "The device did not allow exclusive access. Disable it or choose another output.", "O dispositivo não permitiu acesso exclusivo. Desative-o ou escolha outra saída."],
@@ -46,7 +61,7 @@ let translations: [String: [String]] = [
  "artistFetching": ["Buscando biografía y fotografía…", "Finding biography and photo…", "Buscando biografia e foto…"],
  "artistNoMatch": ["No se encontró una biografía musical con una coincidencia clara para este nombre.", "No musical biography with a clear name match was found.", "Nenhuma biografia musical com correspondência clara foi encontrada."],
  "artistFetchFailed": ["No se pudo consultar la información. Puedes reintentarlo.", "Could not retrieve the information. You can try again.", "Não foi possível consultar as informações. Tente novamente."],
- "artistPrivacy": ["Con internet activado, esta ficha consulta el nombre del artista en Wikipedia y Wikimedia. No envía tu biblioteca ni archivos de audio.", "With internet enabled, this page looks up the artist’s name on Wikipedia and Wikimedia. It does not send your library or audio files.", "Com internet ativada, esta página consulta o nome do artista na Wikipédia e Wikimedia. Não envia sua biblioteca nem arquivos de áudio."],
+ "artistPrivacy": ["Con internet activado, Artistas consulta nombres en Wikipedia y Wikimedia al mostrar sus fichas e imágenes. No envía tu biblioteca ni archivos de audio.", "With internet enabled, Artists looks up names on Wikipedia and Wikimedia when showing profiles and images. It does not send your library or audio files.", "Com internet ativada, Artistas consulta nomes na Wikipédia e Wikimedia ao mostrar perfis e imagens. Não envia sua biblioteca nem arquivos de áudio."],
  "retry": ["Reintentar", "Retry", "Tentar novamente"],
 
  "cancelAudioLoad": ["Cancelar carga de audio", "Cancel audio loading", "Cancelar carregamento de áudio"],
@@ -237,7 +252,7 @@ let translations: [String: [String]] = [
  "done": ["Listo", "Done", "Concluído"],
  "name": ["Nombre", "Name", "Nome"],
  "keyboard": ["Teclado", "Keyboard", "Teclado"],
- "versionNew": ["Versión 0.8.0 · Swift + SwiftUI · macOS", "Version 0.8.0 · Swift + SwiftUI · macOS", "Versão 0.8.0 · Swift + SwiftUI · macOS"],
+ "versionNew": ["Versión 0.9.0 · Swift + SwiftUI · macOS", "Version 0.9.0 · Swift + SwiftUI · macOS", "Versão 0.9.0 · Swift + SwiftUI · macOS"],
  "engine": ["Motor AVAudioEngine · EQ → velocidad → salida", "AVAudioEngine · EQ → rate → output", "AVAudioEngine · EQ → velocidade → saída"],
  "settingsSaved": ["Los cambios se guardan automáticamente.", "Changes save automatically.", "As alterações são salvas automaticamente."],
  "formatFilter": ["Todos los formatos", "All formats", "Todos os formatos"],

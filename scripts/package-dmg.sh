@@ -6,4 +6,4 @@ STAGING="$(mktemp -d "${TMPDIR:-/tmp}/prisma-dmg.XXXXXX")"
 trap 'rm -rf "$STAGING"' EXIT
 ditto "build/Prisma Music.app" "$STAGING/Prisma Music.app"
 ln -s /Applications "$STAGING/Applications"
-hdiutil create -volname 'Prisma Music' -srcfolder "$STAGING" -ov -format UDZO "../Prisma-Music-0.8.0.dmg"
+hdiutil create -volname 'Prisma Music' -srcfolder "$STAGING" -ov -format UDZO "../Prisma-Music-0.9.0.dmg"

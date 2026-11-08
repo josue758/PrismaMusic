@@ -1,4 +1,16 @@
-# Validación de Prisma Music 0.8.0
+# Validación de Prisma Music 0.9.0
+
+8 de noviembre de 2026. **64 pruebas, sin omisiones ni fallos**, con internet, NAS SMB, inventario completo y dispositivos Core Audio habilitados. El recorrido volvió a encontrar exactamente los 7.854 archivos del inventario independiente, sin errores de exploración. Se decodificó y se buscó dentro de un FLAC real del NAS; se verificaron cuatro salidas y la preparación para AVPlayer. Se mantienen los límites de las pruebas físicas de DAC y AirPlay descritos abajo.
+
+Nueve pruebas nuevas verifican orden por disco/pista, lectura de MP4, identidad y colaboraciones de álbum, navegación, conservación de ediciones y favoritos al actualizar numeración, cancelación de preparación y eliminación del álbum, clasificación y créditos de fotos, metadatos de Wikimedia y encuadre que incluye los rostros. Las pruebas locales sin recursos externos pasan también: 64 pruebas con seis omisiones intencionales.
+
+En la app instalada se comprobó que Back In Black abre diez canciones en orden, comenzando por Hells Bells, sin cambiar la canción pausada. También se comprobó la apertura pulsando el título de un álbum desde la ficha de Adele, conservando el botón para volver al artista y la fotografía elegida después de reiniciar. Se revisaron Canciones, Favoritos, Recientes, Ajustes, Bienvenida y el inspector con formato, bitrate, tamaño, frecuencia, canales y profundidad. La ficha de Adele muestra la fotografía de 2023 con crédito y licencia; el selector ofrece imágenes con año y resolución y guarda la elección.
+
+Las descargas de retratos de la cuadrícula se serializan y cancelan al abandonar la vista. Caché de datos comprimidos de 16 MiB y 24 entradas; caché de miniaturas de 24 MiB y 96 entradas. Las fichas se renderizan hasta 1.600 píxeles mediante ImageIO fuera del hilo principal. Estos límites acotan las cachés propias; no representan un máximo de RAM para toda la aplicación.
+
+La ejecución de pruebas produjo mensajes de macOS sobre el servicio de Contactos al inicializar componentes del sistema; no hubo fallos de pruebas ni advertencias de compilación Swift. Prisma no solicita acceso a Contactos.
+
+## Validación previa de Prisma Music 0.8.0
 
 8 de noviembre de 2026. Se ejecutaron **55 pruebas, sin omisiones ni fallos**, con internet, NAS SMB, inventario completo y dispositivos Core Audio habilitados. Los detalles personales de dispositivos y rutas quedan fuera del repositorio.
 

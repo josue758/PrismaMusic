@@ -1,5 +1,13 @@
 # Cambios
 
+## 0.9.0 — 8 de noviembre de 2026
+
+Página de álbum con lista ordenada por disco y pista, duración, portada y reproducción independiente de la apertura. Lectura de numeración FLAC/ID3/MP4 bajo demanda, con fallback al nombre del archivo. Agrupación de colaboraciones bajo el artista principal.
+
+Fotografías de artistas vinculadas mediante Wikidata, selección por resolución/fecha/encuadre, encuadre de rostros con Vision y selector con créditos y elección persistente. Retratos reales en la cuadrícula, carga progresiva serializada y cachés limitadas.
+
+Filas compartidas entre canciones, artistas, álbumes, favoritos, recientes y playlists. Navegación que limpia el contexto anterior, búsqueda global desde fichas, recuentos correctos y conservación del archivo inspeccionado. Cancelar la preparación de un álbum o eliminarlo durante la carga ya no deja el indicador pendiente. Nueve pruebas nuevas de presentación, orden, navegación, cancelación y fotografías.
+
 ## 0.8.0 — 8 de noviembre de 2026
 
 Selector de dispositivos Core Audio, detección de cambios, UID persistente y pausa si desaparece la salida elegida. Modo directo sin DSP ni atenuación, frecuencia nativa y acceso exclusivo opcional con comprobación del propietario. Restauración de frecuencia y reserva al cambiar de ruta o cerrar.

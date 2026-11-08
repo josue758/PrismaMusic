@@ -22,7 +22,7 @@ struct OutputToolbarButton:View {
     @EnvironmentObject var store:LibraryStore
     @State private var showing=false
     var body:some View {
-        Button { showing.toggle() } label: { Image(systemName:"hifispeaker").font(.system(size:12)).foregroundStyle(store.directOutputActive ? store.effectiveAccent : .secondary) }.buttonStyle(.plain).help(store.t("audioDevices")).accessibilityLabel(store.t("audioDevices"))
+        Button { showing.toggle() } label: { Image(systemName:"hifispeaker").font(.system(size:12)).frame(width:24,height:22).foregroundStyle(store.directOutputActive ? store.effectiveAccent : .secondary) }.buttonStyle(.plain).help(store.t("audioDevices")).accessibilityLabel(store.t("audioDevices"))
         .popover(isPresented:$showing) { ScrollView { OutputSettingsView().padding(22) }.frame(width:450,height:520).environmentObject(store).tint(store.effectiveAccent) }
     }
 }

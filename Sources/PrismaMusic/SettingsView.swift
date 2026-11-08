@@ -22,7 +22,7 @@ struct SettingsView: View {
                         }
                         Spacer()
                         Button(store.t("welcome")) { store.openWelcome(); dismiss() }.buttonStyle(.glass)
-                        VStack(alignment: .leading, spacing: 7) { HStack(spacing: 5) { Circle().fill(.mint).frame(width: 5, height: 5); Text("PRISMA ENGINE").font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(1) }; Text("0.8 / macOS").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary) }.padding(10)
+                        VStack(alignment: .leading, spacing: 7) { HStack(spacing: 5) { Circle().fill(.mint).frame(width: 5, height: 5); Text("PRISMA ENGINE").font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(1) }; Text("0.9 / macOS").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary) }.padding(10)
                     }.padding(14).frame(width: 203).prismaGlass(24)
                     VStack(alignment: .leading, spacing: 20) {
                         HStack(alignment: .top) {
@@ -43,7 +43,7 @@ struct SettingsView: View {
                                 }
                             }.padding(2).padding(.bottom, 16)
                         }.scrollIndicators(.hidden).clipped()
-                        HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint); Text(store.t("settingsSaved")); Spacer(); Text("PRISMA / 08").font(.system(size: 8, design: .monospaced)).tracking(1) }.font(.system(size: 10)).foregroundStyle(.secondary)
+                        HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint); Text(store.t("settingsSaved")); Spacer(); Text("PRISMA / 09").font(.system(size: 8, design: .monospaced)).tracking(1) }.font(.system(size: 10)).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity)
                 }.padding(20)
             }
