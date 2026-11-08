@@ -69,11 +69,13 @@ struct PlayerBar: View {
                 HStack(spacing: 12) {
                     if store.sleepDeadline != nil { Button { store.openSettings("playback") } label: { Label(clockText(Double(store.sleepRemaining)), systemImage: "moon").font(.system(size: 8, design: .monospaced)) }.buttonStyle(.plain).foregroundStyle(store.effectiveAccent) }
                     Button { store.openSettings("sound") } label: { Text("EQ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(store.preferences.eqEnabled ? store.effectiveAccent : .secondary).padding(.horizontal, 7).padding(.vertical, 4).background(.primary.opacity(0.045), in: Capsule()) }.buttonStyle(.plain).help(store.t("equalizer"))
+                    OutputToolbarButton()
+                    AirPlayRouteButton().frame(width:24,height:22).help("AirPlay")
                     Button { store.miniPlayer() } label: { Image(systemName: "pip").font(.system(size: 12)) }.buttonStyle(.plain).help(store.t("mini"))
                     Button { store.fullScreen() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 11)) }.buttonStyle(.plain).help(store.t("full"))
                 }.foregroundStyle(.secondary)
-                HStack(spacing: 9) { Image(systemName: store.volume == 0 ? "speaker.slash" : "speaker.wave.2").font(.system(size: 10)).foregroundStyle(.secondary); Slider(value: $store.volume, in: 0...1).controlSize(.mini).accessibilityLabel(store.t("volume")); Text("\(Int(store.volume * 100))").font(.system(size: 8, design: .monospaced)).foregroundStyle(.tertiary).frame(width: 22) }
-            }.frame(width: 175)
+                HStack(spacing: 9) { Image(systemName: store.effectiveVolume == 0 ? "speaker.slash" : "speaker.wave.2").font(.system(size: 10)).foregroundStyle(.secondary); Slider(value: store.outputVolume, in: 0...1).disabled(store.directOutputActive).controlSize(.mini).accessibilityLabel(store.t("volume")); Text("\(Int(store.effectiveVolume * 100))").font(.system(size: 8, design: .monospaced)).foregroundStyle(.tertiary).frame(width: 22) }
+            }.frame(width: 215)
         }
     }
     private func transport(_ icon: String, _ label: String, active: Bool = false, _ action: @escaping () -> Void) -> some View { Button(action: action) { Image(systemName: icon).font(.system(size: 12, weight: .medium)).foregroundStyle(active ? store.effectiveAccent : .primary.opacity(0.75)).frame(width: 19, height: 22) }.buttonStyle(PrismaPressStyle()).help(store.t(label)) }
@@ -229,7 +231,7 @@ struct PlaybackControlSymbol:View {
     @EnvironmentObject var store:LibraryStore
     var body:some View {
         Group {
-            if store.playbackLoading { ProgressView().controlSize(.small) }
+            if store.playbackLoading || store.playbackBuffering { ProgressView().controlSize(.small) }
             else { Image(systemName:store.isPlaying ? "pause.fill" : "play.fill") }
         }.accessibilityLabel(store.playbackControlLabel)
     }

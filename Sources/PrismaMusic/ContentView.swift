@@ -6,7 +6,7 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var navigationSelection
     private var motion:Bool { store.preferences.microInteractions && !reduceMotion }
-    private var pageKey:String { store.showImmersive ? "immersive" : store.showVisualizer ? "visualizer" : store.section }
+    private var pageKey:String { store.showImmersive ? "immersive" : store.showVisualizer ? "visualizer" : (store.section == "artists" ? store.selectedArtist.map { "artist:"+$0 } ?? store.section : store.section) }
     @State private var nas = false
     @State private var editing: Track?
     @State private var newPlaylist = false
@@ -15,7 +15,7 @@ struct ContentView: View {
     private var inspectorVisible: Bool { store.showInfo || store.showLyrics || store.showQueue }
     private var sectionTitle: String {
         if store.section.hasPrefix("playlist:"), let playlist = store.playlists.first(where: { store.section == "playlist:\($0.id)" }) { return playlist.name }
-        return store.t(store.section)
+        return store.section == "artists" ? store.selectedArtist ?? store.t("artists") : store.t(store.section)
     }
     var body: some View {
         ZStack {
@@ -28,7 +28,8 @@ struct ContentView: View {
                             toolbar
                             ZStack(alignment:.topLeading) {
                                 Group {
-                                    if store.showImmersive { ImmersivePlayerView() }
+                                    if let name=store.selectedArtist,store.section == "artists",!store.showImmersive,!store.showVisualizer { ArtistDetailView(name:name) }
+                                    else if store.showImmersive { ImmersivePlayerView() }
                                     else if store.showVisualizer { VisualizerView() }
                                     else { library }
                                 }.id(pageKey).transition(motion ? .opacity.combined(with:.offset(y:7)) : .opacity)
@@ -103,7 +104,7 @@ struct ContentView: View {
         return Button {
             withAnimation(motion ? .smooth(duration:0.3) : nil) {
                 store.showImmersive = key == "immersive"; store.showVisualizer = false
-                if key != "immersive" { store.section=key; store.clearFilters() }
+                if key != "immersive" { store.section=key; store.selectedArtist=nil; store.clearFilters() }
             }
         } label: {
             HStack(spacing:11) { Image(systemName:icon).font(.system(size:13)).frame(width:18); Text(store.t(key == "recent" ? "recentNav" : key)).font(.system(size:12,weight:selected ? .semibold : .regular)).lineLimit(1); Spacer(minLength:0); if key == "songs" { Text("\(store.tracks.count)").font(.system(size:9)).foregroundStyle(.tertiary) } }.padding(.horizontal,12).padding(.vertical,10).background { if selected { RoundedRectangle(cornerRadius:11).fill(store.effectiveAccent.opacity(0.16)).matchedGeometryEffect(id:"navigationSelection",in:navigationSelection) } }.foregroundStyle(selected ? store.effectiveAccent : .primary.opacity(0.65))
@@ -139,7 +140,7 @@ struct ContentView: View {
                             songList(Array(store.filtered.prefix(8)))
                         } else {
                             HStack(alignment: .bottom) {
-                                VStack(alignment: .leading, spacing: 8) { Text(sectionTitle).font(.system(size: 30, weight: .semibold, design: .rounded)); Text("\(store.filtered.count) \(store.t("count")) · \(collectionTimeText(store.filtered.reduce(0) { $0 + $1.duration }))").font(.system(size: 11)).foregroundStyle(.secondary) }
+                                VStack(alignment: .leading, spacing: 8) { Text(sectionTitle).font(.system(size: 30, weight: .semibold, design: .rounded)); Text("\(store.songCountText(store.filtered.count)) · \(collectionTimeText(store.filtered.reduce(0) { $0 + $1.duration }))").font(.system(size: 11)).foregroundStyle(.secondary) }
                                 Spacer(); Button { store.pickMusic() } label: { Label(store.t("add"), systemImage: "plus").font(.system(size: 11)).padding(.vertical, 3) }.buttonStyle(.glassProminent).disabled(store.scanning)
                             }.padding(.top, 10)
                             filterBar
@@ -152,7 +153,7 @@ struct ContentView: View {
                     }.padding(3).padding(.bottom, 20)
                 }.scrollIndicators(.hidden).clipped()
             }
-            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini); Button { store.cancelScan() } label: { Image(systemName:"stop.circle") }.buttonStyle(.plain).help(store.t("cancel")) }; Text(store.loadingTrackID.flatMap { store.track(for:$0) }.map { store.t("loadingAudio") + " " + $0.title } ?? (store.status.isEmpty ? store.t("ready") : store.status)).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 07").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
+            HStack(spacing: 6) { if store.scanning { ProgressView().controlSize(.mini); Button { store.cancelScan() } label: { Image(systemName:"stop.circle") }.buttonStyle(.plain).help(store.t("cancel")) }; Text(store.loadingTrackID.flatMap { store.track(for:$0) }.map { store.t("loadingAudio") + " " + $0.title } ?? (store.status.isEmpty ? store.t("ready") : store.status)).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary); Spacer(); Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 10)) }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan")); Text("PRISMA / 08").font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary) }.padding(.horizontal, 4)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     private var hero: some View {
@@ -209,7 +210,7 @@ struct ContentView: View {
         let groups = store.groupedArtists
         return LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 18) {
             ForEach(groups, id: \.key) { group in
-                Button { store.artist = group.key; store.section = "songs" } label: { VStack(spacing: 14) { ArtworkView(track: group.value.first).frame(width: 105, height: 105).clipShape(Circle()); Text(group.key).font(.system(size: 13, weight: .medium)).lineLimit(1); Text("\(group.value.count) \(store.t("count"))").font(.system(size: 10)).foregroundStyle(.secondary) }.padding(22).frame(maxWidth: .infinity).prismaGlass(22) }.buttonStyle(.plain)
+                Button { store.selectedArtist=group.key } label: { VStack(spacing: 14) { ArtworkView(track: group.value.first).frame(width: 105, height: 105).clipShape(Circle()); Text(group.key).font(.system(size: 13, weight: .medium)).lineLimit(1); Text(store.songCountText(group.value.count)).font(.system(size: 10)).foregroundStyle(.secondary) }.padding(22).frame(maxWidth: .infinity).prismaGlass(22) }.buttonStyle(.plain)
             }
         }
     }

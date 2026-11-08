@@ -1,6 +1,9 @@
 import Foundation
 
 struct ListeningPreferences: Codable, Equatable {
+    var outputDeviceUID=""
+    var directOutput=false
+    var exclusiveOutput=false
     var hasCompletedWelcome = false
     var eqEnabled = false
     var eqGains: [Float] = Array(repeating: 0, count: 10)
@@ -39,9 +42,12 @@ struct ListeningPreferences: Codable, Equatable {
     var miniAlwaysOnTop = true
     var miniAllSpaces = true
     init() {}
-    private enum CodingKeys: String, CodingKey { case hasCompletedWelcome, eqEnabled, eqGains, eqPreset, preamp, autoHeadroom, balance, playbackRate, continueQueue, keepAwake, rememberPosition, startSection, glassStyle, atmosphere, adaptiveArtwork, ambientMotion, artworkPulse, glassTransparency, microInteractions, hoverDepth, showFeedback, compactRows, showQuality, albumSize, autoArtwork, autoLyrics, recursiveScan, scanWorkers, lyricsFontSize, lyricsOffset, autoScrollLyrics, visualizerStyle, visualizerSensitivity, visualizerFPS, animateVisualizer, miniAlwaysOnTop, miniAllSpaces }
+    private enum CodingKeys: String, CodingKey { case outputDeviceUID,directOutput,exclusiveOutput,hasCompletedWelcome, eqEnabled, eqGains, eqPreset, preamp, autoHeadroom, balance, playbackRate, continueQueue, keepAwake, rememberPosition, startSection, glassStyle, atmosphere, adaptiveArtwork, ambientMotion, artworkPulse, glassTransparency, microInteractions, hoverDepth, showFeedback, compactRows, showQuality, albumSize, autoArtwork, autoLyrics, recursiveScan, scanWorkers, lyricsFontSize, lyricsOffset, autoScrollLyrics, visualizerStyle, visualizerSensitivity, visualizerFPS, animateVisualizer, miniAlwaysOnTop, miniAllSpaces }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        outputDeviceUID=try values.decodeIfPresent(String.self,forKey:.outputDeviceUID) ?? ""
+        directOutput=try values.decodeIfPresent(Bool.self,forKey:.directOutput) ?? false
+        exclusiveOutput=try values.decodeIfPresent(Bool.self,forKey:.exclusiveOutput) ?? false
         hasCompletedWelcome = try values.decodeIfPresent(Bool.self, forKey: .hasCompletedWelcome) ?? false
         eqEnabled = try values.decodeIfPresent(Bool.self, forKey: .eqEnabled) ?? eqEnabled
         eqGains = try values.decodeIfPresent([Float].self, forKey: .eqGains) ?? eqGains

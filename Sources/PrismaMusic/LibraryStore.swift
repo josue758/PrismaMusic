@@ -3,9 +3,21 @@ import AppKit
 import AVFoundation
 import MediaPlayer
 import UniformTypeIdentifiers
+import Combine
 
 @MainActor
 final class LibraryStore: NSObject, ObservableObject {
+    let outputs=AudioOutputCatalog(autoStart:false)
+    let airPlayPlayer=AVPlayer()
+    private let outputController=AudioDeviceController()
+    private var outputSubscriptions=Set<AnyCancellable>()
+    private var outputResumeIntent=false
+    @Published private(set) var airPlayReceiverActive=false
+    private var airPlayRouteObserver:NSKeyValueObservation?
+    @Published private(set) var usingAirPlay=false
+    @Published private(set) var playbackBuffering=false
+    @Published private(set) var preparedOutput:OutputPreparation?
+    @Published var selectedArtist:String?
     @Published var tracks: [Track] = [] { didSet { invalidateLibraryCaches(); refreshArtworkPalette() } }
     @Published var sources: [MusicSource] = []
     @Published var currentID: String? { didSet { refreshArtworkPalette() } }
@@ -46,7 +58,7 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var sleepRemaining = 0
     @Published var stopAfterCurrent = false
     @Published var peak = 0.0
-    @Published var preferences = ListeningPreferences() { didSet { preferencesChanged() } }
+    @Published var preferences = ListeningPreferences() { didSet { preferencesChanged(previous:oldValue) } }
     @Published var settingsPage = "sound"
     @Published var showWelcome = false
     private var welcomeAfterSettings = false
@@ -74,9 +86,14 @@ final class LibraryStore: NSObject, ObservableObject {
     private var queueIndexCache:[String:Int]?
     private var statisticsCache:LibraryStatistics?
     private var queryCache:LibraryQueryCache?
+    private var artistCollectionCache:(revision:Int,name:String,value:ArtistCollection)?
+    func artistCollection(_ name:String)->ArtistCollection {
+        if let cached=artistCollectionCache,cached.revision == revision,cached.name == name { return cached.value }
+        let value=ArtistCollection(name:name,library:tracks); artistCollectionCache=(revision,name,value); return value
+    }
     private var revision=0
     private var lastQueryKey:LibraryQueryKey?
-    private var player: AudioPlayback?
+    private var player:(any MusicPlayback)?
     private var timer: Timer?
     @Published var queue: [String] = [] { didSet { queueIndexCache=nil } }
     private var activity: NSObjectProtocol?
@@ -151,6 +168,7 @@ final class LibraryStore: NSObject, ObservableObject {
     var groupedAlbums:[(key:String,value:[Track])] { results.albums }
     var groupedArtists:[(key:String,value:[Track])] { results.artists }
     func displayIndex(_ id:String) -> Int { results.indices[id] ?? 0 }
+    func songCountText(_ count:Int)->String { "\(count) \(t(count == 1 ? "songSingular" : "count"))" }
     func t(_ key: String) -> String { translations[key]?[language == .es ? 0 : language == .en ? 1 : 2] ?? key }
     init(directory: URL? = nil, autoStart: Bool = true, scanWorkers:Int? = nil, openAudioFile:(@Sendable (URL) async throws -> OpenedAudioFile)? = nil) {
         dataDirectory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("PrismaMusic")
@@ -172,6 +190,21 @@ final class LibraryStore: NSObject, ObservableObject {
         if preferences.rememberPosition,let data=try? Data(contentsOf:dataDirectory.appendingPathComponent("playback.json")),let saved=try? JSONDecoder().decode(PlaybackBookmark.self,from:data) { savedPlayback=(saved.id,saved.position) }
         persistence.setErrorHandler { [weak self] message in Task { @MainActor in self?.error=message } }
         if autoStart {
+            airPlayRouteObserver=airPlayPlayer.observe(\.isExternalPlaybackActive,options:[.new]) { [weak self] player,_ in
+                let active=player.isExternalPlaybackActive
+                Task { @MainActor in self?.airPlayReceiverActive=active }
+            }
+            outputs.start()
+            outputs.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in:&outputSubscriptions)
+            outputs.$devices.dropFirst().sink { [weak self] devices in
+                guard let self,!self.usingAirPlay,!self.preferences.outputDeviceUID.isEmpty,self.player != nil,
+                      !devices.contains(where:{ $0.uid == self.preferences.outputDeviceUID }) else { return }
+                self.pausePlayback(); self.player?.stop(); self.player=nil; self.preparedOutput=nil; self.status=self.t("outputUnavailable")
+            }.store(in:&outputSubscriptions)
+            outputs.$defaultID.dropFirst().removeDuplicates().sink { [weak self] _ in
+                guard let self,self.preferences.outputDeviceUID.isEmpty,!self.usingAirPlay,self.player != nil else { return }
+                self.restartOutput()
+            }.store(in:&outputSubscriptions)
             timer=Timer.scheduledTimer(withTimeInterval:1.0/15,repeats:true) { [weak self] _ in Task { @MainActor in self?.tick() } }
             setupRemoteCommands()
             readyTask=Task { [weak self] in
@@ -252,7 +285,9 @@ final class LibraryStore: NSObject, ObservableObject {
         cancelScan()
         if loading { await readyTask?.value }
         await scanTask?.value
-        pausePlayback(); paletteTask?.cancel(); enrichmentTask?.cancel()
+        pausePlayback(); player?.stop(); player=nil; airPlayPlayer.replaceCurrentItem(with:nil)
+        await outputController.release()
+        paletteTask?.cancel(); enrichmentTask?.cancel()
         save(); try await persistence.flush()
         timer?.invalidate(); timer=nil
         for url in scopeURLs { url.stopAccessingSecurityScopedResource() }; scopeURLs.removeAll()
@@ -474,10 +509,44 @@ final class LibraryStore: NSObject, ObservableObject {
         }
         postFeedback("undone",icon:"arrow.uturn.backward")
     }
+    var directOutputActive:Bool { preferences.directOutput && !usingAirPlay }
+    var effectiveVolume:Float { directOutputActive ? 1 : volume }
+    var outputVolume:Binding<Float> { Binding(get:{ self.effectiveVolume },set:{ if !self.directOutputActive { self.volume=$0 } }) }
+    func selectOutput(_ uid:String) {
+        if usingAirPlay { usingAirPlay=false; let previous=preferences.outputDeviceUID; preferences.outputDeviceUID=uid; if previous == uid { restartOutput() } }
+        else if preferences.outputDeviceUID != uid { preferences.outputDeviceUID=uid }
+    }
+    func enableAirPlay() {
+        guard !usingAirPlay else { return }
+        usingAirPlay=true; restartOutput()
+    }
+    func useLocalOutput() { guard usingAirPlay else { return }; usingAirPlay=false; restartOutput() }
+    private func restartOutput() {
+        let resume=isPlaying || outputResumeIntent || playbackLoading
+        let pending=loadingTrackID
+        let time=pending != nil && pending != currentID ? 0 : position
+        let track=pending.flatMap { self.track(for:$0) } ?? current
+        cancelPlaybackLoad(); outputResumeIntent=resume; player?.stop(); player=nil; isPlaying=false; preparedOutput=nil; playbackBuffering=false
+        let token=playbackRequest
+        if resume { loadingTrackID=track?.id }
+        playbackLoadTask=Task { [weak self] in
+            guard let self else { return }
+            await self.outputController.release()
+            guard !Task.isCancelled,self.playbackRequest == token else { return }
+            self.outputResumeIntent=false; self.loadingTrackID=nil; self.playbackLoadTask=nil
+            if resume,let track { self.play(track,from:time) }
+            else if self.usingAirPlay,let track {
+                do { let audio=try self.makePlayer(track,file:nil,output:nil); audio.currentTime=time; self.player=audio }
+                catch { self.error=error.localizedDescription }
+            }
+            self.updateNowPlaying(); self.updateActivity()
+        }
+    }
     var playbackLoading:Bool { loadingTrackID != nil }
     var playbackControlLabel:String { t(playbackLoading ? "cancelAudioLoad" : isPlaying ? "pause" : "play") }
     func waitForPlaybackLoad() async { await playbackLoadTask?.value }
     private func cancelPlaybackLoad() {
+        outputResumeIntent=false
         playbackRequest=UUID(); playbackLoadTask?.cancel(); playbackLoadTask=nil; loadingTrackID=nil
     }
     func play(_ track: Track, in list: [Track]? = nil, from start:Double = 0) {
@@ -492,19 +561,30 @@ final class LibraryStore: NSObject, ObservableObject {
                 if let self,self.playbackRequest == token { self.loadingTrackID=nil; self.playbackLoadTask=nil }
             }
             do {
-                let opened=try await opener(track.url)
+                guard let self else { return }
+                let airPlay=self.usingAirPlay
+                let opened=airPlay ? nil : try await opener(track.url)
                 try Task.checkCancellation()
-                guard let self,self.playbackRequest == token,!self.quitting,self.track(for:track.id) != nil else { return }
-                let audio=try self.makePlayer(track,file:opened.file)
+                guard self.playbackRequest == token,!self.quitting,self.track(for:track.id) != nil else { return }
+                let previous=self.player
+                previous?.pause(); self.isPlaying=false
+                var output:OutputPreparation?
+                if !airPlay,let opened {
+                    if self.outputs.devices.isEmpty && !self.outputs.refreshing { self.outputs.refresh() }
+                    await self.outputs.waitForRefresh()
+                    guard let device=self.outputs.device(uid:self.preferences.outputDeviceUID) else { throw NSError(domain:"PrismaOutput",code:3,userInfo:[NSLocalizedDescriptionKey:self.t("outputUnavailable")]) }
+                    if self.directOutputActive,Int(opened.file.processingFormat.channelCount) > device.channels { throw NSError(domain:"PrismaOutput",code:4,userInfo:[NSLocalizedDescriptionKey:"channelMismatch"]) }
+                    output=try await self.outputController.prepare(device,direct:self.directOutputActive,exclusive:self.preferences.exclusiveOutput,rate:opened.file.processingFormat.sampleRate)
+                }
+                try Task.checkCancellation()
+                guard self.playbackRequest == token else { return }
+                let audio=try self.makePlayer(track,file:opened?.file,output:output)
                 audio.currentTime=start.isFinite ? max(0,start) : 0
-                // Stop the old output before starting the new engine to avoid overlapping songs.
-                let previous=self.player; let wasPlaying=self.isPlaying
-                previous?.pause()
                 guard audio.play() else {
-                    if wasPlaying { self.isPlaying=previous?.play() ?? false }
                     throw NSError(domain:"Prisma",code:2,userInfo:[NSLocalizedDescriptionKey:self.t("audioLoadFailed")])
                 }
-                previous?.stop(); self.player=audio; self.currentID=track.id; self.isPlaying=true; self.position=audio.currentTime
+                self.preparedOutput=output
+                previous?.stop(); self.player=audio; self.currentID=track.id; self.isPlaying=true; self.position=airPlay ? min(track.duration,max(0,start.isFinite ? start : 0)) : audio.currentTime
                 self.loadingTrackID=nil; self.playbackLoadTask=nil
                 if let i=self.tracks.firstIndex(where:{ $0.id == track.id }) { self.tracks[i].lastPlayed=Date(); self.tracks[i].playCount=(self.tracks[i].playCount ?? 0)+1; self.save() }
                 self.updateActivity(); self.updateNowPlaying(); self.rememberPlayback()
@@ -515,7 +595,7 @@ final class LibraryStore: NSObject, ObservableObject {
             } catch {
                 guard let self,self.playbackRequest == token,!Task.isCancelled else { return }
                 self.loadingTrackID=nil; self.playbackLoadTask=nil
-                self.error="\(self.t("audioLoadFailed")) · \(track.title)\n\(error.localizedDescription)"
+                self.error="\(self.t("audioLoadFailed")) · \(track.title)\n\(self.t(error.localizedDescription))"
                 self.updateActivity(); self.updateNowPlaying()
             }
         }
@@ -559,19 +639,25 @@ final class LibraryStore: NSObject, ObservableObject {
         let energy=ambientEnergy + (targetEnergy - ambientEnergy) * (targetEnergy > ambientEnergy ? 0.20 : 0.075)
         if abs(energy-ambientEnergy) > 0.0005 { ambientEnergy=energy } else if targetEnergy == 0 && ambientEnergy != 0 { ambientEnergy=0 }
         guard let player else { return }
+        if playbackBuffering != player.isBuffering { playbackBuffering=player.isBuffering }
         let time=min(current?.duration ?? player.duration,player.currentTime)
         if abs(time-position) >= 0.09 || position > (current?.duration ?? player.duration) { position=time }
         if isPlaying { let meters = player.levels; level = Double(meters.rms); peak = Double(meters.peak) }
         else { if level != 0 { level=level < 0.0001 ? 0 : level * 0.85 }; if peak != 0 { peak=peak < 0.0001 ? 0 : peak * 0.85 } }
         if Int(position) % 5 == 0 && Int(position) != lastRememberedSecond { lastRememberedSecond = Int(position); rememberPlayback() }
     }
-    private func makePlayer(_ track: Track,file:AVAudioFile) throws -> AudioPlayback {
-        let audio = try AudioPlayback(file:file)
+    private func makePlayer(_ track: Track,file:AVAudioFile?,output:OutputPreparation?) throws -> any MusicPlayback {
+        let audio:any MusicPlayback
+        if usingAirPlay { audio=AirPlayPlayback(player:airPlayPlayer,track:track) }
+        else if let file { audio=try AudioPlayback(file:file,output:output) }
+        else { throw URLError(.cannotOpenFile) }
         audio.volume = volume; audio.apply(preferences)
         audio.onFinish = { [weak self] in self?.playbackDidFinish() }
         audio.onError = { [weak self,weak audio] error in
             guard let self,let audio,self.player === audio else { return }
-            self.isPlaying=false; self.error=error.localizedDescription; self.updateActivity(); self.updateNowPlaying()
+            self.isPlaying=false; self.position=audio.currentTime; self.error=self.t(error.localizedDescription)
+            if self.directOutputActive { audio.stop(); self.player=nil; self.preparedOutput=nil }
+            self.updateActivity(); self.updateNowPlaying()
         }
         return audio
     }
@@ -580,13 +666,14 @@ final class LibraryStore: NSObject, ObservableObject {
         updateActivity(); updateNowPlaying(); rememberPlayback()
         if !playbackLoading { next(automatic:true) }
     }
-    func pausePlayback() { cancelPlaybackLoad(); player?.pause(); isPlaying = false; updateNowPlaying(); updateActivity(); rememberPlayback() }
+    func pausePlayback() { outputResumeIntent=false; cancelPlaybackLoad(); playbackBuffering=false; player?.pause(); isPlaying = false; updateNowPlaying(); updateActivity(); rememberPlayback() }
     private struct PlaybackBookmark: Codable { var id: String; var position: Double }
     private func rememberPlayback() {
         guard preferences.rememberPosition, let currentID else { return }
         do { persistence.writeSmallFile("playback.json",data:try JSONEncoder().encode(PlaybackBookmark(id:currentID,position:position))) } catch { status = error.localizedDescription }
     }
-    private func preferencesChanged() {
+    private func preferencesChanged(previous:ListeningPreferences) {
+        if previous.outputDeviceUID != preferences.outputDeviceUID || previous.directOutput != preferences.directOutput || previous.exclusiveOutput != preferences.exclusiveOutput { restartOutput() }
         if !preferences.showFeedback { dismissFeedback() }
         player?.apply(preferences); updateActivity(); configureMiniPlayer()
         do { persistence.writeSmallFile("preferences.json",data:try JSONEncoder().encode(preferences)) } catch { self.error = error.localizedDescription }
@@ -656,7 +743,7 @@ final class LibraryStore: NSObject, ObservableObject {
     private func updateNowPlaying() {
         refreshArtworkPalette()
         guard let track = current else { MPNowPlayingInfoCenter.default().nowPlayingInfo = nil; return }
-        var info: [String: Any] = [MPMediaItemPropertyTitle: track.title, MPMediaItemPropertyArtist: track.artist, MPMediaItemPropertyAlbumTitle: track.album, MPMediaItemPropertyPlaybackDuration: track.duration, MPNowPlayingInfoPropertyElapsedPlaybackTime: position, MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? Double(preferences.playbackRate) : 0.0]
+        var info: [String: Any] = [MPMediaItemPropertyTitle: track.title, MPMediaItemPropertyArtist: track.artist, MPMediaItemPropertyAlbumTitle: track.album, MPMediaItemPropertyPlaybackDuration: track.duration, MPNowPlayingInfoPropertyElapsedPlaybackTime: position, MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? Double(directOutputActive ? 1 : preferences.playbackRate) : 0.0]
         if track.hasArtwork,let image=ArtworkCache.shared.image(for:track,pixels:512) { info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image } }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
         MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused

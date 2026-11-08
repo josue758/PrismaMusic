@@ -1,10 +1,13 @@
 import Foundation
 import AVFoundation
 import Accelerate
+import AudioToolbox
 
 /// Streaming file playback through a real equalizer and pitch-preserving rate processor.
 @MainActor
-final class AudioPlayback {
+final class AudioPlayback:MusicPlayback {
+    let direct:Bool
+    var isBuffering:Bool { false }
     let engine = AVAudioEngine()
     let node = AVAudioPlayerNode()
     let equalizer = AVAudioUnitEQ(numberOfBands: 10)
@@ -22,14 +25,14 @@ final class AudioPlayback {
     private var startRenderSample: AVAudioFramePosition?
     private var configurationObserver: NSObjectProtocol?
     var duration: Double { Double(file.length) / file.processingFormat.sampleRate }
-    var volume: Float { get { engine.mainMixerNode.outputVolume } set { engine.mainMixerNode.outputVolume = newValue } }
+    var volume: Float { get { engine.mainMixerNode.outputVolume } set { engine.mainMixerNode.outputVolume = direct ? 1 : newValue } }
     var isPlaying: Bool { active }
     var currentTime: Double {
         get {
             guard active, let time = engine.mainMixerNode.lastRenderTime, time.isSampleTimeValid, time.sampleRate > 0 else { return offset }
             if startRenderSample == nil || time.sampleTime < startRenderSample! { startRenderSample = time.sampleTime }
             let elapsed = Double(max(0, time.sampleTime - (startRenderSample ?? time.sampleTime))) / time.sampleRate
-            return min(duration, offset + elapsed * Double(speed.rate))
+            return min(duration, offset + elapsed * Double(direct ? 1 : speed.rate))
         }
         set {
             let wasPlaying = active
@@ -42,9 +45,16 @@ final class AudioPlayback {
     convenience init(contentsOf url: URL) throws {
         try self.init(file:AVAudioFile(forReading:url))
     }
-    init(file:AVAudioFile) throws {
+    init(file:AVAudioFile,output:OutputPreparation? = nil,direct:Bool = false) throws {
+        self.direct=output?.direct ?? direct
         balanceEffect = AVAudioUnitEffect(audioComponentDescription: StereoBalanceUnit.component)
         self.file = file
+        if let output {
+            guard let unit=engine.outputNode.audioUnit else { throw CoreAudioOutputs.error(kAudioHardwareBadDeviceError) }
+            var id=output.deviceID
+            let status=AudioUnitSetProperty(unit,kAudioOutputUnitProperty_CurrentDevice,kAudioUnitScope_Global,0,&id,UInt32(MemoryLayout<AudioDeviceID>.size))
+            guard status == noErr else { throw CoreAudioOutputs.error(status) }
+        }
         engine.attach(node); engine.attach(equalizer); engine.attach(speed); engine.attach(balanceMixer); engine.attach(balanceEffect)
         for (index, frequency) in ListeningPreferences.frequencies.enumerated() {
             let band = equalizer.bands[index]
@@ -52,12 +62,18 @@ final class AudioPlayback {
         }
         // The time-pitch unit requires a noninterleaved floating-point processing format.
         let format = file.processingFormat
-        engine.connect(node, to: equalizer, format: format)
-        engine.connect(equalizer, to: speed, format: format)
-        engine.connect(speed, to: balanceMixer, format: format)
-        let stereo = AVAudioFormat(standardFormatWithSampleRate: format.sampleRate, channels: 2)!
-        engine.connect(balanceMixer, to: balanceEffect, format: stereo)
-        engine.connect(balanceEffect, to: engine.mainMixerNode, format: stereo)
+        if self.direct {
+            // Unity gain and the source channel layout; none of the DSP nodes is in this graph.
+            engine.connect(node,to:engine.mainMixerNode,format:format)
+            engine.mainMixerNode.outputVolume=1
+        } else {
+            engine.connect(node, to: equalizer, format: format)
+            engine.connect(equalizer, to: speed, format: format)
+            engine.connect(speed, to: balanceMixer, format: format)
+            let stereo = AVAudioFormat(standardFormatWithSampleRate: format.sampleRate, channels: 2)!
+            engine.connect(balanceMixer, to: balanceEffect, format: stereo)
+            engine.connect(balanceEffect, to: engine.mainMixerNode, format: stereo)
+        }
         let meter = self.meter
         engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in meter.measure(buffer) }
         configurationObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
@@ -65,11 +81,17 @@ final class AudioPlayback {
                 guard let self, self.active else { return }
                 let time = self.currentTime
                 self.stopNode(); self.offset = time
+                if self.direct {
+                    self.engine.pause()
+                    self.onError?(NSError(domain:"PrismaOutput",code:5,userInfo:[NSLocalizedDescriptionKey:"directConfigurationChanged"]))
+                    return
+                }
                 if !self.play() { self.onError?(NSError(domain: "PrismaAudio", code: 3, userInfo: [NSLocalizedDescriptionKey: "The audio output changed. Press play to reconnect."])) }
             }
         }
     }
     func apply(_ preferences: ListeningPreferences) {
+        if direct { engine.mainMixerNode.outputVolume=1; return }
         equalizer.bypass = !preferences.eqEnabled
         equalizer.globalGain = preferences.effectivePreamp
         for i in equalizer.bands.indices { equalizer.bands[i].gain = preferences.eqGains[i] }

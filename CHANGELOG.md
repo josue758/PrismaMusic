@@ -1,5 +1,15 @@
 # Cambios
 
+## 0.8.0 — 8 de noviembre de 2026
+
+Selector de dispositivos Core Audio, detección de cambios, UID persistente y pausa si desaparece la salida elegida. Modo directo sin DSP ni atenuación, frecuencia nativa y acceso exclusivo opcional con comprobación del propietario. Restauración de frecuencia y reserva al cambiar de ruta o cerrar.
+
+AirPlay nativo mediante AVPlayer, con retorno al motor local e indicación de ruta. Se evita que un reproductor anterior pause una nueva canción al compartir el transporte AirPlay.
+
+Icono fijo de dispositivos independiente de AirPlay y cabecera de artista con foto amplia, fondo difuminado y colores extraídos de la imagen.
+
+Ficha de artista con biografía y foto acreditada de Wikipedia/Wikimedia, biblioteca local, álbumes seleccionables, reproducción y favoritos. Agrupación de colaboraciones por participante y consultas de colección reutilizadas hasta que cambian los datos. Nuevas pruebas de PCM directo, dispositivos reales, migración, artistas y transporte AirPlay.
+
 ## 0.7.1 — 8 de noviembre de 2026
 
 Apertura de audio serializada fuera de la interfaz, estado de carga cancelable y protección frente a respuestas de solicitudes anteriores. Siguiente usa la selección pendiente; pausar, buscar y salir cancelan la carga. Restaurar la sesión no abre el archivo hasta solicitar reproducir. Se evita solapar dos canciones al cambiar y se conservan los controles del audio actual si falla el nuevo. Indicadores de carga y etiqueta Recientes más breve.

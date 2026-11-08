@@ -1,19 +1,29 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.7.1** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.8.0** para probar e iterar.
 
-[Descargar la versión 0.7.1 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.7.1) · [Ver el código](https://github.com/josue758/PrismaMusic)
+[Descargar la versión 0.8.0 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.8.0) · [Ver el código](https://github.com/josue758/PrismaMusic)
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.7.1.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.8.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación y sigue la bienvenida para elegir idioma, biblioteca y estilo. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
 
-En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.7. La actualización conserva tus datos.
+En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.8. La actualización conserva tus datos.
+
+## Novedades de la versión 0.8
+
+**DAC y salidas de audio.** El botón de altavoz de la barra y Ajustes → Sonido permiten elegir una salida Core Audio por su identificador persistente, ver canales y frecuencia y seguir la salida predeterminada de macOS. Se actualiza al conectar/desconectar dispositivos; una salida elegida que desaparece pausa la reproducción y no la desvía silenciosamente a otros altavoces.
+
+**Salida directa para uso bit-perfect.** Omite físicamente el EQ, balance y velocidad en el grafo, utiliza ganancia unitaria y solicita la frecuencia nativa de la canción. El acceso exclusivo es opcional y se muestra solo si el dispositivo lo concede. Se rechazan rutas inalámbricas o frecuencias/canales incompatibles; se intenta restaurar la frecuencia anterior y liberar la reserva al cambiar de ruta o cerrar. El volumen de Prisma queda al 100 % en este modo: ajusta primero el volumen físico del equipo. Tus ajustes DSP se conservan al volver al modo normal. La prueba de renderizado confirma igualdad exacta de muestras PCM de 24 bits dentro de Prisma; no certifica los bits entregados por un DAC físico ni los efectos del controlador o del sistema.
+
+**AirPlay.** Botón nativo de selección de destinos, conectado a un reproductor AVPlayer real. Esta ruta usa el transporte del sistema; no aplica el EQ, balance ni la salida directa del motor Core Audio. El panel permite volver a la salida local. La aparición y funcionamiento de receptores depende de macOS, la red y los dispositivos disponibles.
+
+**Artistas.** Pulsar un artista abre su ficha con biografía, fotografía atribuida cuando está disponible, álbumes, canciones, géneros y duración de tu colección. Puedes reproducir todo, mezclar, seleccionar un álbum, consultar una canción o marcar favoritos. Las colaboraciones etiquetadas con `;` aparecen en las fichas de cada participante. Wikipedia y Wikimedia se consultan solo al abrir una ficha con internet activado; se envía el nombre del artista, no tu colección. Las coincidencias ambiguas o no musicales se omiten y la biblioteca local sigue disponible.
 
 ## Novedades de la versión 0.7.1
 

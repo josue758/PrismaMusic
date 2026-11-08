@@ -47,7 +47,7 @@ enum LibraryQuery {
         return tracks.filter { track in
             let haystack = [track.title, track.artist, track.album, track.genre, track.year].joined(separator: " ")
             return words.allSatisfy { haystack.localizedStandardContains($0) }
-                && (artist.isEmpty || track.artist == artist)
+                && (artist.isEmpty || ArtistIdentity.contains(track.artist,name:artist))
                 && (genre.isEmpty || track.genre == genre)
                 && (year.isEmpty || track.year == year)
                 && (!favorites || track.favorite)

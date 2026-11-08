@@ -22,7 +22,7 @@ struct SettingsView: View {
                         }
                         Spacer()
                         Button(store.t("welcome")) { store.openWelcome(); dismiss() }.buttonStyle(.glass)
-                        VStack(alignment: .leading, spacing: 7) { HStack(spacing: 5) { Circle().fill(.mint).frame(width: 5, height: 5); Text("PRISMA ENGINE").font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(1) }; Text("0.7 / macOS").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary) }.padding(10)
+                        VStack(alignment: .leading, spacing: 7) { HStack(spacing: 5) { Circle().fill(.mint).frame(width: 5, height: 5); Text("PRISMA ENGINE").font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(1) }; Text("0.8 / macOS").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary) }.padding(10)
                     }.padding(14).frame(width: 203).prismaGlass(24)
                     VStack(alignment: .leading, spacing: 20) {
                         HStack(alignment: .top) {
@@ -43,7 +43,7 @@ struct SettingsView: View {
                                 }
                             }.padding(2).padding(.bottom, 16)
                         }.scrollIndicators(.hidden).clipped()
-                        HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint); Text(store.t("settingsSaved")); Spacer(); Text("PRISMA / 07").font(.system(size: 8, design: .monospaced)).tracking(1) }.font(.system(size: 10)).foregroundStyle(.secondary)
+                        HStack(spacing: 6) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint); Text(store.t("settingsSaved")); Spacer(); Text("PRISMA / 08").font(.system(size: 8, design: .monospaced)).tracking(1) }.font(.system(size: 10)).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity)
                 }.padding(20)
             }
@@ -52,7 +52,7 @@ struct SettingsView: View {
     private var sound: some View {
         VStack(spacing: 16) {
             card {
-                HStack { VStack(alignment: .leading, spacing: 4) { Label(store.t("equalizer"), systemImage: "slider.vertical.3").font(.system(size: 15, weight: .semibold)); Text(store.t("eqDescription")).font(.system(size: 10)).foregroundStyle(.secondary) }; Spacer(); Toggle(store.t("equalizer"), isOn: $store.preferences.eqEnabled).labelsHidden().toggleStyle(.switch).controlSize(.small) }
+                HStack { VStack(alignment: .leading, spacing: 4) { Label(store.t("equalizer"), systemImage: "slider.vertical.3").font(.system(size: 15, weight: .semibold)); Text(store.t("eqDescription")).font(.system(size: 10)).foregroundStyle(.secondary) }; Spacer(); Toggle(store.t("equalizer"), isOn: $store.preferences.eqEnabled).labelsHidden().toggleStyle(.switch).controlSize(.small).disabled(store.directOutputActive || store.usingAirPlay) }
                 HStack {
                     Picker(store.t("preset"), selection: Binding(get: { store.preferences.eqPreset }, set: { store.preferences.selectPreset($0); store.preferences.eqEnabled = true })) { ForEach(["flat", "rock", "jazz", "classical", "electronic", "vocal", "custom"], id: \.self) { Text(store.t($0)).tag($0) } }.frame(width: 210)
                     Spacer(); Button(store.t("resetEQ")) { store.preferences.selectPreset("flat"); store.preferences.preamp = 0 }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(store.effectiveAccent)
@@ -68,25 +68,25 @@ struct SettingsView: View {
                     }
                 }
                 Divider().opacity(0.5)
-                HStack { Text(store.t("preamp")).font(.system(size: 12)); Slider(value: $store.preferences.preamp, in: -12...6, step: 0.5).frame(maxWidth: 230); Text(String(format: "%+.1f dB", store.preferences.preamp)).font(.system(size: 10, design: .monospaced)).frame(width: 65) }.disabled(!store.preferences.eqEnabled)
+                HStack { Text(store.t("preamp")).font(.system(size: 12)); Slider(value: $store.preferences.preamp, in: -12...6, step: 0.5).frame(maxWidth: 230); Text(String(format: "%+.1f dB", store.preferences.preamp)).font(.system(size: 10, design: .monospaced)).frame(width: 65) }.disabled(!store.preferences.eqEnabled || store.directOutputActive || store.usingAirPlay)
                 toggle("headroom", $store.preferences.autoHeadroom)
                 Text(store.t("headroomNote")).font(.system(size: 10)).foregroundStyle(.secondary)
                 HStack { Text(store.t("effectiveGain")); Spacer(); Text(String(format: "%+.1f dB", store.preferences.effectivePreamp)).monospacedDigit() }.font(.system(size: 10)).foregroundStyle(.secondary)
-            }
+            }.disabled(store.directOutputActive || store.usingAirPlay)
             card {
                 HStack { Text(store.t("balance")).font(.system(size: 14, weight: .semibold)); Spacer(); Button(store.t("center")) { store.preferences.balance = 0 }.buttonStyle(.plain).foregroundStyle(store.effectiveAccent).font(.caption) }
-                HStack { Text("L"); Slider(value: $store.preferences.balance, in: -1...1); Text("R") }.font(.system(size: 10, design: .monospaced))
+                HStack { Text("L"); Slider(value: $store.preferences.balance, in: -1...1).disabled(store.directOutputActive || store.usingAirPlay); Text("R") }.font(.system(size: 10, design: .monospaced))
                 HStack { Text(store.t("signal")).font(.system(size: 9, weight: .medium)).tracking(1); Spacer(); Text(String(format: "%.1f dBFS", 20 * log10(max(0.00001, store.peak)))).font(.system(size: 10, design: .monospaced)).foregroundStyle(store.peak >= 1 ? .red : .secondary) }
                 GeometryReader { geo in Capsule().fill(.primary.opacity(0.06)).overlay(alignment: .leading) { Capsule().fill(LinearGradient(colors: [.mint, store.effectiveAccent], startPoint: .leading, endPoint: .trailing)).frame(width: geo.size.width * min(1, store.peak * 2)) } }.frame(height: 5)
-            }
-            card { SectionHeading(title: store.t("output"), subtitle: store.t("systemOutput")); Text(store.t("outputNote")).font(.caption).foregroundStyle(.secondary); Button { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension")!) } label: { Label(store.t("openSound"), systemImage: "arrow.up.forward.app") }.buttonStyle(.glass) }
+            }.disabled(store.directOutputActive || store.usingAirPlay)
+            card { OutputSettingsView() }
         }
     }
     private var playback: some View {
         VStack(spacing: 16) {
             card {
                 SectionHeading(title: store.t("speed"), subtitle: store.t("speedNote"))
-                HStack { Slider(value: $store.preferences.playbackRate, in: 0.5...1.5, step: 0.05); Text(String(format: "%.2f×", store.preferences.playbackRate)).font(.system(size: 16, weight: .medium, design: .rounded)).frame(width: 60); Button("1×") { store.preferences.playbackRate = 1 }.buttonStyle(.glass) }
+                HStack { Slider(value: $store.preferences.playbackRate, in: 0.5...1.5, step: 0.05).disabled(store.directOutputActive); Text(String(format: "%.2f×", store.preferences.playbackRate)).font(.system(size: 16, weight: .medium, design: .rounded)).frame(width: 60); Button("1×") { store.preferences.playbackRate = 1 }.buttonStyle(.glass) }
                 Divider(); toggle("continueQueue", $store.preferences.continueQueue); toggle("rememberPosition", $store.preferences.rememberPosition); Text(store.t("rememberNote")).font(.caption).foregroundStyle(.secondary); toggle("keepAwake", $store.preferences.keepAwake)
             }
             card {
