@@ -91,8 +91,8 @@ struct ArtistDetailView:View {
                     HStack(spacing:0) {
                         Spacer(minLength:0)
                         Image(nsImage:portrait).resizable().aspectRatio(contentMode:portrait.size.width < portrait.size.height ? .fit : .fill)
-                            .frame(width:max(260,geo.size.width*0.54),height:320).clipped()
-                            .mask(LinearGradient(stops:[.init(color:.clear,location:0),.init(color:.white,location:0.28),.init(color:.white,location:1)],startPoint:.leading,endPoint:.trailing))
+                            .frame(width:portrait.size.width < portrait.size.height ? min(max(260,geo.size.width*0.54),320*portrait.size.width/max(1,portrait.size.height)) : max(260,geo.size.width*0.54),height:320).clipped()
+                            .mask(LinearGradient(stops:[.init(color:.clear,location:0),.init(color:.white,location:0.2),.init(color:.white,location:0.85),.init(color:.clear,location:1)],startPoint:.leading,endPoint:.trailing))
                     }.accessibilityLabel(name)
                 } else {
                     Text(name.split(separator:" ").prefix(2).compactMap(\.first).map(String.init).joined()).font(.system(size:150,weight:.ultraLight,design:.rounded)).foregroundStyle(.white.opacity(0.12)).frame(maxWidth:.infinity,alignment:.trailing).padding(.trailing,36).accessibilityHidden(true)
