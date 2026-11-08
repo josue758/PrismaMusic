@@ -22,39 +22,49 @@ struct ArtistPhotoPicker: View {
                 Text(store.t("artistPhotoChoicesNote")).font(.caption).foregroundStyle(.secondary)
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                        ForEach(photos) { photo in
-                            VStack(alignment: .leading, spacing: 10) {
-                                Button {
-                                    Task {
-                                        await choose(photo)
-                                        dismiss()
-                                    }
-                                } label: {
-                                    ArtistPhotoThumbnail(photo: photo).frame(height: 180).frame(maxWidth: .infinity)
-                                        .clipped().clipShape(RoundedRectangle(cornerRadius: 16)).overlay(
-                                            alignment: .topTrailing
-                                        ) {
-                                            if selected == photo.url {
-                                                Image(systemName: "checkmark.circle.fill").foregroundStyle(.white)
-                                                    .padding(10)
-                                            }
-                                        }
-                                }.buttonStyle(.plain).accessibilityLabel(
-                                    store.t("usePhoto") + ": " + name + (photo.year.map { " · " + String($0) } ?? ""))
-                                Text(
-                                    [photo.year.map(String.init) ?? "", "\(photo.width) × \(photo.height)"].filter {
-                                        !$0.isEmpty
-                                    }.joined(separator: " · ")
-                                ).font(.caption.weight(.medium))
-                                Link("\(photo.credit) · \(photo.license) ↗", destination: photo.pageURL).font(.caption2)
-                                    .lineLimit(2)
-                            }.padding(12).prismaGlass(20)
-                        }
+                        ForEach(photos) { photo in photoCard(photo) }
                     }.padding(3)
                 }
             }.padding(24)
         }.frame(width: 740, height: 680).tint(store.effectiveAccent).preferredColorScheme(store.colorScheme)
     }
+    private func photoCard(_ photo: ArtistPhotoChoice) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                Task {
+                    await choose(photo)
+                    dismiss()
+                }
+            } label: {
+                ArtistPhotoThumbnail(photo: photo)
+                    .frame(height: 180)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(alignment: .topTrailing) { selectionBadge(for: photo) }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(photoLabel(photo))
+            Text(photoFacts(photo)).font(.caption.weight(.medium))
+            Link("\(photo.credit) · \(photo.license) ↗", destination: photo.pageURL)
+                .font(.caption2).lineLimit(2)
+        }.padding(12).prismaGlass(20)
+    }
+    @ViewBuilder
+    private func selectionBadge(for photo: ArtistPhotoChoice) -> some View {
+        if selected == photo.url {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(.white).padding(10)
+        }
+    }
+    private func photoLabel(_ photo: ArtistPhotoChoice) -> String {
+        store.t("usePhoto") + ": " + name + (photo.year.map { " · " + String($0) } ?? "")
+    }
+    private func photoFacts(_ photo: ArtistPhotoChoice) -> String {
+        let year = photo.year.map { String($0) } ?? ""
+        let size = "\(photo.width) × \(photo.height)"
+        return [year, size].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
 }
 private struct ArtistPhotoThumbnail: View {
     var photo: ArtistPhotoChoice
