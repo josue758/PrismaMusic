@@ -1,5 +1,9 @@
 # Cambios
 
+## 0.11.3
+
+La barra principal y la pantalla completa muestran «Activar volumen» cuando la salida directa fija la ganancia. El botón vuelve a la salida ajustable y recupera el volumen guardado.
+
 ## 0.11.2
 
 Álbumes respeta el orden por nombre, artista o año. Las recopilaciones usan la etiqueta de artista del álbum cuando existe. Canciones adapta las columnas al ancho disponible y conserva el álbum y año debajo del título en la vista compacta.

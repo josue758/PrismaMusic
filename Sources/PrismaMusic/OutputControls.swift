@@ -21,6 +21,37 @@ struct AirPlayRouteButton: NSViewRepresentable {
         }
     }
 }
+struct PlaybackVolumeControl: View {
+    @EnvironmentObject var store: LibraryStore
+    var showsPercentage = false
+
+    var body: some View {
+        if store.directOutputActive {
+            Button {
+                store.preferences.directOutput = false
+            } label: {
+                Label(store.t("enableVolume"), systemImage: "lock")
+                    .font(.caption2)
+                    .lineLimit(1)
+            }
+            .buttonStyle(.glass)
+            .help(store.t("enableVolumeHelp"))
+            .accessibilityHint(store.t("enableVolumeHelp"))
+        } else {
+            HStack(spacing: 9) {
+                Image(systemName: store.volume == 0 ? "speaker.slash" : "speaker.wave.2")
+                    .font(.caption2).accessibilityHidden(true)
+                Slider(value: store.outputVolume, in: 0...1)
+                    .accessibilityLabel(store.t("volume"))
+                if showsPercentage {
+                    Text("\(Int(store.volume * 100))").font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(.tertiary).frame(width: 22)
+                }
+            }.foregroundStyle(.secondary)
+        }
+    }
+}
+
 struct OutputToolbarButton: View {
     @EnvironmentObject var store: LibraryStore
     @State private var showing = false

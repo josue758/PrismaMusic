@@ -192,15 +192,7 @@ struct PlayerBar: View {
                         Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 11))
                     }.buttonStyle(.plain).help(store.t("full"))
                 }.foregroundStyle(.secondary)
-                HStack(spacing: 9) {
-                    Image(systemName: store.effectiveVolume == 0 ? "speaker.slash" : "speaker.wave.2").font(
-                        .system(size: 10)
-                    ).foregroundStyle(.secondary)
-                    Slider(value: store.outputVolume, in: 0...1).disabled(store.directOutputActive).controlSize(.mini)
-                        .accessibilityLabel(store.t("volume"))
-                    Text("\(Int(store.effectiveVolume * 100))").font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(.tertiary).frame(width: 22)
-                }
+                PlaybackVolumeControl(showsPercentage: true).controlSize(.mini)
             }.frame(width: 215)
         }
     }

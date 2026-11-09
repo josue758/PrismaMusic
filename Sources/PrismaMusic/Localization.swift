@@ -622,6 +622,12 @@ let translations: [String: [String]] = [
         "Sem correspondência online. Use cover.jpg e arquivos .lrc junto ao áudio.",
     ],
     "finished": ["Metadatos actualizados", "Metadata updated", "Metadados atualizados"],
+    "enableVolume": ["Activar volumen", "Enable volume", "Ativar volume"],
+    "enableVolumeHelp": [
+        "La salida directa mantiene el volumen fijo. Pulsa para desactivarla y ajustar el volumen en Prisma.",
+        "Direct output uses fixed volume. Click to turn it off and adjust volume in Prisma.",
+        "A saída direta mantém o volume fixo. Clique para desativá-la e ajustar o volume no Prisma.",
+    ],
     "volume": ["Volumen", "Volume", "Volume"],
     "removeSource": ["Quitar ubicación", "Remove location", "Remover local"],
     "count": ["canciones", "songs", "músicas"],

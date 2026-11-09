@@ -179,9 +179,7 @@ struct ListeningStageView: View {
             }.font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
             OutputToolbarButton()
             AirPlayRouteButton().frame(width: 26, height: 26).help("AirPlay")
-            Image(systemName: "speaker.wave.2").foregroundStyle(.secondary)
-            Slider(value: store.outputVolume, in: 0...1).frame(width: 95)
-                .disabled(store.directOutputActive).accessibilityLabel(store.t("volume"))
+            PlaybackVolumeControl().frame(width: 116)
         }
     }
     private func control(_ image: String, _ key: String, action: @escaping () -> Void) -> some View {
