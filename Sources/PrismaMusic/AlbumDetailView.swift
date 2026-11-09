@@ -9,11 +9,6 @@ struct AlbumDetailView: View {
         ScrollView {
             if let album {
                 VStack(alignment: .leading, spacing: 24) {
-                    Button {
-                        store.selectedAlbumID = nil
-                    } label: {
-                        Label(store.selectedArtist ?? store.t("albums"), systemImage: "chevron.left")
-                    }.buttonStyle(.glass)
                     HStack(alignment: .bottom, spacing: 26) {
                         ArtworkView(track: album.tracks.first).frame(width: 208, height: 208).shadow(
                             color: .black.opacity(0.18), radius: 18, y: 10)
@@ -66,8 +61,7 @@ struct AlbumDetailView: View {
             } else {
                 ContentUnavailableView(store.t("albumUnavailable"), systemImage: "square.stack")
                 Button(store.t("albums")) {
-                    store.selectedAlbumID = nil
-                    store.section = "albums"
+                    store.navigateTo("albums")
                 }
             }
         }.scrollIndicators(.hidden)

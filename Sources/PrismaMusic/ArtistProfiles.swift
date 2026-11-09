@@ -37,7 +37,14 @@ actor ArtistProfileService {
     private var cache: [String: ArtistProfile] = [:]
     private struct Response: Decodable {
         var query: Query?
-        struct Query: Decodable { var pages: [Page]? }
+        struct Query: Decodable {
+            var pages: [Page]?
+            var redirects: [Redirect]?
+        }
+        struct Redirect: Decodable {
+            var from: String
+            var to: String
+        }
     }
     private struct Page: Decodable {
         var title: String
@@ -49,24 +56,40 @@ actor ArtistProfileService {
     static func isMusical(_ text: String) -> Bool {
         let intro = String(text.prefix(800)).folding(
             options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+        if ["歌手", "音楽家", "作曲家", "バンド", "シンガー"].contains(where: intro.contains) { return true }
         return intro.range(
             of:
-                "\\b(musician|singer|songwriter|composer|rapper|band|cantante|cantautor|cantautora|musico|compositor|compositora|cantor|cantora|banda|grupo musical|duo musical)\\b",
+                "\\b(musician|singer|songwriter|composer|rapper|band|vocalist|guitarist|pianist|disc jockey|record producer|cantante|cantautor|cantautora|musico|musica|compositor|compositora|cantor|cantora|banda|grupo musical|duo musical|rapero|rapera|guitarrista|pianista|vocalista|produtor musical|productor musical|music producer)\\b",
             options: .regularExpression) != nil
     }
     func profile(name: String, language: String) async throws -> ArtistProfile? {
         guard !OnlineMetadata.normalized(name).isEmpty else { return nil }
         let key = language + ":" + OnlineMetadata.normalized(name)
         if let cached = cache[key] { return cached }
-        for lang in language == "en" ? ["en"] : [language, "en"] {
+        var failure: Error?
+        for lang in [language] + ["en", "es", "pt", "ja"].filter({ $0 != language }) {
             try Task.checkCancellation()
-            var found = try await query(name: name, language: lang, search: false)
-            if found == nil { found = try await query(name: name, language: lang, search: true) }
+            var found: (ArtistProfile, String?)?
+            do {
+                found = try await query(name: name, language: lang, search: false)
+                if found == nil, lang != "ja" {
+                    found = try await query(name: name, language: lang, search: true)
+                }
+            } catch {
+                try Task.checkCancellation()
+                failure = error
+                continue
+            }
             if var value = found {
                 try Task.checkCancellation()
                 var candidates: [ArtistPhotoChoice] = []
                 if let photo = value.1 { candidates = (try? await photoChoices(filename: photo)) ?? [] }
                 if let entity = value.0.wikidataID, entity.range(of: "^Q[0-9]+$", options: .regularExpression) != nil {
+                    if candidates.allSatisfy({ $0.score < 0 }),
+                        let filename = try? await wikidataImage(entity: entity)
+                    {
+                        candidates += (try? await photoChoices(filename: filename)) ?? []
+                    }
                     let extra = (try? await photoChoices(entity: entity)) ?? []
                     for photo in extra where !candidates.contains(where: { $0.id == photo.id }) {
                         candidates.append(photo)
@@ -81,10 +104,11 @@ actor ArtistProfileService {
                 return value.0
             }
         }
+        if let failure { throw failure }
         return nil
     }
     private func query(name: String, language: String, search: Bool) async throws -> (ArtistProfile, String?)? {
-        guard ["es", "en", "pt"].contains(language) else { return nil }
+        guard ["es", "en", "pt", "ja"].contains(language) else { return nil }
         var parameters = [
             "action": "query", "format": "json", "formatversion": "2", "prop": "extracts|pageimages|info|pageprops",
             "exintro": "1", "explaintext": "1", "exchars": "1200", "piprop": "name", "inprop": "url", "redirects": "1",
@@ -93,6 +117,8 @@ actor ArtistProfileService {
             let escaped = name.replacingOccurrences(of: "\"", with: "")
             parameters["generator"] = "search"
             parameters["gsrlimit"] = "5"
+            parameters["exlimit"] = "5"
+            parameters["pilimit"] = "5"
             parameters["gsrsearch"] =
                 "intitle:\"\(escaped)\" (music OR musician OR cantante OR compositor OR banda OR cantor)"
         } else {
@@ -100,12 +126,13 @@ actor ArtistProfileService {
         }
         let (data, code) = try await OnlineMetadata.request(
             OnlineMetadata.url("https://\(language).wikipedia.org/w/api.php", parameters))
-        guard code == 200 else { return nil }
-        let pages = try JSONDecoder().decode(Response.self, from: data).query?.pages ?? []
+        guard code == 200 else { throw URLError(.badServerResponse) }
+        let response = try JSONDecoder().decode(Response.self, from: data).query
+        let alias = response?.redirects?.first { ArtistIdentity.titleMatches($0.from, name: name) }?.to
         guard
-            let page = pages.first(where: {
-                ArtistIdentity.titleMatches($0.title, name: name) && $0.pageprops?["disambiguation"] == nil
-                    && Self.isMusical($0.extract ?? "")
+            let page = response?.pages?.first(where: { page in
+                (ArtistIdentity.titleMatches(page.title, name: name) || (!search && page.title == alias))
+                    && page.pageprops?["disambiguation"] == nil && Self.isMusical(page.extract ?? "")
             }),
             let extract = page.extract, !extract.isEmpty, let raw = page.fullurl, let url = URL(string: raw),
             url.scheme == "https", url.host == "\(language).wikipedia.org"
@@ -115,6 +142,29 @@ actor ArtistProfileService {
                 name: page.title, biography: extract, pageURL: url, language: language,
                 wikidataID: page.pageprops?["wikibase_item"]), page.pageimage
         )
+    }
+    private func wikidataImage(entity: String) async throws -> String? {
+        struct Claims: Decodable {
+            struct Claim: Decodable {
+                struct Snak: Decodable {
+                    struct Value: Decodable { let value: String }
+                    let datavalue: Value?
+                }
+                let mainsnak: Snak
+                let rank: String
+            }
+            let claims: [String: [Claim]]
+        }
+        let (data, code) = try await OnlineMetadata.request(
+            OnlineMetadata.url(
+                "https://www.wikidata.org/w/api.php",
+                [
+                    "action": "wbgetclaims", "entity": entity, "property": "P18", "format": "json",
+                ]))
+        guard code == 200 else { return nil }
+        let claims = try JSONDecoder().decode(Claims.self, from: data).claims["P18"] ?? []
+        return (claims.first { $0.rank == "preferred" } ?? claims.first { $0.rank == "normal" })?
+            .mainsnak.datavalue?.value
     }
     private func photoChoices(filename: String? = nil, entity: String? = nil) async throws -> [ArtistPhotoChoice] {
         var values = [

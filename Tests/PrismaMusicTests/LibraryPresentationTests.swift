@@ -14,6 +14,19 @@ final class LibraryPresentationTests: XCTestCase {
             url: URL(fileURLWithPath: "/Music/" + file), title: title, artist: "Artist", album: "Album", genre: "Jazz",
             year: "2026", duration: 60, trackNumber: number, discNumber: disc)
     }
+    func testSpokenSongPrefersExactTitleAndAcceptsArtist() {
+        var first = track("a.flac", "Órbita")
+        first.artist = "Björk"
+        var second = track("b.flac", "Órbita")
+        second.artist = "Prisma"
+        let partial = track("c.flac", "Órbita distante")
+        let tracks = [partial, first, second]
+        XCTAssertEqual(PlaySongIntent.matches("orbita", in: tracks).map(\.id), [first.id, second.id])
+        XCTAssertEqual(PlaySongIntent.matches("orbita de bjork", in: tracks).map(\.id), [first.id])
+        XCTAssertEqual(PlaySongIntent.matches("Órbita, Prisma", in: tracks).map(\.id), [second.id])
+        XCTAssertTrue(PlaySongIntent.matches("???", in: tracks).isEmpty)
+        XCTAssertTrue(PlaySongIntent.matches("No existe", in: tracks).isEmpty)
+    }
     func testKeyboardSelectionHandlesBoundariesAndChangedResults() {
         let ids = ["a", "b", "c"]
         XCTAssertNil(SongSelection.moved(from: "a", in: [], by: 1))
@@ -184,12 +197,30 @@ final class LibraryPresentationTests: XCTestCase {
         XCTAssertNil(store.selectedAlbumID)
         XCTAssertNil(store.selectedArtist)
         XCTAssertFalse(store.showVisualizer)
-        XCTAssertFalse(store.showImmersive)
         XCTAssertFalse(store.hasActiveFilters)
         XCTAssertEqual(store.section, "playlist:test")
-        store.navigateTo("immersive")
-        XCTAssertTrue(store.showImmersive)
         XCTAssertEqual(store.displayArtist("Artist;Guest"), "Artist · Guest")
+    }
+    @MainActor
+    func testBackReturnsToArtistAlbumAndOriginalGrid() throws {
+        let directory = try root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = LibraryStore(directory: directory, autoStart: false)
+        let song = track("a.flac", "A")
+        store.tracks = [song]
+        store.navigateTo("artists")
+        store.openArtist(song.artist)
+        store.openAlbum(song)
+        store.openArtist("Guest")
+        store.goBack()
+        XCTAssertEqual(store.selectedAlbumID, song.id)
+        store.goBack()
+        XCTAssertEqual(store.selectedArtist, song.artist)
+        XCTAssertNil(store.selectedAlbumID)
+        store.goBack()
+        XCTAssertEqual(store.section, "artists")
+        XCTAssertNil(store.selectedArtist)
+        XCTAssertNil(store.backDestination)
     }
     func testPhotoRankingRejectsLogosAndPrioritizesResolutionAndRecentPhotos() {
         func photo(_ title: String, _ width: Int, _ height: Int, _ year: Int) -> ArtistPhotoChoice {

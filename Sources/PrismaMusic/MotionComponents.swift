@@ -31,6 +31,7 @@ struct PrismaPressStyle: ButtonStyle {
     }
 }
 struct InteractiveDepth: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @EnvironmentObject private var store: LibraryStore
     @Environment(\.accessibilityReduceMotion) private var reduced
     @State private var size = CGSize(width: 1, height: 1)
@@ -38,13 +39,18 @@ struct InteractiveDepth: ViewModifier {
     @State private var hover = false
     var radius: CGFloat
     var tilt: Double
-    private var enabled: Bool { !reduced && store.preferences.microInteractions && store.preferences.hoverDepth }
+    private var enabled: Bool {
+        !reduced && !reduceTransparency && store.preferences.microInteractions && store.preferences.hoverDepth
+    }
     func body(content: Content) -> some View {
         content
             .overlay {
                 RoundedRectangle(cornerRadius: radius).fill(
                     RadialGradient(
-                        colors: [.white.opacity(hover ? 0.09 : 0), .clear],
+                        colors: [
+                            .white.opacity(enabled && hover ? 0.11 : 0),
+                            store.effectiveAccent.opacity(enabled && hover ? 0.05 : 0), .clear,
+                        ],
                         center: UnitPoint(x: point.x + 0.5, y: point.y + 0.5), startRadius: 0,
                         endRadius: max(size.width, size.height) * 0.8)
                 ).allowsHitTesting(false)
@@ -62,6 +68,7 @@ struct InteractiveDepth: ViewModifier {
                 size = $0
             }
             .onContinuousHover { phase in
+                guard enabled else { return }
                 switch phase {
                 case .active(let location):
                     hover = true
@@ -73,6 +80,7 @@ struct InteractiveDepth: ViewModifier {
                     point = .zero
                 }
             }
+            .onChange(of: enabled) { _, _ in hover = false }
             .animation(enabled ? .spring(duration: 0.34, bounce: 0.12) : nil, value: hover)
             .animation(enabled ? .smooth(duration: 0.16) : nil, value: point)
     }

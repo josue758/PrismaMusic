@@ -1,5 +1,12 @@
 # Cambios
 
+## 0.12.3
+
+- Reflejo más suave y pequeño al mover el cursor, con menos brillo sobre las carátulas.
+- Navegación hacia atrás entre artistas y álbumes. La carátula del reproductor abre la sala de pantalla completa.
+- Búsqueda de biografías y retratos de artistas en más idiomas, con datos de la biblioteca cuando falta una coincidencia fiable.
+- Atajo «Reproducir canción» para compilaciones con una firma que macOS valide. El instalador público usa firma ad hoc y macOS rechazó el atajo con esa firma en las pruebas.
+
 ## 0.11.3
 
 La barra principal y la pantalla completa muestran «Activar volumen» cuando la salida directa fija la ganancia. El botón vuelve a la salida ajustable y recupera el volumen guardado.

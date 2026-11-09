@@ -108,11 +108,11 @@ struct PlayerBar: View {
     var body: some View {
         HStack(spacing: 25) {
             HStack(spacing: 13) {
-                ChangingArtwork(track: store.current).frame(width: 55, height: 55).contentShape(Rectangle())
-                    .onTapGesture {
-                        store.showImmersive = true
-                        store.showVisualizer = false
-                    }
+                Button {
+                    store.fullScreen()
+                } label: {
+                    ChangingArtwork(track: store.current).frame(width: 55, height: 55).contentShape(Rectangle())
+                }.buttonStyle(.plain).help(store.t("full")).accessibilityLabel(store.t("full"))
                 VStack(alignment: .leading, spacing: 5) {
                     Text(store.current?.title ?? store.t("choose")).font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.primary)

@@ -4,7 +4,13 @@ import SwiftUI
 @main
 struct PrismaMusicApp: App {
     @NSApplicationDelegateAdaptor(PrismaAppDelegate.self) private var delegate
-    @StateObject private var store = LibraryStore()
+    @MainActor static let sharedStore = LibraryStore()
+    @StateObject private var store = PrismaMusicApp.sharedStore
+
+    init() {
+        PrismaShortcuts.updateAppShortcutParameters()
+    }
+
     var body: some Scene {
         WindowGroup("Prisma Music") {
             ContentView().environmentObject(store).tint(store.effectiveAccent).preferredColorScheme(store.colorScheme)

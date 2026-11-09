@@ -79,6 +79,7 @@ final class ListeningWindowController: NSObject, NSWindowDelegate {
 
 struct ListeningStageView: View {
     @EnvironmentObject private var store: LibraryStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showLyrics = true
     var body: some View {
         GeometryReader { geometry in
@@ -98,6 +99,7 @@ struct ListeningStageView: View {
                             if showLyrics {
                                 BilingualLyricsView(track: track, large: true)
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                    .transition(.opacity)
                             }
                         }.frame(maxHeight: .infinity)
                         transport.padding(22).prismaGlass(24, tinted: true)
@@ -105,6 +107,11 @@ struct ListeningStageView: View {
                         ContentUnavailableView { Label(store.t("empty"), systemImage: "music.note") }
                     }
                 }.padding(.horizontal, max(32, geometry.size.width * 0.05)).padding(.top, 48).padding(.bottom, 30)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .prismaCursorLighting()
+                    .animation(
+                        reduceMotion || !store.preferences.microInteractions ? nil : .smooth(duration: 0.32),
+                        value: showLyrics)
             }.frame(width: geometry.size.width, height: geometry.size.height).background(Color.black)
         }
         .ignoresSafeArea()

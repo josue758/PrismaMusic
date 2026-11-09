@@ -1,14 +1,14 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.11.3** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.12.3** para probar e iterar.
 
-[Descargar la versión 0.11.3 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.11.3) · [Ver el código](https://github.com/josue758/PrismaMusic)
+[Descargar la versión 0.12.3 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.12.3) · [Ver el código](https://github.com/josue758/PrismaMusic)
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.11.3.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.12.3.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación y sigue la bienvenida para elegir idioma, biblioteca y estilo. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
@@ -116,11 +116,11 @@ Esta versión refina la respuesta de la interfaz:
 - Barra temporal con previsualización de tiempo bajo el cursor. Al arrastrar, la posición se confirma al soltar para evitar reiniciar el audio en cada movimiento. Una vez enfocada permite saltos de cinco segundos con las flechas; conserva los atajos de siguiente/anterior con Comando.
 - Avisos breves para favoritos, cola y playlists, con **Deshacer** en las acciones compatibles. Una eliminación de playlist puede deshacerse durante el aviso. Las acciones antiguas no pueden deshacer un aviso más reciente, y deshacer un cambio de cola conserva la canción activa.
 
-Los controles **Animaciones de la interfaz**, **Profundidad al pasar el cursor** y **Avisos breves con Deshacer** están en Ajustes → Apariencia. El movimiento de fondo sigue teniendo sus propios controles. La opción global **Reducir movimiento** retira las transiciones espaciales y el paralaje. No se agregan sonidos de interfaz que interrumpan la música.
+Los controles **Animaciones de la interfaz**, **Reflejos y profundidad con el cursor** y **Avisos breves con Deshacer** están en Ajustes → Apariencia. El movimiento de fondo sigue teniendo sus propios controles. La opción global **Reducir movimiento** retira las transiciones espaciales y el paralaje. No se agregan sonidos de interfaz que interrumpan la música.
 
-## Novedades de la versión 0.3
+## Carátulas, color y movimiento
 
-La nueva vista **Escuchando** da protagonismo a la carátula, con un fondo difuminado, cristal más transparente y una paleta que sigue a la canción. Se abre desde la barra lateral, el botón de escucha inmersiva o haciendo clic en la carátula del reproductor. Puedes elegirla como pantalla de inicio en Ajustes → Apariencia. Se conserva la pantalla de inicio que ya tuvieras configurada; las instalaciones nuevas comienzan en la vista inmersiva.
+La sala de pantalla completa da protagonismo a la carátula y a las letras. Se abre haciendo clic en la carátula del reproductor o en el botón de pantalla completa.
 
 Los colores se extraen de la carátula local en segundo plano, sin enviar la imagen a servicios externos. Una transición suave acompaña los cambios de canción. Cuando no hay imagen, se utiliza la paleta de la portada generativa de Prisma; la interfaz indica su procedencia. Las imágenes blancas, negras o transparentes tienen tratamiento específico.
 
@@ -128,7 +128,7 @@ El fondo y la carátula tienen un movimiento suave modulado por el nivel RMS rea
 
 En **Ajustes → Apariencia** puedes activar o desactivar por separado los colores adaptativos, el movimiento del fondo y la animación de la carátula, además de regular transparencia y luz ambiental. Elegir uno de los ocho colores manuales desactiva la adaptación de color; puedes reactivarla con su interruptor. Los ajustes de sonido y biblioteca de 0.2 se migran sin restablecerlos.
 
-La vista de escucha muestra título, artista, álbum, año y calidad del archivo. Si hay letras, incluye una vista previa sincronizada; el panel lateral mantiene las letras completas.
+La sala de escucha muestra la calidad del archivo y permite consultar las letras, con sincronización cuando está disponible.
 
 ## Novedades de la versión 0.2
 

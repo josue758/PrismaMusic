@@ -459,7 +459,7 @@ struct SettingsView: View {
                     ForEach(AppLanguage.allCases) { Text($0.name).tag($0) }
                 }
                 Picker(store.t("startPage"), selection: $store.preferences.startSection) {
-                    ForEach(["immersive", "home", "songs", "albums", "favorites", "recent"], id: \.self) {
+                    ForEach(["home", "songs", "albums", "favorites", "recent"], id: \.self) {
                         Text(store.t($0)).tag($0)
                     }
                 }

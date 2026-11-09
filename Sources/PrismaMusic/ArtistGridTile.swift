@@ -56,10 +56,12 @@ actor ArtistGridLoader {
     }
 }
 struct ArtistGridTile: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var store: LibraryStore
     @ObservedObject private var photos = ArtistPortraitCache.shared
     var name: String
     var count: Int
+    var cover: Track?
     var body: some View {
         let entry = photos.entry(name)
         VStack(spacing: 10) {
@@ -70,6 +72,9 @@ struct ArtistGridTile: View {
                     Group {
                         if let image = entry?.image {
                             Image(nsImage: image).resizable().scaledToFill()
+                        } else if let cover {
+                            ArtworkView(track: cover)
+                                .accessibilityLabel(store.t("artistCoverFallback"))
                         } else {
                             ZStack {
                                 LinearGradient(
@@ -96,6 +101,10 @@ struct ArtistGridTile: View {
                 Text(" ").font(.system(size: 8))
             }
         }.padding(20).frame(maxWidth: .infinity).prismaGlass(22)
+            .animation(
+                reduceMotion || !store.preferences.microInteractions ? nil : .easeOut(duration: 0.22),
+                value: entry != nil
+            )
             .task(id: name + ":" + store.language.rawValue + ":" + String(store.online)) {
                 guard store.online, photos.entry(name) == nil else { return }
                 if let result = try? await ArtistGridLoader.shared.load(

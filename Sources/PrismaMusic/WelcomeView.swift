@@ -160,7 +160,7 @@ struct WelcomeView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text(store.t("welcomeReadyNote")).foregroundStyle(.secondary)
             Picker(store.t("startPage"), selection: $store.preferences.startSection) {
-                ForEach(["immersive", "home", "songs", "albums", "favorites", "recent"], id: \.self) {
+                ForEach(["home", "songs", "albums", "favorites", "recent"], id: \.self) {
                     Text(store.t($0)).tag($0)
                 }
             }

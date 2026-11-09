@@ -7,13 +7,9 @@ struct ContentView: View {
     @Namespace private var navigationSelection
     private var motion: Bool { store.preferences.microInteractions && !reduceMotion }
     private var pageKey: String {
-        if let id = store.selectedAlbumID, !store.showImmersive, !store.showVisualizer { return "album:" + id }
-        return store.showImmersive
-            ? "immersive"
-            : store.showVisualizer
-                ? "visualizer"
-                : (store.section == "artists"
-                    ? store.selectedArtist.map { "artist:" + $0 } ?? store.section : store.section)
+        if store.showVisualizer { return "visualizer" }
+        if let id = store.selectedAlbumID { return "album:" + id }
+        return store.selectedArtist.map { "artist:" + $0 } ?? store.section
     }
     @FocusState private var searchFocused: Bool
     @State private var nas = false
@@ -43,20 +39,18 @@ struct ContentView: View {
                             toolbar
                             ZStack(alignment: .topLeading) {
                                 Group {
-                                    if let id = store.selectedAlbumID, !store.showImmersive, !store.showVisualizer {
+                                    if let id = store.selectedAlbumID, !store.showVisualizer {
                                         AlbumDetailView(id: id)
                                     } else if let name = store.selectedArtist, store.section == "artists",
-                                        !store.showImmersive, !store.showVisualizer
+                                        !store.showVisualizer
                                     {
                                         ArtistDetailView(name: name)
-                                    } else if store.showImmersive {
-                                        ImmersivePlayerView()
                                     } else if store.showVisualizer {
                                         VisualizerView()
                                     } else {
                                         library
                                     }
-                                }.id(pageKey).transition(motion ? .opacity.combined(with: .offset(y: 7)) : .opacity)
+                                }.id(pageKey).transition(.opacity)
                             }.frame(maxWidth: .infinity, maxHeight: .infinity).clipped().animation(
                                 motion ? .smooth(duration: 0.3) : nil, value: pageKey)
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -75,7 +69,7 @@ struct ContentView: View {
                     }.frame(maxHeight: .infinity).animation(
                         motion ? .smooth(duration: 0.3) : nil, value: inspectorVisible)
                     PlayerBar().padding(.horizontal, 20).padding(.vertical, 14).prismaGlass(26, tinted: true)
-                }.padding(16).padding(.top, 24)
+                }.padding(16).padding(.top, 24).prismaCursorLighting()
             }
         }
         .overlay(alignment: .bottom) {
@@ -92,17 +86,9 @@ struct ContentView: View {
         .onChange(of: store.search) { _, text in
             if !text.isEmpty
                 && (store.section == "home" || store.selectedAlbumID != nil || store.selectedArtist != nil
-                    || store.showImmersive
                     || store.showVisualizer)
             {
-                store.selectedAlbumID = nil
-                store.selectedArtist = nil
-                store.showImmersive = false
-                store.showVisualizer = false
-                store.section = "songs"
-                store.artist = ""
-                store.genre = ""
-                store.year = ""
+                store.navigateTo("songs", preservingSearch: true)
             }
         }
         .sheet(isPresented: $store.showWelcome) { WelcomeView().environmentObject(store) }
@@ -153,7 +139,6 @@ struct ContentView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     VStack(spacing: 4) {
-                        nav("immersive", "play.rectangle")
                         nav("home", "square.grid.2x2")
                         nav("songs", "music.note.list")
                         nav("albums", "square.stack")
@@ -271,9 +256,7 @@ struct ContentView: View {
         ).padding(.horizontal, 12).padding(.bottom, 4)
     }
     private func nav(_ key: String, _ icon: String) -> some View {
-        let selected =
-            key == "immersive"
-            ? store.showImmersive : store.section == key && !store.showVisualizer && !store.showImmersive
+        let selected = store.section == key && !store.showVisualizer
         return Button {
             withAnimation(motion ? .smooth(duration: 0.3) : nil) {
                 store.navigateTo(key)
@@ -296,13 +279,20 @@ struct ContentView: View {
     }
     private var toolbar: some View {
         HStack(spacing: 10) {
+            if let destination = store.showVisualizer ? store.t("back") : store.backDestination {
+                Button {
+                    store.goBack()
+                } label: {
+                    Label(destination, systemImage: "chevron.backward").lineLimit(1).frame(
+                        maxWidth: 140, alignment: .leading)
+                }.buttonStyle(.glass).help(store.t("back"))
+                    .keyboardShortcut("[", modifiers: .command)
+            }
             VStack(alignment: .leading, spacing: 5) {
                 Text("PRISMA / LIBRARY").font(.system(size: 8, weight: .medium, design: .monospaced)).tracking(1.5)
                     .foregroundStyle(.tertiary)
-                Text(
-                    store.showImmersive
-                        ? store.t("immersiveMode") : store.showVisualizer ? store.t("visualizer") : sectionTitle
-                ).font(.system(size: 15, weight: .medium, design: .rounded)).lineLimit(1)
+                Text(store.showVisualizer ? store.t("visualizer") : sectionTitle)
+                    .font(.system(size: 15, weight: .medium, design: .rounded)).lineLimit(1)
             }
             Spacer(minLength: 8)
             HStack(spacing: 7) {
@@ -319,29 +309,26 @@ struct ContentView: View {
                     }.buttonStyle(.plain).help(store.t("clearSearch")).accessibilityLabel(store.t("clearSearch"))
                 }
             }.padding(.horizontal, 13).frame(width: inspectorVisible ? 190 : 255, height: 36).prismaGlass(22)
-            HStack(spacing: 7) {
-                GlassIconButton(icon: "play.rectangle", label: store.t("immersiveMode"), active: store.showImmersive) {
-                    store.showImmersive.toggle()
-                    store.showVisualizer = false
-                }
-                GlassIconButton(icon: "waveform.path", label: store.t("visualizer"), active: store.showVisualizer) {
-                    store.showVisualizer.toggle()
-                    store.showImmersive = false
-                }
-                GlassIconButton(icon: "quote.bubble", label: store.t("lyrics"), active: store.showLyrics) {
-                    store.showLyrics.toggle()
-                    store.showInfo = false
-                    store.showQueue = false
-                }
-                GlassIconButton(icon: "list.bullet", label: store.t("queue"), active: store.showQueue) {
-                    store.showQueue.toggle()
-                    store.showLyrics = false
-                    store.showInfo = false
-                }
-                GlassIconButton(icon: "info", label: store.t("fileInfo"), active: store.showInfo) {
-                    store.showInfo.toggle()
-                    store.showLyrics = false
-                    store.showQueue = false
+            GlassEffectContainer(spacing: 7) {
+                HStack(spacing: 7) {
+                    GlassIconButton(icon: "waveform.path", label: store.t("visualizer"), active: store.showVisualizer) {
+                        store.showVisualizer.toggle()
+                    }
+                    GlassIconButton(icon: "quote.bubble", label: store.t("lyrics"), active: store.showLyrics) {
+                        store.showLyrics.toggle()
+                        store.showInfo = false
+                        store.showQueue = false
+                    }
+                    GlassIconButton(icon: "list.bullet", label: store.t("queue"), active: store.showQueue) {
+                        store.showQueue.toggle()
+                        store.showLyrics = false
+                        store.showInfo = false
+                    }
+                    GlassIconButton(icon: "info", label: store.t("fileInfo"), active: store.showInfo) {
+                        store.showInfo.toggle()
+                        store.showLyrics = false
+                        store.showQueue = false
+                    }
                 }
             }
         }.padding(.horizontal, 2).frame(height: 42)
@@ -403,9 +390,7 @@ struct ContentView: View {
                                         Button(store.t("clear")) { store.clearFilters() }
                                     } else {
                                         Button(store.t("browseSongs")) {
-                                            store.section = "songs"
-                                            store.selectedArtist = nil
-                                            store.selectedAlbumID = nil
+                                            store.navigateTo("songs")
                                         }
                                     }
                                 }.frame(minHeight: 240)
@@ -580,7 +565,7 @@ struct ContentView: View {
         let groups = store.groupedArtists
         return LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 18) {
             ForEach(groups, id: \.key) { group in
-                ArtistGridTile(name: group.key, count: group.value.count)
+                ArtistGridTile(name: group.key, count: group.value.count, cover: group.value.first(where: \.hasArtwork))
             }
         }
     }

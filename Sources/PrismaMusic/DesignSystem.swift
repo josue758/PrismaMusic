@@ -65,6 +65,66 @@ struct PrismaBackdrop: View {
             reduceMotion ? nil : .easeInOut(duration: 1.1), value: store.artworkPalette)
     }
 }
+/// A window-level reflection. Pointer changes only animate this background layer.
+private struct CursorLighting: ViewModifier {
+    @EnvironmentObject private var store: LibraryStore
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @State private var point = CGPoint.zero
+    @State private var inside = false
+
+    private var enabled: Bool {
+        store.preferences.microInteractions && store.preferences.hoverDepth && !reduceMotion && !reduceTransparency
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                if enabled {
+                    GeometryReader { proxy in
+                        let radius = min(400, max(190, proxy.size.width * 0.29))
+                        let strength = store.preferences.atmosphere * 0.75
+                        let colors =
+                            store.preferences.adaptiveArtwork
+                            ? store.artworkPalette.colors : [store.accent.color, .cyan, .pink]
+                        ZStack {
+                            Circle().fill(
+                                RadialGradient(
+                                    colors: [
+                                        colors[0].opacity(scheme == .dark ? 0.36 : 0.23),
+                                        colors[1].opacity(0.12), .clear,
+                                    ], center: .center, startRadius: 0, endRadius: radius)
+                            ).frame(width: radius * 2, height: radius * 2)
+                                .position(point)
+                            Circle().fill(
+                                RadialGradient(
+                                    colors: [
+                                        .white.opacity(scheme == .dark ? 0.08 : 0.26), .clear,
+                                    ], center: .center, startRadius: 0, endRadius: radius * 0.43)
+                            ).frame(width: radius * 0.86, height: radius * 0.86)
+                                .position(x: point.x - 16, y: point.y - 20)
+                        }
+                        .opacity(inside ? strength : 0)
+                        .animation(.smooth(duration: 0.26), value: inside)
+                        .animation(.smooth(duration: 0.16), value: point)
+                    }.clipped().allowsHitTesting(false).accessibilityHidden(true)
+                }
+            }
+            .onContinuousHover { phase in
+                guard enabled else { return }
+                switch phase {
+                case .active(let location):
+                    point = location
+                    inside = true
+                case .ended:
+                    inside = false
+                }
+            }
+            .onChange(of: enabled) { _, _ in inside = false }
+    }
+}
+
 struct GlassSurface: ViewModifier {
     @EnvironmentObject var store: LibraryStore
     @Environment(\.accessibilityReduceTransparency) var reduceTransparency
@@ -83,7 +143,6 @@ struct GlassSurface: ViewModifier {
                 )
                 .glassEffect(
                     store.preferences.glassStyle == "clear"
-                        || (store.showImmersive && store.preferences.glassTransparency > 0.55)
                         ? .clear.tint(tinted ? store.effectiveAccent.opacity(0.10) : nil)
                         : .regular.tint(tinted ? store.effectiveAccent.opacity(0.08) : nil),
                     in: RoundedRectangle(cornerRadius: radius)
@@ -99,12 +158,15 @@ struct GlassSurface: ViewModifier {
     }
 }
 extension View {
+    func prismaCursorLighting() -> some View { modifier(CursorLighting()) }
+
     func prismaGlass(_ radius: CGFloat = 22, tinted: Bool = false) -> some View {
         modifier(GlassSurface(radius: radius, tinted: tinted))
     }
 }
 struct GlassIconButton: View {
     @EnvironmentObject var store: LibraryStore
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     var icon: String
     var label: String
     var active = false
@@ -114,9 +176,18 @@ struct GlassIconButton: View {
             Image(systemName: icon).font(.system(size: 13, weight: .medium)).foregroundStyle(
                 active ? store.effectiveAccent : .primary.opacity(0.75)
             ).frame(width: 35, height: 35)
-        }.buttonStyle(PrismaPressStyle()).glassEffect(
-            .regular.tint(active ? store.effectiveAccent.opacity(0.20) : nil).interactive(), in: Circle()
-        ).help(label).accessibilityLabel(label)
+        }.buttonStyle(PrismaPressStyle())
+            .background {
+                if reduceTransparency {
+                    Circle().fill(Color(nsColor: .controlBackgroundColor))
+                }
+            }
+            .glassEffect(
+                reduceTransparency
+                    ? .identity
+                    : .regular.tint(active ? store.effectiveAccent.opacity(0.20) : nil)
+                        .interactive(), in: Circle()
+            ).help(label).accessibilityLabel(label)
     }
 }
 struct QualityBadge: View {
@@ -145,8 +216,8 @@ struct QualityBadge: View {
             Text(title)
         }.font(.system(size: showsFormatDetails ? 10 : 8, weight: .semibold, design: .monospaced))
             .tracking(0.5).padding(.horizontal, 7).padding(
-            .vertical, 4
-        ).background(.primary.opacity(0.06), in: Capsule()).foregroundStyle(.secondary)
+                .vertical, 4
+            ).background(.primary.opacity(0.06), in: Capsule()).foregroundStyle(.secondary)
     }
 }
 struct SectionHeading: View {

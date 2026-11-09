@@ -85,6 +85,8 @@ struct ArtistCollection {
     var tracks: [Track]
     var albums: [(key: String, value: [Track])]
     var genres: String
+    var years: String
+    var cover: Track?
     var duration: Double
     init(name: String, library: [Track]) {
         tracks = library.filter { ArtistIdentity.contains($0.artist, name: name) }.sorted {
@@ -96,6 +98,13 @@ struct ArtistCollection {
             ($0.value.first?.album ?? "").localizedStandardCompare($1.value.first?.album ?? "") == .orderedAscending
         }
         genres = Array(Set(tracks.map(\.genre))).filter { $0 != "—" }.sorted().prefix(4).joined(separator: " · ")
+        let dated = tracks.compactMap { Int($0.year) }.filter { $0 > 0 }
+        if let first = dated.min(), let last = dated.max() {
+            years = first == last ? String(first) : "\(first)–\(last)"
+        } else {
+            years = ""
+        }
+        cover = tracks.first(where: \.hasArtwork)
         duration = tracks.reduce(0) { $0 + $1.duration }
     }
 }

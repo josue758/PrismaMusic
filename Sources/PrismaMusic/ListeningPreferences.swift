@@ -15,7 +15,7 @@ struct ListeningPreferences: Codable, Equatable {
     var continueQueue = true
     var keepAwake = false
     var rememberPosition = true
-    var startSection = "immersive"
+    var startSection = "home"
     var glassStyle = "regular"
     var atmosphere = 0.75
     var adaptiveArtwork = true
@@ -68,7 +68,8 @@ struct ListeningPreferences: Codable, Equatable {
         continueQueue = try values.decodeIfPresent(Bool.self, forKey: .continueQueue) ?? continueQueue
         keepAwake = try values.decodeIfPresent(Bool.self, forKey: .keepAwake) ?? keepAwake
         rememberPosition = try values.decodeIfPresent(Bool.self, forKey: .rememberPosition) ?? rememberPosition
-        startSection = try values.decodeIfPresent(String.self, forKey: .startSection) ?? startSection
+        let savedSection = try values.decodeIfPresent(String.self, forKey: .startSection)
+        if let savedSection, savedSection != "immersive" { startSection = savedSection }
         glassStyle = try values.decodeIfPresent(String.self, forKey: .glassStyle) ?? glassStyle
         atmosphere = try values.decodeIfPresent(Double.self, forKey: .atmosphere) ?? atmosphere
         adaptiveArtwork = try values.decodeIfPresent(Bool.self, forKey: .adaptiveArtwork) ?? adaptiveArtwork

@@ -39,7 +39,6 @@ final class HardeningTests: XCTestCase {
         try await store.flushSaving()
         XCTAssertFalse(store.showWelcome)
         XCTAssertEqual(store.section, "albums")
-        XCTAssertFalse(store.showImmersive)
         let reopened = LibraryStore(directory: root, autoStart: false)
         XCTAssertTrue(reopened.preferences.hasCompletedWelcome)
         XCTAssertEqual(reopened.preferences.eqGains[3], 4)

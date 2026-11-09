@@ -24,11 +24,6 @@ struct ArtistDetailView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     HStack {
-                        Button {
-                            store.selectedArtist = nil
-                        } label: {
-                            Label(store.t("backArtists"), systemImage: "chevron.left")
-                        }.buttonStyle(.glass)
                         Spacer()
                         if fetching { ProgressView().controlSize(.small) }
                         if (profile?.photos?.count ?? 0) > 1 {
@@ -126,6 +121,12 @@ struct ArtistDetailView: View {
                                         .init(color: .white, location: 0.85), .init(color: .clear, location: 1),
                                     ], startPoint: .leading, endPoint: .trailing))
                     }.accessibilityLabel(name)
+                } else if let cover = collection.cover {
+                    ArtworkView(track: cover)
+                        .frame(width: 270, height: 270)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.trailing, 25)
+                        .accessibilityHidden(true)
                 } else {
                     Text(name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined()).font(
                         .system(size: 150, weight: .ultraLight, design: .rounded)
@@ -171,6 +172,10 @@ struct ArtistDetailView: View {
                                 .white.opacity(0.8)
                             ).padding(8).background(.black.opacity(0.3), in: Capsule())
                         }.padding(16)
+                    } else if portrait == nil, collection.cover != nil {
+                        Label(store.t("artistCoverFallback"), systemImage: "square.stack")
+                            .font(.caption2).padding(8).background(.black.opacity(0.6), in: Capsule())
+                            .foregroundStyle(.white).padding(16)
                     }
                 }
                 .overlay { RoundedRectangle(cornerRadius: 28).strokeBorder(.white.opacity(0.14), lineWidth: 0.7) }
@@ -207,6 +212,9 @@ struct ArtistDetailView: View {
                             ? "artistOffline"
                             : fetching ? "artistFetching" : failed ? "artistFetchFailed" : "artistNoMatch")
                 ).font(.callout).foregroundStyle(.secondary)
+                if !collection.years.isEmpty {
+                    LabeledContent(store.t("artistLibraryYears"), value: collection.years).font(.caption)
+                }
                 if store.online && !fetching { Button(store.t("retry")) { retry += 1 }.buttonStyle(.glass) }
                 if !store.online { Button(store.t("settings")) { store.openSettings("metadata") }.buttonStyle(.glass) }
             }

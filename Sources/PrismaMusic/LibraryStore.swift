@@ -54,7 +54,6 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var sort = "title"
     @Published var feedback: FeedbackNotice?
     private var feedbackTask: Task<Void, Never>?
-    @Published var showImmersive = true
     @Published var artworkPalette = ArtworkPalette.fallback()
     @Published var ambientEnergy = 0.0
     @Published var showVisualizer = false
@@ -118,20 +117,47 @@ final class LibraryStore: NSObject, ObservableObject {
         albumCollectionCache = (revision, id, value)
         return value
     }
-    func navigateTo(_ destination: String) {
+    private struct DetailOrigin {
+        let section: String
+        let artist: String?
+        let albumID: String?
+    }
+    private var detailHistory: [DetailOrigin] = []
+    var backDestination: String? {
+        guard let origin = detailHistory.last else { return nil }
+        if let id = origin.albumID, let track = track(for: id) { return displayAlbum(track.album) }
+        if let artist = origin.artist { return displayArtist(artist) }
+        if let playlist = playlists.first(where: { "playlist:\($0.id)" == origin.section }) { return playlist.name }
+        return t(origin.section)
+    }
+    private func rememberDetailOrigin() {
+        detailHistory.append(.init(section: section, artist: selectedArtist, albumID: selectedAlbumID))
+    }
+    func goBack() {
+        if showVisualizer {
+            showVisualizer = false
+            return
+        }
+        guard let origin = detailHistory.popLast() else { return }
+        section = origin.section
+        selectedArtist = origin.artist
+        selectedAlbumID = origin.albumID
+    }
+    func navigateTo(_ destination: String, preservingSearch: Bool = false) {
+        let query = preservingSearch ? search : ""
+        detailHistory.removeAll()
         selectedAlbumID = nil
         selectedArtist = nil
         showVisualizer = false
-        showImmersive = destination == "immersive"
-        if destination != "immersive" {
-            section = destination
-            clearFilters()
-        }
+        section = destination
+        clearFilters()
+        if preservingSearch { search = query }
     }
     func openAlbum(_ track: Track) {
+        guard selectedAlbumID != track.id else { return }
+        rememberDetailOrigin()
         selectedAlbumID = track.id
         inspectedID = track.id
-        showImmersive = false
         showVisualizer = false
         if section != "artists" || selectedArtist == nil {
             section = "albums"
@@ -139,10 +165,11 @@ final class LibraryStore: NSObject, ObservableObject {
         }
     }
     func openArtist(_ name: String) {
+        guard selectedArtist != name || selectedAlbumID != nil else { return }
+        rememberDetailOrigin()
         selectedAlbumID = nil
         selectedArtist = name
         section = "artists"
-        showImmersive = false
         showVisualizer = false
     }
     func readAlbumOrder(_ id: String) async {
@@ -364,8 +391,7 @@ final class LibraryStore: NSObject, ObservableObject {
         if let data = try? Data(contentsOf: dataDirectory.appendingPathComponent("scan-report.json")) {
             scanAudit = try? JSONDecoder().decode(ScanAudit.self, from: data)
         }
-        section = preferences.startSection == "immersive" ? "home" : preferences.startSection
-        showImmersive = preferences.startSection == "immersive"
+        section = preferences.startSection
         if preferences.rememberPosition,
             let data = try? Data(contentsOf: dataDirectory.appendingPathComponent("playback.json")),
             let saved = try? JSONDecoder().decode(PlaybackBookmark.self, from: data)
@@ -596,8 +622,7 @@ final class LibraryStore: NSObject, ObservableObject {
     func finishWelcome(scanAfter: Bool = true) {
         preferences.hasCompletedWelcome = true
         showWelcome = false
-        section = preferences.startSection == "immersive" ? "home" : preferences.startSection
-        showImmersive = preferences.startSection == "immersive"
+        navigateTo(preferences.startSection)
         if scanAfter && scanOnLaunch && !scanning { Task { await scan() } }
     }
     func retryFailedScan() async {
