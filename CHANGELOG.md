@@ -1,5 +1,9 @@
 # Cambios
 
+## 0.11.2
+
+Álbumes respeta el orden por nombre, artista o año. Las recopilaciones usan la etiqueta de artista del álbum cuando existe. Canciones adapta las columnas al ancho disponible y conserva el álbum y año debajo del título en la vista compacta.
+
 ## 0.11.1
 
 La etiqueta de la sala de escucha muestra el formato, la profundidad de bits y la frecuencia de muestreo disponibles para la pista.

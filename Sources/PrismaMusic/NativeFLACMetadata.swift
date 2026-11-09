@@ -54,7 +54,8 @@ enum NativeFLACMetadata {
             fileSize: header.info.st_size, sampleRate: Double(header.rate), channels: header.channels,
             bitDepth: header.bits, sourceIsNetwork: sourceIsNetwork,
             trackNumber: AlbumOrdering.number(value(["TRACKNUMBER", "TRACK"])),
-            discNumber: AlbumOrdering.number(value(["DISCNUMBER", "DISC"])), albumOrderRead: true)
+            discNumber: AlbumOrdering.number(value(["DISCNUMBER", "DISC"])), albumOrderRead: true,
+            albumArtist: value(["ALBUMARTIST", "ALBUM ARTIST", "ALBUM_ARTIST"]) ?? "")
     }
     private struct Header {
         var rate: Int

@@ -515,13 +515,23 @@ struct ContentView: View {
             filterMenu("allGenres", selection: $store.genre, values: store.statistics.genres)
             filterMenu("allYears", selection: $store.year, values: store.statistics.years)
             Spacer(minLength: 0)
-            Menu {
-                Picker(store.t("sort"), selection: $store.sort) {
-                    ForEach(["title", "artist", "album", "year"], id: \.self) { Text(store.t($0)).tag($0) }
-                }
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
-            }.menuStyle(.borderlessButton).fixedSize().help(store.t("sort"))
+            if store.section != "artists" && store.section != "recent" && !store.section.hasPrefix("playlist:") {
+                let isAlbums = store.section == "albums"
+                let selection = Binding(
+                    get: { isAlbums && store.sort == "title" ? "album" : store.sort },
+                    set: { store.sort = $0 })
+                Menu {
+                    Picker(store.t("sort"), selection: selection) {
+                        ForEach(
+                            isAlbums ? ["album", "artist", "year"] : ["title", "artist", "album", "year"], id: \.self
+                        ) {
+                            Text(store.t($0)).tag($0)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                }.menuStyle(.borderlessButton).fixedSize().help(store.t("sort"))
+            }
             if !store.artist.isEmpty || !store.genre.isEmpty || !store.year.isEmpty {
                 Button {
                     store.clearFilters()
@@ -575,7 +585,7 @@ struct ContentView: View {
         }
     }
     private func songList(_ list: [Track]) -> some View {
-        LibrarySongList(tracks: list, showAlbum: !inspectorVisible) { store.displayIndex($0.id) + 1 }
+        LibrarySongList(tracks: list) { store.displayIndex($0.id) + 1 }
     }
 
 }
@@ -598,7 +608,8 @@ struct AlbumCard: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(store.displayAlbum(track.album)).font(.system(size: 12, weight: .semibold))
                     HStack {
-                        Text(store.displayArtist(track.artist)).font(.system(size: 10)).foregroundStyle(.secondary)
+                        Text(store.displayArtist(AlbumIdentity.artist(track))).font(.system(size: 10)).foregroundStyle(
+                            .secondary)
                         Spacer(minLength: 2)
                         Text(track.year).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
                     }

@@ -321,7 +321,7 @@ final class LibraryStore: NSObject, ObservableObject {
                 return x.localizedStandardCompare(y) == .orderedAscending
             }
         }
-        let cache = LibraryQueryCache(tracks: value)
+        let cache = LibraryQueryCache(tracks: value, albumSort: sort)
         queryCache = cache
         lastQueryKey = key
         return cache

@@ -312,7 +312,7 @@ final class HardeningTests: XCTestCase {
         }
         let values = [
             "TITLE=Prueba única", "ARTIST=Artista", "ALBUM=Álbum", "GENRE=Ambient", "DATE=1999-04-12",
-            "LYRICS=[00:01.00]Hola",
+            "LYRICS=[00:01.00]Hola", "ALBUM ARTIST=Varios artistas",
         ]
         var comments = number(0, little: true) + number(values.count, little: true)
         for value in values {
@@ -351,6 +351,7 @@ final class HardeningTests: XCTestCase {
         let track = try await MetadataReader.read(url)
         XCTAssertEqual(track.title, "Prueba única")
         XCTAssertEqual(track.artist, "Artista")
+        XCTAssertEqual(track.albumArtist, "Varios artistas")
         XCTAssertEqual(track.album, "Álbum")
         XCTAssertEqual(track.genre, "Ambient")
         XCTAssertEqual(track.year, "1999")

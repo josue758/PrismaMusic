@@ -71,6 +71,37 @@ final class LibraryPresentationTests: XCTestCase {
         XCTAssertEqual(ArtistCollection(name: "Artist", library: [a, collaboration, guestAlbum]).albums.count, 2)
     }
     @MainActor
+    func testAlbumGridHonorsSortAndGroupsCompilationByAlbumArtist() throws {
+        let directory = try root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = LibraryStore(directory: directory, autoStart: false)
+        var first = track("a.flac", "First", 1)
+        first.album = "Anthology"
+        first.artist = "Björk"
+        first.albumArtist = "Various Artists"
+        var second = track("b.flac", "Second", 2)
+        second.album = first.album
+        second.artist = "Radiohead"
+        second.albumArtist = "Various Artists"
+        var early = track("c.flac", "Third")
+        early.album = "Zebra"
+        early.year = "2001"
+        var undated = track("d.flac", "Fourth")
+        undated.album = "Middle"
+        undated.year = ""
+        store.tracks = [second, early, undated, first]
+        store.navigateTo("albums")
+        XCTAssertEqual(store.groupedAlbums.compactMap { $0.value.first?.album }, ["Anthology", "Middle", "Zebra"])
+        store.sort = "year"
+        XCTAssertEqual(store.groupedAlbums.compactMap { $0.value.first?.album }, ["Zebra", "Anthology", "Middle"])
+        store.sort = "artist"
+        XCTAssertEqual(store.groupedAlbums.compactMap { $0.value.first?.album }, ["Middle", "Zebra", "Anthology"])
+        store.openAlbum(second)
+        let album = try XCTUnwrap(store.selectedAlbumID.flatMap(store.albumCollection))
+        XCTAssertEqual(album.artist, "Various Artists")
+        XCTAssertEqual(album.tracks.map(\.id), [first.id, second.id])
+    }
+    @MainActor
     func testAlbumNavigationAndOrderReadPreserveUserState() async throws {
         let directory = try root()
         defer { try? FileManager.default.removeItem(at: directory) }

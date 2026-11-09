@@ -26,7 +26,7 @@ struct ScannedTrackResult: Sendable {
             try Task.checkCancellation()
             var modified: Date?
             if !force, let cached, let oldDate = cached.modified, cached.format != nil, cached.sourceIsNetwork != nil,
-                cached.bitrate != nil, !cached.isLossless || cached.bitDepth != nil
+                cached.bitrate != nil, cached.albumArtist != nil, !cached.isLossless || cached.bitDepth != nil
             {
                 var info = stat()
                 let result = file.url.withUnsafeFileSystemRepresentation { path in

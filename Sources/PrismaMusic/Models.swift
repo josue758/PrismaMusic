@@ -34,6 +34,8 @@ struct Track: Identifiable, Codable, Equatable, Sendable {
     var trackNumber: Int? = nil
     var discNumber: Int? = nil
     var albumOrderRead: Bool? = nil
+    // Nil marks an older library entry. An empty value means the file had no album artist.
+    var albumArtist: String? = nil
     var codecLabel: String {
         format?.components(separatedBy: "·").last?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             ?? url.pathExtension.uppercased()
@@ -227,7 +229,8 @@ enum MetadataReader {
                 ?? (try? url.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal).map { !$0 },
             trackNumber: embeddedTrack ?? AlbumOrdering.number(value(["id3/TRCK", "trackNumber", "itsk/trkn"])),
             discNumber: embeddedDisc ?? AlbumOrdering.number(value(["id3/TPOS", "discNumber", "itsk/disk"])),
-            albumOrderRead: true)
+            albumOrderRead: true,
+            albumArtist: value(["albumArtist", "id3/TPE2", "itsk/aART", "mdta/com.apple.quicktime.albumArtist"]) ?? "")
     }
 }
 func clockText(_ seconds: Double) -> String {

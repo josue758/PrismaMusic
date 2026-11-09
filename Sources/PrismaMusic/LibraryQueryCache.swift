@@ -13,9 +13,28 @@ final class LibraryQueryCache {
     let tracks: [Track]
     lazy var duration: Double = tracks.reduce(0) { $0 + $1.duration }
     let indices: [String: Int]
-    lazy var albums: [(key: String, value: [Track])] = Dictionary(grouping: tracks) { AlbumIdentity.key($0) }.sorted {
-        $0.key < $1.key
-    }
+    private let albumSort: String
+    lazy var albums: [(key: String, value: [Track])] = {
+        let groups = Dictionary(grouping: tracks, by: AlbumIdentity.key)
+        let entries = groups.map { key, tracks in
+            let title = tracks[0].album
+            let artist = AlbumIdentity.artist(tracks[0])
+            let year = tracks.map(\.year).filter { !$0.isEmpty }.min() ?? ""
+            return (key: key, value: tracks, title: title, artist: artist, year: year)
+        }
+        return entries.sorted { a, b in
+            if albumSort == "year", a.year != b.year {
+                if a.year.isEmpty || b.year.isEmpty { return !a.year.isEmpty }
+                return a.year.localizedStandardCompare(b.year) == .orderedAscending
+            }
+            if albumSort == "artist" {
+                let comparison = a.artist.localizedStandardCompare(b.artist)
+                if comparison != .orderedSame { return comparison == .orderedAscending }
+            }
+            let comparison = a.title.localizedStandardCompare(b.title)
+            return comparison == .orderedSame ? a.key < b.key : comparison == .orderedAscending
+        }.map { ($0.key, $0.value) }
+    }()
     lazy var artists: [(key: String, value: [Track])] = {
         var groups: [String: [Track]] = [:]
         for track in tracks {
@@ -23,8 +42,9 @@ final class LibraryQueryCache {
         }
         return groups.sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
     }()
-    init(tracks: [Track]) {
+    init(tracks: [Track], albumSort: String = "album") {
         self.tracks = tracks
+        self.albumSort = albumSort
         indices = Dictionary(
             tracks.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
     }

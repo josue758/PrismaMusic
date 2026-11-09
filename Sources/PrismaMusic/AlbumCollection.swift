@@ -33,7 +33,12 @@ enum AlbumOrdering {
     }
 }
 enum AlbumIdentity {
-    static func artist(_ track: Track) -> String { ArtistIdentity.names(track.artist).first ?? track.artist }
+    static func artist(_ track: Track) -> String {
+        if let albumArtist = track.albumArtist?.trimmingCharacters(in: .whitespacesAndNewlines), !albumArtist.isEmpty {
+            return albumArtist
+        }
+        return ArtistIdentity.names(track.artist).first ?? track.artist
+    }
     static func key(_ track: Track) -> String { artist(track) + "\u{1f}" + track.album }
 }
 struct AlbumCollection {

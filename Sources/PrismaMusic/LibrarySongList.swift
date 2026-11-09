@@ -6,6 +6,8 @@ struct LibrarySongList: View {
     var showAlbum = true
     var subtitleAlbum = false
     var number: (Track) -> Int
+    @State private var hasColumnSpace = true
+    private var showsAlbumColumns: Bool { showAlbum && hasColumnSpace }
     @State private var selectedID: String?
     @State private var editing: Track?
     @FocusState private var keyboardFocused: Bool
@@ -16,7 +18,7 @@ struct LibrarySongList: View {
                     Text("#").frame(width: 22)
                     Color.clear.frame(width: 40, height: 1)
                     Text(store.t("title")).frame(maxWidth: .infinity, alignment: .leading)
-                    if showAlbum {
+                    if showsAlbumColumns {
                         Text(store.t("album")).frame(width: 140, alignment: .leading)
                         Text(store.t("year")).frame(width: 38)
                     }
@@ -26,6 +28,11 @@ struct LibrarySongList: View {
                     .bottom, 9
                 ).accessibilityHidden(true)
                 ForEach(tracks) { track in row(track) }
+            }
+            .onGeometryChange(for: Bool.self) { proxy in
+                proxy.size.width >= 600
+            } action: {
+                hasColumnSpace = $0
             }
             .focusable().focused($keyboardFocused).focusEffectDisabled()
             .onMoveCommand { direction in
@@ -62,7 +69,7 @@ struct LibrarySongList: View {
             }.buttonStyle(.plain).help(store.t("play")).accessibilityLabel(store.t("play") + ": " + track.title)
             ArtworkView(track: track).frame(width: 40, height: 40)
             songTitle(track)
-            if showAlbum {
+            if showsAlbumColumns {
                 Text(store.displayAlbum(track.album)).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                     .frame(width: 140, alignment: .leading)
                 Text(track.year).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary).frame(
@@ -108,13 +115,17 @@ struct LibrarySongList: View {
             HStack(spacing: 7) {
                 Text(track.title).font(.system(size: 12, weight: .medium)).foregroundStyle(
                     store.currentID == track.id ? store.effectiveAccent : .primary)
-                if store.preferences.showQuality && showAlbum { QualityBadge(track: track) }
+                if store.preferences.showQuality && showsAlbumColumns { QualityBadge(track: track) }
             }
             Text(
                 (subtitleAlbum ? store.displayAlbum(track.album) : store.displayArtist(track.artist))
                     + (store.preferences.showQuality && !track.qualitySummary.isEmpty
                         ? " · " + track.qualitySummary : "")
             ).font(.system(size: 9)).foregroundStyle(.secondary)
+            if showAlbum && !showsAlbumColumns {
+                Text([store.displayAlbum(track.album), track.year].filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
         }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
     }
     private func moveSelection(_ direction: Int, proxy: ScrollViewProxy) -> KeyPress.Result {
