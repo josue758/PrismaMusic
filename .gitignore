@@ -14,3 +14,10 @@ scan-report.json
 artist-photo-choices.json
 
 artifacts/
+
+# Signing assets and local credential files
+*.p12
+*.p8
+*.keychain-db
+.env
+.env.*

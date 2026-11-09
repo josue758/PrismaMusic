@@ -819,7 +819,7 @@ final class LibraryStore: NSObject, ObservableObject {
                     track.artworkURL = old.artworkURL
                     track.artworkCredit = old.artworkCredit
                 }
-                if track.lyrics == nil {
+                if !track.hasLyrics {
                     track.lyrics = old.lyrics
                     track.lyricsCredit = old.lyricsCredit
                 }
@@ -1081,7 +1081,7 @@ final class LibraryStore: NSObject, ObservableObject {
                 self.updateNowPlaying()
                 self.rememberPlayback()
                 if self.online && !track.isDemo && !self.attempted.contains(track.id)
-                    && (track.lyrics == nil || !track.hasArtwork)
+                    && (!track.hasLyrics || !track.hasArtwork)
                 {
                     self.attempted.insert(track.id)
                     self.enrichmentTask?.cancel()
@@ -1451,7 +1451,15 @@ final class LibraryStore: NSObject, ObservableObject {
         panel?.collectionBehavior =
             preferences.miniAllSpaces ? [.canJoinAllSpaces, .fullScreenAuxiliary] : [.fullScreenAuxiliary]
     }
-    func fullScreen() { NSApp.windows.first(where: { !($0 is NSPanel) && $0.isVisible })?.toggleFullScreen(nil) }
+    private let listeningWindow = ListeningWindowController()
+    func fullScreen() {
+        if let window = listeningWindow.window, NSApp.keyWindow === window {
+            listeningWindow.close()
+        } else {
+            listeningWindow.show(store: self)
+        }
+    }
+    func closeListeningWindow() { listeningWindow.close() }
     func enrich(_ track: Track) async {
         guard !fetching else { return }
         fetching = true
@@ -1468,7 +1476,7 @@ final class LibraryStore: NSObject, ObservableObject {
             } catch { if !Task.isCancelled { hadError = true } }
         }
         guard !Task.isCancelled else { return }
-        if track.lyrics == nil && preferences.autoLyrics {
+        if !track.hasLyrics && preferences.autoLyrics {
             do { lyrics = try await OnlineMetadata.lyrics(for: track) } catch {
                 if !Task.isCancelled { hadError = true }
             }
@@ -1484,7 +1492,7 @@ final class LibraryStore: NSObject, ObservableObject {
                     if let index = tracks.firstIndex(where: { $0.id == value.id }) { tracks[index] = value }
                 } catch { hadError = true }
             }
-            if let lyrics, let index = tracks.firstIndex(where: { $0.id == track.id }), tracks[index].lyrics == nil {
+            if let lyrics, let index = tracks.firstIndex(where: { $0.id == track.id }), !tracks[index].hasLyrics {
                 tracks[index].lyrics = lyrics
                 tracks[index].lyricsCredit = "LRCLIB"
             }

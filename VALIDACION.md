@@ -1,4 +1,24 @@
-# Validación de Prisma Music 0.10.0
+# Validación de Prisma Music 0.11.0
+
+8 de noviembre de 2026. **80 pruebas sin omisiones ni fallos**, con NAS SMB, inventario independiente, proveedores online, dispositivos Core Audio y modelos de traducción instalados. Se volvieron a encontrar los 7.854 archivos del inventario sin errores de exploración. La ejecución ordinaria pasa 80 pruebas con diez omisiones intencionales de integraciones externas.
+
+## Sala de escucha y letras
+
+En la app instalada se comprobó que el botón de pantalla completa abre una ventana independiente con carátula, colores, controles y letras. Se verificó el regreso a la ventana de biblioteca mediante el atajo de pantalla completa; el volumen de la prueba se restauró a su valor anterior. No se crea un segundo motor de audio ni otro temporizador de medición.
+
+La búsqueda real recuperó y guardó la letra original de una canción japonesa cuyo título tenía Unicode descompuesto y la etiqueta Album EDIT. La ficha mostró la atribución LRCLIB. Se probaron también búsquedas reales de catálogo japonés y portugués, con controles de artista, título, versión y duración. El catálogo no garantiza disponibilidad para todas las canciones ni una revisión humana de sus textos.
+
+Se verificaron modelos reales inglés → español y japonés → español, y un lote de frases propias en japonés/inglés. La interfaz instalada mostró original y traducción española juntos para una canción japonesa con estribillo inglés. La detección considera caracteres japoneses para que ese estribillo no oculte el idioma principal. Si el idioma detectado es incorrecto, se puede corregir en el menú. Los modelos instalados usan una sesión offline; la descarga se solicita explícitamente mediante la interfaz de Apple cuando hace falta.
+
+Las traducciones son automáticas, pueden perder matices y no reemplazan la letra original ni sus tiempos. La caché en memoria está limitada por coste y número de canciones. Se prueban respuestas fuera de orden, descarte de identificadores/textos incorrectos, cachés separadas por idioma/contenido, límites sin truncar el original y migración del ajuste.
+
+## Distribución
+
+El instalador pasó compilación release, firma ad hoc, coincidencia de versión y verificación del DMG. La ruta opcional Developer ID/notarización está preparada con Hardened Runtime, timestamp, tickets y Gatekeeper. Se comprobó que rechaza identidad ausente, certificado de desarrollo e identidad de distribución inexistente antes de compilar o subir archivos. **No se ha completado ni validado una notarización real**: falta la membresía y un certificado Developer ID Application. La beta sigue firmada ad hoc.
+
+Los detalles de infraestructura, muestras privadas de diagnóstico, inventario y registros locales permanecen fuera del repositorio. Las ejecuciones con componentes del sistema siguen emitiendo los mensajes de Contactos descritos en la versión anterior, sin fallos de pruebas.
+
+## Validación previa de Prisma Music 0.10.0
 
 8 de noviembre de 2026. **66 pruebas, sin omisiones ni fallos**, con internet, NAS SMB, inventario independiente y dispositivos Core Audio activados. El recorrido encontró los 7.854 archivos esperados, sin errores de exploración. Las 66 pruebas locales también pasan con seis omisiones intencionales al no habilitar recursos externos.
 

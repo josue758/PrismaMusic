@@ -36,6 +36,14 @@ Faces influence portrait framing; Wikimedia links and license metadata remain vi
 
 Song lists have a keyboard focus state independent of playback. Arrow keys select and scroll without playing; Return starts the selection. Search has a separate focus request, and modified arrow keys are left for command shortcuts. VoiceOver actions expose playback and album navigation; a full screen-reader usability audit remains future work.
 
+## Independent listening window and translation
+
+`ListeningWindowController` owns one additional native window and returns focus to the library on close. It shares the existing store, transport, output selection and artwork cache; it creates no second audio engine or meter timer. The library keeps its navigation and filters.
+
+`LyricDocument` preserves original timed/plain entries and deduplicates only translation requests. A translation response must match both its client identifier and source text. Each job captures its document, source language and request identity, so late responses cannot overwrite a different song. Batches of 32 use Apple's on-device Translation framework, with an explicit system download action for missing models. The original remains visible on unsupported languages, failure or oversized documents.
+
+Translations live in a bounded memory cache, keyed by lyric-content hash, source and Spanish target. They do not modify files or library metadata. Original timestamps drive highlighting and seeking; translations never invent timing. This is machine translation, with known limitations for poetry and multilingual lyrics.
+
 ## Reproducible distribution
 
 `Resources/Version.plist` is the single source of version/build metadata for the UI, request user agent, app bundle and DMG filename. `scripts/verify.sh` runs the tests, builds the app/DMG, verifies the ad hoc signature and checks image integrity. CI uses no personal library, credentials or optional integration environment variables.

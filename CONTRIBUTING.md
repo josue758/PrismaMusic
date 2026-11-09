@@ -10,19 +10,22 @@ Use `./scripts/format.sh` for the repository’s Swift formatting (the formatter
 
 ## Optional integration checks
 
-Ordinary tests skip six checks that need external resources. Enable only the resources you have:
+Ordinary tests skip ten checks that need external resources. Enable only the resources you have:
 
 ```bash
 PRISMA_LIVE_NETWORK=1 swift test
 PRISMA_NAS_FILE="/Volumes/YourNAS/Music/sample.flac" swift test
 PRISMA_AUDIO_HARDWARE=1 swift test
+PRISMA_TRANSLATION=1 swift test
 ```
+
+`PRISMA_TRANSLATION` checks English/Spanish and Japanese/Spanish only when the Apple models are already installed; tests never download models.
 
 `PRISMA_NAS_INVENTORY` accepts a private JSON file with `root` (absolute directory) and `files` (absolute file paths). Its integration test compares the complete native traversal with that independent reference. Do not commit the inventory, real library exports, credentials, device UIDs or private logs. NAS decoding tests render offline rather than playing through speakers.
 
 ## Releases
 
-Update version/build in `Sources/PrismaMusic/Resources/Version.plist`, document behavior and validation limits, and run the verification script. Build a source archive from the release tag, calculate SHA-256 checksums and attach the DMG, archive and checksums to a GitHub release. Verify uploaded asset digests. This workflow does not supply Developer ID signing or notarization.
+Update version/build in `Sources/PrismaMusic/Resources/Version.plist`, document behavior and validation limits, and run the verification script. Build a source archive from the release tag, calculate SHA-256 checksums and attach the DMG, archive and checksums to a GitHub release. Verify uploaded asset digests. The default workflow uses ad hoc signing. The optional [Developer ID/notarization workflow](docs/NOTARIZATION.md) needs locally supplied membership, certificates and Keychain credentials; no real notarization has been performed yet.
 
 ## Reports
 

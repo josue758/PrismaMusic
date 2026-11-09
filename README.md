@@ -5,21 +5,24 @@
 
 A native macOS music player for local collections and mounted NAS libraries. Built with Swift, SwiftUI, AVAudioEngine and Core Audio, with an artwork-driven Liquid Glass interface.
 
-**Apple Silicon · macOS 26+ · Beta 0.10.0**
+**Apple Silicon · macOS 26+ · Beta 0.11.0**
 
-[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.10.0) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md)
+[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.11.0) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md)
 
 ## Try it
 
 Download the DMG, drag **Prisma Music** to Applications, and open it. The welcome flow lets you choose Spanish, English or Portuguese, appearance and a music folder. Three redistributable instrumental demos are included; a NAS is optional.
 
-The beta is ad hoc signed. It does not yet have Apple Developer ID signing or notarization. No account or subscription is required. Updates preserve the library and preferences.
+The beta is ad hoc signed. It does not yet have Apple Developer ID signing or notarization. A [local signing/notarization workflow](docs/NOTARIZATION.md) is prepared and requires the owner’s Apple Developer membership and signing assets. No account or subscription is required. Updates preserve the library and preferences.
 
 ## Listening and browsing
 
 - Browse songs, albums and artists; filter by artist, genre and year. Album pages show their songs with disc/track ordering when the files provide it.
 - Inspect the real codec/container, bitrate estimate, file size, sample rate, channel count and bit depth.
 - Choose a Core Audio output or DAC. Direct output bypasses application DSP and requests the source sample rate; exclusive access is optional and device dependent.
+- Open an independent full-screen listening window with artwork, transport and synchronized lyrics. Closing it returns to the unchanged library.
+- Look up original lyrics across scripts with canonical Unicode normalization, search fallbacks and strict artist/duration/performance checks.
+- Show Apple on-device Spanish translation beneath the original lyrics. Supported language models can be downloaded with the system prompt; unsupported languages keep the original.
 - Use the native AirPlay picker, a floating mini player, lyrics, a visualizer, playlists, favorites and listening history.
 - Discover attributed artist photographs and biographies from Wikipedia/Wikimedia, choose a portrait and keep that choice locally.
 - Customize artwork-derived colors, glass, motion, EQ and listening behavior. Reduced motion and reduced transparency are respected.
@@ -67,7 +70,7 @@ To run the same offline validation as CI, including a release build, signature c
 ./scripts/verify.sh
 ```
 
-**66 tests** currently cover persistence and migration, scan cancellation, metadata parsing, playback races, offline DSP, direct PCM output, album identity, keyboard selection and artist-photo data. Six integration tests are opt-in; CI skips them so it does not require your network, NAS or audio hardware. A local integration run with all resources enabled passed all 66 tests without skips; see [validation](VALIDACION.md) for the exact scope.
+**80 tests** currently cover persistence and migration, scan cancellation, metadata parsing, playback races, offline DSP, direct PCM output, album identity, keyboard selection and artist-photo data. Ten integration tests are opt-in; CI skips them so it does not require your network, NAS or audio hardware. All 80 tests passed locally with external resources enabled, including real Japanese/Portuguese lyric lookups and native English/Japanese translation; see [validation](VALIDACION.md) for the exact scope.
 
 GitHub Actions runs this check on the standard [macOS 26 Apple Silicon runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), with read-only repository permissions and actions pinned to commit IDs. Each run retains its log and installer for 14 days.
 

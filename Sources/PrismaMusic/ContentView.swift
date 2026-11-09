@@ -91,7 +91,8 @@ struct ContentView: View {
         .onChange(of: store.searchFocusRequest) { _, _ in searchFocused = true }
         .onChange(of: store.search) { _, text in
             if !text.isEmpty
-                && (store.selectedAlbumID != nil || store.selectedArtist != nil || store.showImmersive
+                && (store.section == "home" || store.selectedAlbumID != nil || store.selectedArtist != nil
+                    || store.showImmersive
                     || store.showVisualizer)
             {
                 store.selectedAlbumID = nil

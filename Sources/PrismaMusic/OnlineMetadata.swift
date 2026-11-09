@@ -55,18 +55,28 @@ enum OnlineMetadata {
         return status == 200 ? (image, match.collectionViewUrl ?? "iTunes") : nil
     }
     static func lyrics(for track: Track) async throws -> String? {
-        guard track.artist != "—" else { return nil }
-        var items = [
-            "track_name": track.title, "artist_name": track.artist, "duration": String(Int(track.duration.rounded())),
-        ]
-        if track.album != "—" { items["album_name"] = track.album }
+        guard track.artist != "—", track.duration.isFinite, track.duration > 0 else { return nil }
+        let title = track.title.precomposedStringWithCanonicalMapping
+        let artist = (ArtistIdentity.names(track.artist).first ?? track.artist).precomposedStringWithCanonicalMapping
+        var items = ["track_name": title, "artist_name": artist, "duration": String(Int(track.duration.rounded()))]
+        if track.album != "—" { items["album_name"] = track.album.precomposedStringWithCanonicalMapping }
         let (data, code) = try await request(url("https://lrclib.net/api/get", items))
-        guard code == 200 else { return nil }
-        struct Result: Decodable {
-            var plainLyrics: String?
-            var syncedLyrics: String?
+        if code == 200 {
+            let candidate = try JSONDecoder().decode(LyricsCandidate.self, from: data)
+            if let match = LyricsMatching.best([candidate], for: track) { return match.text }
         }
-        let result = try JSONDecoder().decode(Result.self, from: data)
-        return result.syncedLyrics?.isEmpty == false ? result.syncedLyrics : result.plainLyrics
+        // Search without album metadata, then verify identity/version/duration locally.
+        var searches = [["track_name": title, "artist_name": artist], ["track_name": title]]
+        let base = LyricsMatching.baseTitle(title)
+        if base != title { searches.append(["track_name": base, "artist_name": artist]) }
+        for query in searches {
+            try Task.checkCancellation()
+            try await Task.sleep(for: .milliseconds(350))
+            let (data, status) = try await request(url("https://lrclib.net/api/search", query))
+            guard status == 200 else { continue }
+            let candidates = try JSONDecoder().decode([LyricsCandidate].self, from: data)
+            if let match = LyricsMatching.best(candidates, for: track) { return match.text }
+        }
+        return nil
     }
 }

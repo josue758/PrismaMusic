@@ -2,6 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 BUILD_MODE="${1:-release}"
+source scripts/signing-config.sh
+if [ -n "${PRISMA_SIGNING_IDENTITY:-}" ]; then prisma_signing_preflight; fi
 VERSION_FILE="Sources/PrismaMusic/Resources/Version.plist"
 PRISMA_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :version' "$VERSION_FILE")"
 PRISMA_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :build' "$VERSION_FILE")"
@@ -32,5 +34,15 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>CFBundleDocumentTypes</key><array><dict><key>CFBundleTypeName</key><string>Audio</string><key>CFBundleTypeRole</key><string>Viewer</string><key>LSHandlerRank</key><string>Alternate</string><key>LSItemContentTypes</key><array><string>public.audio</string></array></dict></array>
 </dict></plist>
 PLIST
-codesign --force --deep --sign - "$APP"
+if [ -n "${PRISMA_SIGNING_IDENTITY:-}" ]; then
+  # This app currently contains one executable and a data-only resource bundle.
+  # New frameworks or plug-ins need explicit inside-out signing before this step.
+  if [ -d "$APP/Contents/Frameworks" ] || [ -d "$APP/Contents/PlugIns" ]; then
+    echo 'Nested executable bundles require an explicit signing plan.' >&2; exit 1
+  fi
+  codesign --force --options runtime --timestamp --sign "$PRISMA_SIGNING_IDENTITY" "$APP"
+  prisma_verify_developer_app "$APP"
+else
+  codesign --force --sign - "$APP"
+fi
 echo "Built: $PWD/$APP"

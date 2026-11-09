@@ -481,6 +481,8 @@ struct SettingsView: View {
                 ).foregroundStyle(store.effectiveAccent).frame(maxWidth: .infinity, alignment: .leading).padding(
                     .vertical, 8)
                 toggle("autoScroll", $store.preferences.autoScrollLyrics)
+                toggle("bilingualLyrics", $store.preferences.translateLyrics)
+                Text(store.t("translationDownloadNote")).font(.caption2).foregroundStyle(.secondary)
                 HStack {
                     Text(store.t("lyricOffset")).font(.caption)
                     Slider(value: $store.preferences.lyricsOffset, in: -10...10, step: 0.1)

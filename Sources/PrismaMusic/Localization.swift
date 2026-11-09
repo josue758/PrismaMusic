@@ -28,6 +28,54 @@ enum Accent: String, CaseIterable, Identifiable {
     }
 }
 let translations: [String: [String]] = [
+    "detectedLanguage": ["Idioma detectado", "Detected language", "Idioma detectado"],
+    "lyricsShown": ["Letras visibles", "Lyrics visible", "Letras visíveis"],
+    "retryTranslation": ["Reintentar traducción", "Retry translation", "Tentar tradução novamente"],
+    "listeningStage": ["Sala de escucha", "Listening room", "Sala de escuta"],
+    "bilingualLyrics": ["Español junto al original", "Spanish alongside the original", "Espanhol junto ao original"],
+    "localLyrics": ["Archivo local", "Local file", "Arquivo local"],
+    "detectLanguage": ["Detectar idioma", "Detect language", "Detectar idioma"],
+    "downloadTranslation": [
+        "Activar traducción de este idioma", "Enable translation for this language", "Ativar tradução deste idioma",
+    ],
+    "translationDownloadNote": [
+        "macOS puede pedir descargar los idiomas. La traducción se procesa en este Mac.",
+        "macOS may ask to download languages. Translation is processed on this Mac.",
+        "O macOS pode pedir o download dos idiomas. A tradução é processada neste Mac.",
+    ],
+    "translatingLyrics": ["Traduciendo…", "Translating…", "Traduzindo…"],
+    "machineTranslationNote": [
+        "Traducción automática de Apple · Español. Puede perder matices; se conserva el original.",
+        "Apple machine translation · Spanish. Nuances may be lost; the original is preserved.",
+        "Tradução automática da Apple · Espanhol. Pode perder nuances; o original é preservado.",
+    ],
+    "translationTooLong": [
+        "Esta letra supera el límite de traducción. Se muestra el original completo.",
+        "These lyrics exceed the translation limit. The complete original is shown.",
+        "A letra excede o limite de tradução. O original completo é exibido.",
+    ],
+    "translationChooseLanguage": [
+        "No se pudo detectar el idioma. Elígelo en el menú.",
+        "The language could not be detected. Choose it from the menu.",
+        "Não foi possível detectar o idioma. Escolha no menu.",
+    ],
+    "lyricsAlreadySpanish": [
+        "La letra ya está en español.", "These lyrics are already in Spanish.", "A letra já está em espanhol.",
+    ],
+    "translationUnsupported": [
+        "macOS no admite esta combinación de idiomas. El original sigue disponible.",
+        "macOS does not support this language pair. The original remains available.",
+        "O macOS não suporta esta combinação de idiomas. O original continua disponível.",
+    ],
+    "translationIncomplete": [
+        "No se pudieron traducir todas las líneas. Se conserva cada línea original.",
+        "Some lines could not be translated. Every original line is preserved.",
+        "Algumas linhas não puderam ser traduzidas. Cada linha original foi preservada.",
+    ],
+    "translationFailed": [
+        "No se pudo traducir la letra.", "The lyrics could not be translated.", "Não foi possível traduzir a letra.",
+    ],
+    "seekLyric": ["Ir a este verso", "Seek to this line", "Ir a este verso"],
     "findMusic": ["Buscar música", "Find music", "Buscar música"],
     "clearSearch": ["Borrar búsqueda", "Clear search", "Limpar busca"],
     "listKeyboardHelp": [

@@ -1,5 +1,15 @@
 # Cambios
 
+## 0.11.0 — 8 de noviembre de 2026
+
+Pantalla completa abre una ventana de escucha independiente con carátula, controles compartidos y letras. Volver o Esc la cierra y conserva la biblioteca. Traducción nativa de Apple al español bajo cada línea original, con detección/corrección de idioma, modelos instalables, errores visibles y caché limitada. Letras sincronizadas conservan los tiempos y permiten saltar a un verso; se respetan Reducir movimiento y la preferencia de desplazamiento automático.
+
+Búsqueda de letras con Unicode canónico, acentos latinos y marcas japonesas preservadas, alternativas de búsqueda sin álbum y validación de artista, duración y versión. Los campos vacíos cuentan como letras faltantes, sin sobrescribir letras locales válidas. Pruebas reales de catálogo japonés/portugués.
+
+Catorce pruebas nuevas de documentos de letras, traducciones fuera de orden, límites, caché, migración y modelos nativos inglés/japonés. Se contempla el japonés con estribillos ingleses y se reutilizan los modelos ya instalados sin abrir una descarga implícita.
+
+Flujo local de firma Developer ID, Hardened Runtime, timestamp, notarización de app/DMG, tickets y Gatekeeper. Rechaza certificados de desarrollo y credenciales ausentes. Está preparado pero no se ha ejecutado con una identidad Developer ID: la beta publicada sigue con firma ad hoc porque falta la membresía y sus certificados.
+
 ## 0.10.0 — 8 de noviembre de 2026
 
 Navegación por teclado en listas compartidas, selección sin reproducción automática, Intro para reproducir, ⌘F para buscar y Esc para salir. Acciones y selección expuestas a accesibilidad. ⌘I conserva la canción inspeccionada.

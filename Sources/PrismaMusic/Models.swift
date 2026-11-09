@@ -17,6 +17,7 @@ struct Track: Identifiable, Codable, Equatable, Sendable {
     var artworkData: Data? { artwork ?? artworkURL.flatMap { ArtworkCache.shared.data(at: $0) } }
     var artworkIdentity: String { artworkURL?.absoluteString ?? (id + ":" + String(artwork?.count ?? 0)) }
     var lyrics: String?
+    var hasLyrics: Bool { lyrics?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
     var artworkCredit: String?
     var lyricsCredit: String?
     var favorite = false

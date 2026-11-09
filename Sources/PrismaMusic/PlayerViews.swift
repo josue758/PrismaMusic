@@ -386,78 +386,14 @@ struct LyricsView: View {
                     store.showLyrics = false
                 } label: {
                     Image(systemName: "xmark")
-                }.buttonStyle(.plain)
+                }.buttonStyle(.plain).help(store.t("close"))
             }
             if let track = store.current {
-                ArtworkView(track: track).aspectRatio(1.6, contentMode: .fit)
-                Text(track.title).font(.title3.bold())
-                Text(track.artist).font(.caption).foregroundStyle(.secondary)
-                if let lyrics = track.lyrics, !lyrics.isEmpty {
-                    let lines = LyricLine.parse(lyrics)
-                    if lines.isEmpty {
-                        ScrollView {
-                            Text(lyrics).font(
-                                .system(size: store.preferences.lyricsFontSize, weight: .medium, design: .rounded)
-                            ).lineSpacing(9).frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    } else {
-                        let active = lines.last { $0.time <= store.position + store.preferences.lyricsOffset }?.id
-                        ScrollViewReader { proxy in
-                            ScrollView {
-                                VStack(alignment: .leading, spacing: 20) {
-                                    ForEach(lines) { line in
-                                        Button {
-                                            store.seek(line.time)
-                                        } label: {
-                                            Text(line.text.isEmpty ? "♪" : line.text).font(
-                                                .system(
-                                                    size: store.preferences.lyricsFontSize, weight: .semibold,
-                                                    design: .rounded)
-                                            ).foregroundStyle(
-                                                line.id == active
-                                                    ? store.effectiveAccent : Color.secondary.opacity(0.65)
-                                            ).frame(maxWidth: .infinity, alignment: .leading)
-                                        }.buttonStyle(.plain).id(line.id)
-                                    }
-                                }.padding(.vertical, 12)
-                            }
-                            .onChange(of: active) { _, value in
-                                if store.preferences.autoScrollLyrics {
-                                    withAnimation { proxy.scrollTo(value, anchor: .center) }
-                                }
-                            }
-                        }
-                    }
-                    HStack {
-                        Text(track.lyricsCredit ?? "Archivo local")
-                        Spacer()
-                        if track.lyricsCredit == "LRCLIB" {
-                            Link("LRCLIB ↗", destination: URL(string: "https://lrclib.net")!)
-                        }
-                    }.font(.system(size: 9)).foregroundStyle(.tertiary)
-                } else {
-                    Spacer()
-                    Text(store.t("noLyrics")).font(.callout).foregroundStyle(.secondary)
-                    Spacer()
-                }
-                if !track.isDemo {
-                    Button {
-                        Task { await store.enrich(track) }
-                    } label: {
-                        if store.fetching {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Label(store.t("fetch"), systemImage: "sparkle.magnifyingglass")
-                        }
-                    }.disabled(store.fetching).font(.caption)
-                }
-                if let credit = track.artworkCredit, let url = URL(string: credit), url.scheme == "https" {
-                    Link("Artwork · iTunes ↗", destination: url).font(.system(size: 9)).foregroundStyle(.secondary)
-                }
+                Text(track.title).font(.title3.bold()).lineLimit(2)
+                Text(store.displayArtist(track.artist)).font(.caption).foregroundStyle(.secondary)
+                BilingualLyricsView(track: track).frame(maxHeight: .infinity)
             } else {
-                Spacer()
-                Text(store.t("choose")).foregroundStyle(.secondary)
-                Spacer()
+                ContentUnavailableView { Label(store.t("choose"), systemImage: "music.note") }
             }
         }.padding(20).padding(.top, 5)
     }

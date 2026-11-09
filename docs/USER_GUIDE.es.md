@@ -1,19 +1,31 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.10.0** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.11.0** para probar e iterar.
 
-[Descargar la versión 0.10.0 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.10.0) · [Ver el código](https://github.com/josue758/PrismaMusic)
+[Descargar la versión 0.11.0 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.11.0) · [Ver el código](https://github.com/josue758/PrismaMusic)
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.10.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.11.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación y sigue la bienvenida para elegir idioma, biblioteca y estilo. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
 
-En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.10. La actualización conserva tus datos.
+En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.11. La actualización conserva tus datos.
+
+## Novedades de la versión 0.11
+
+El botón de pantalla completa abre una sala de escucha en otra ventana y otro espacio de macOS, con carátula, letra y controles del mismo reproductor. Volver a la biblioteca o Esc cierran esa ventana; no cambian tu filtro ni posición de navegación.
+
+**Español junto al original** muestra traducciones automáticas bajo cada verso. Apple procesa la traducción en el Mac. Inglés y japonés se probaron con los modelos instalados; otros idiomas dependen de la compatibilidad de macOS. Si faltan modelos, **Activar traducción de este idioma** permite solicitar su descarga en el diálogo del sistema. El menú permite corregir el idioma detectado. Si la traducción falla, el original permanece visible. Las traducciones no sobrescriben etiquetas ni letras del archivo y se conservan solo en una caché de memoria limitada. Se puede desactivar en Letras o Ajustes → Letras y visualizador.
+
+La búsqueda usa LRCLIB para letras originales en distintos idiomas. Normaliza Unicode japonés y acentos portugueses, prueba consultas sin el álbum y comprueba título, artista, duración y marcas de directo/remix. No sustituye una letra local válida y no garantiza que el catálogo tenga todas las canciones.
+
+La traducción automática puede perder matices. En letras que mezclan idiomas se puede seleccionar la lengua principal; no se promete una traducción correcta de cada lengua dentro de una misma canción.
+
+La firma y notarización requieren una membresía Apple Developer y un certificado Developer ID Application. El [flujo preparado](NOTARIZATION.md) no se ha ejecutado con un certificado real; esta beta sigue firmada ad hoc.
 
 ## Novedades de la versión 0.10
 
@@ -167,7 +179,7 @@ Para quitar una carpeta, clic secundario en su nombre → **Quitar ubicación**.
 
 La biblioteca se guarda de forma incremental en `~/Library/Application Support/PrismaMusic/library.sqlite` (SQLite con WAL) y las carátulas compartidas en `Artwork/`; los ajustes de escucha se guardan en `preferences.json` y la sesión pausada en `playback.json`, junto a la biblioteca. El color, idioma, tema y volumen se guardan con el identificador `local.prisma.music`. Se conservan la biblioteca, favoritos y etiquetas de la versión 0.1.
 
-La opción **Completar desde internet** está activada inicialmente. Envía título y artista a iTunes; título, artista, álbum y duración a LRCLIB. No se envían archivos de audio, rutas locales ni credenciales del NAS. Las búsquedas solo aceptan coincidencia de título/artista para carátulas; las letras usan el endpoint exacto de LRCLIB con duración. La disponibilidad depende del catálogo y de la conexión. Los resultados pueden requerir revisión para versiones en directo o remasterizadas. Se muestra la procedencia de letras y un enlace a iTunes cuando hay carátula en línea.
+La opción **Completar desde internet** está activada inicialmente. Envía título y artista a iTunes; título, artista, álbum y duración a LRCLIB. No se envían archivos de audio, rutas locales ni credenciales del NAS. Las búsquedas solo aceptan coincidencia de título/artista para carátulas; las letras usan la consulta exacta de LRCLIB y alternativas de búsqueda que comprueban título, artista, duración y versión. La disponibilidad depende del catálogo y de la conexión. Los resultados pueden requerir revisión para versiones en directo o remasterizadas. Se muestra la procedencia de letras y un enlace a iTunes cuando hay carátula en línea.
 
 Las piezas demo no realizan búsquedas en internet.
 
@@ -195,7 +207,7 @@ Para repetir la comprobación con un audio de tu NAS ya montado:
 PRISMA_NAS_FILE="/Volumes/TuNAS/Musica/prueba.flac" PRISMA_LIVE_NETWORK=1 swift test
 ```
 
-El archivo se abre solo para lectura y se decodifica mediante renderizado offline, sin modificar el audio ni hacer sonar los altavoces. Sin las variables correspondientes, se omiten seis pruebas externas.
+El archivo se abre solo para lectura y se decodifica mediante renderizado offline, sin modificar el audio ni hacer sonar los altavoces. Sin las variables correspondientes, se omiten diez pruebas externas.
 
 Las pruebas ordinarias no necesitan internet. También verifican la migración desde 0.1, playlists/cola, persistencia de ajustes y que el ecualizador atenúe una señal real de 1 kHz mediante renderizado offline sin activar los altavoces. Cubren filtros y acentos, parser LRC, lectura de etiquetas y decodificación de tres audios reales, persistencia de edición/favoritos y comportamiento con una ubicación desconectada o archivos borrados.
 
