@@ -121,11 +121,30 @@ struct GlassIconButton: View {
 }
 struct QualityBadge: View {
     var track: Track
+    var showsFormatDetails = false
+
+    private var title: String {
+        guard showsFormatDetails else { return track.isLossless ? "LOSSLESS" : track.codecLabel }
+        var details = [track.format ?? track.codecLabel]
+        if track.isLossless, let bits = track.bitDepth, bits > 0 {
+            details.append("\(bits) bit")
+        }
+        if let rate = track.sampleRate, rate.isFinite, rate > 0 {
+            let kilohertz = (rate / 1000).formatted(.number.precision(.fractionLength(0...3)))
+            details.append("\(kilohertz) kHz")
+        }
+        if track.isLossless {
+            details.append("LOSSLESS")
+        }
+        return details.joined(separator: " · ")
+    }
+
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: track.isLossless ? "waveform.badge.magnifyingglass" : "waveform")
-            Text(track.isLossless ? "LOSSLESS" : track.codecLabel)
-        }.font(.system(size: 8, weight: .semibold, design: .monospaced)).tracking(0.5).padding(.horizontal, 7).padding(
+            Text(title)
+        }.font(.system(size: showsFormatDetails ? 10 : 8, weight: .semibold, design: .monospaced))
+            .tracking(0.5).padding(.horizontal, 7).padding(
             .vertical, 4
         ).background(.primary.opacity(0.06), in: Capsule()).foregroundStyle(.secondary)
     }

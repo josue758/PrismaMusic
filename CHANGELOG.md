@@ -1,5 +1,9 @@
 # Cambios
 
+## 0.11.1
+
+La etiqueta de la sala de escucha muestra el formato, la profundidad de bits y la frecuencia de muestreo disponibles para la pista.
+
 ## 0.11.0 — 8 de noviembre de 2026
 
 Pantalla completa abre una ventana de escucha independiente con carátula, controles compartidos y letras. Volver o Esc la cierra y conserva la biblioteca. Traducción nativa de Apple al español bajo cada línea original, con detección/corrección de idioma, modelos instalables, errores visibles y caché limitada. Letras sincronizadas conservan los tiempos y permiten saltar a un verso; se respetan Reducir movimiento y la preferencia de desplazamiento automático.

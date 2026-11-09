@@ -148,7 +148,7 @@ struct ListeningStageView: View {
                             .lineLimit(1)
                     }.buttonStyle(.plain)
                     Text(store.displayAlbum(track.album)).font(.callout).foregroundStyle(.secondary).lineLimit(1)
-                    QualityBadge(track: track)
+                    QualityBadge(track: track, showsFormatDetails: true)
                 }
                 Spacer(minLength: 12)
                 FavoriteControl(track: track, size: 18)
