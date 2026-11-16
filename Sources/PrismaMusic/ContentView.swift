@@ -50,9 +50,9 @@ struct ContentView: View {
                                     } else {
                                         library
                                     }
-                                }.id(pageKey).transition(.opacity)
+                                }.id(pageKey).transition(.asymmetric(insertion: .opacity, removal: .identity))
                             }.frame(maxWidth: .infinity, maxHeight: .infinity).clipped().animation(
-                                motion ? .smooth(duration: 0.3) : nil, value: pageKey)
+                                motion ? .easeOut(duration: 0.12) : nil, value: pageKey)
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
                         if store.showInfo {
                             TrackInfoView().frame(width: 278).prismaGlass(24).transition(
@@ -67,7 +67,7 @@ struct ContentView: View {
                                 motion ? .move(edge: .trailing).combined(with: .opacity) : .opacity)
                         }
                     }.frame(maxHeight: .infinity).animation(
-                        motion ? .smooth(duration: 0.3) : nil, value: inspectorVisible)
+                        motion ? .smooth(duration: 0.18) : nil, value: inspectorVisible)
                     PlayerBar().padding(.horizontal, 20).padding(.vertical, 14).prismaGlass(26, tinted: true)
                 }.padding(16).padding(.top, 24).prismaCursorLighting()
             }
@@ -253,6 +253,7 @@ struct ContentView: View {
                 }.padding(.horizontal, 7)
             }
         }.padding(14).frame(width: 224).frame(maxHeight: .infinity).prismaGlass(24)
+            .animation(motion ? .smooth(duration: 0.14) : nil, value: store.section)
     }
     private func sidebarLabel(_ key: String) -> some View {
         Text(store.t(key).uppercased()).font(.system(size: 8, weight: .semibold)).tracking(1.5).foregroundStyle(
@@ -262,9 +263,7 @@ struct ContentView: View {
     private func nav(_ key: String, _ icon: String) -> some View {
         let selected = store.section == key && !store.showVisualizer
         return Button {
-            withAnimation(motion ? .smooth(duration: 0.3) : nil) {
-                store.navigateTo(key)
-            }
+            store.navigateTo(key)
         } label: {
             HStack(spacing: 11) {
                 Image(systemName: icon).font(.system(size: 13)).frame(width: 18)
@@ -549,7 +548,7 @@ struct ContentView: View {
                 ? [GridItem(.adaptive(minimum: width), spacing: 16)]
                 : Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 18
         ) {
-            ForEach(Array(groups.prefix(limit ?? groups.count)), id: \.key) { group in
+            ForEach(groups.prefix(limit ?? groups.count), id: \.key) { group in
                 if let track = group.value.first {
                     AlbumCard(
                         track: track, wide: limit != nil, action: { store.openAlbum(track) },

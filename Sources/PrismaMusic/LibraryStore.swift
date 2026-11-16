@@ -70,7 +70,7 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var showInfo = false
     @Published var inspectedID: String?
     @Published var fetching = false
-    @Published var playlists: [Playlist] = [] { didSet { queryCache = nil } }
+    @Published var playlists: [Playlist] = [] { didSet { sectionQueries["playlist:"] = nil } }
     @Published var sleepDeadline: Date?
     @Published var sleepRemaining = 0
     @Published var stopAfterCurrent = false
@@ -116,8 +116,9 @@ final class LibraryStore: NSObject, ObservableObject {
     private var trackIndex: [String: Int]?
     private var queueIndexCache: [String: Int]?
     private var statisticsCache: LibraryStatistics?
-    private var queryCache: LibraryQueryCache?
-    private var orderedSearchBase: (section: String, sort: String, tracks: [Track])?
+    private var sectionQueries: [String: (key: LibraryQueryKey, result: LibraryQueryCache)] = [:]
+    private var orderedTracks: (sort: String, tracks: [Track])?
+    private var recentTracks: [Track]?
     private var volumeUnmountObserver: AnyCancellable?
     private var albumCollectionCache: (revision: Int, id: String, value: AlbumCollection)?
     func albumCollection(_ id: String) -> AlbumCollection? {
@@ -154,14 +155,13 @@ final class LibraryStore: NSObject, ObservableObject {
         selectedAlbumID = origin.albumID
     }
     func navigateTo(_ destination: String, preservingSearch: Bool = false) {
-        let query = preservingSearch ? search : ""
         detailHistory.removeAll()
-        selectedAlbumID = nil
-        selectedArtist = nil
-        showVisualizer = false
-        section = destination
-        clearFilters()
-        if preservingSearch { search = query }
+        if selectedAlbumID != nil { selectedAlbumID = nil }
+        if selectedArtist != nil { selectedArtist = nil }
+        if showVisualizer { showVisualizer = false }
+        if section != destination { section = destination }
+        if !preservingSearch && !search.isEmpty { search = "" }
+        clearMetadataFilters()
     }
     func openAlbum(_ track: Track) {
         guard selectedAlbumID != track.id else { return }
@@ -231,7 +231,6 @@ final class LibraryStore: NSObject, ObservableObject {
         return value
     }
     private var revision = 0
-    private var lastQueryKey: LibraryQueryKey?
     private var player: (any MusicPlayback)?
     private var timer: Timer?
     @Published var queue: [String] = [] { didSet { queueIndexCache = nil } }
@@ -295,8 +294,9 @@ final class LibraryStore: NSObject, ObservableObject {
         revision += 1
         trackIndex = nil
         statisticsCache = nil
-        queryCache = nil
-        orderedSearchBase = nil
+        sectionQueries.removeAll(keepingCapacity: true)
+        orderedTracks = nil
+        recentTracks = nil
     }
     var statistics: LibraryStatistics {
         if let statisticsCache { return statisticsCache }
@@ -324,38 +324,50 @@ final class LibraryStore: NSObject, ObservableObject {
     private var results: LibraryQueryCache {
         let key = LibraryQueryKey(
             revision: revision, search: search, artist: artist, genre: genre, year: year, section: section, sort: sort)
-        if let queryCache, lastQueryKey == key { return queryCache }
+        let isPlaylist = section.hasPrefix("playlist:")
+        let cacheSlot = isPlaylist ? "playlist:" : section
+        if let cached = sectionQueries[cacheSlot], cached.key == key { return cached.result }
+
         let base: [Track]
-        if section.hasPrefix("playlist:") {
+        if isPlaylist {
             let id = UUID(uuidString: String(section.dropFirst(9)))
             base = playlists.first(where: { $0.id == id })?.trackIDs.compactMap { track(for: $0) } ?? tracks
-        } else if let orderedSearchBase, orderedSearchBase.section == section, orderedSearchBase.sort == sort {
-            base = orderedSearchBase.tracks
-        } else {
-            let candidates = section == "lossless" ? tracks.filter(\.isLossless) : tracks
-            if section == "recent" {
-                base = candidates.filter { $0.lastPlayed != nil }.sorted {
+        } else if section == "recent" {
+            if let recentTracks {
+                base = recentTracks
+            } else {
+                base = tracks.filter { $0.lastPlayed != nil }.sorted {
                     ($0.lastPlayed ?? .distantPast) > ($1.lastPlayed ?? .distantPast)
                 }
-            } else {
-                let order = sort
-                base = candidates.map { track -> (Track, String) in
-                    switch order {
-                    case "artist": return (track, track.artist + track.album + track.title)
-                    case "album": return (track, track.album + track.title)
-                    case "year": return (track, track.year + track.title)
-                    default: return (track, track.title)
-                    }
-                }.sorted { $0.1.localizedStandardCompare($1.1) == .orderedAscending }.map { $0.0 }
+                recentTracks = base
             }
-            orderedSearchBase = (section, sort, base)
+        } else {
+            let ordered = tracksInCurrentOrder
+            base = section == "lossless" ? ordered.filter(\.isLossless) : ordered
         }
         let value = LibraryQuery.filter(
             base, search: search, artist: artist, genre: genre, year: year, favorites: section == "favorites")
         let cache = LibraryQueryCache(tracks: value, albumSort: sort)
-        queryCache = cache
-        lastQueryKey = key
+        if sectionQueries[cacheSlot] == nil && sectionQueries.count >= 8 {
+            sectionQueries.removeAll(keepingCapacity: true)
+        }
+        sectionQueries[cacheSlot] = (key, cache)
         return cache
+    }
+
+    private var tracksInCurrentOrder: [Track] {
+        if let orderedTracks, orderedTracks.sort == sort { return orderedTracks.tracks }
+        let order = sort
+        let sorted = tracks.map { track -> (Track, String) in
+            switch order {
+            case "artist": return (track, track.artist + track.album + track.title)
+            case "album": return (track, track.album + track.title)
+            case "year": return (track, track.year + track.title)
+            default: return (track, track.title)
+            }
+        }.sorted { $0.1.localizedStandardCompare($1.1) == .orderedAscending }.map { $0.0 }
+        orderedTracks = (order, sorted)
+        return sorted
     }
     var filtered: [Track] { results.tracks }
     var groupedAlbums: [(key: String, value: [Track])] { results.albums }
@@ -577,10 +589,14 @@ final class LibraryStore: NSObject, ObservableObject {
     }
     func waitUntilReady() async { await readyTask?.value }
     func clearFilters() {
-        search = ""
-        artist = ""
-        genre = ""
-        year = ""
+        if !search.isEmpty { search = "" }
+        clearMetadataFilters()
+    }
+
+    private func clearMetadataFilters() {
+        if !artist.isEmpty { artist = "" }
+        if !genre.isEmpty { genre = "" }
+        if !year.isEmpty { year = "" }
     }
     func pickMusic() {
         let open = NSOpenPanel()

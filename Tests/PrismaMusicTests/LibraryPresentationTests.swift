@@ -136,6 +136,34 @@ final class LibraryPresentationTests: XCTestCase {
         XCTAssertEqual(store.filtered.map(\.id), [second.id, first.id])
     }
 
+    @MainActor
+    func testReturningToLibrarySectionsRefreshesTracksAndPlaylistOrder() throws {
+        let directory = try root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = LibraryStore(directory: directory, autoStart: false)
+        let first = track("one.flac", "Alpha")
+        var second = track("two.flac", "Beta")
+        second.favorite = true
+        let playlist = Playlist(name: "Mix", trackIDs: [second.id, first.id])
+        store.tracks = [second, first]
+        store.playlists = [playlist]
+
+        store.navigateTo("songs")
+        XCTAssertEqual(store.filtered.map(\.id), [first.id, second.id])
+        store.navigateTo("favorites")
+        XCTAssertEqual(store.filtered.map(\.id), [second.id])
+        store.navigateTo("playlist:\(playlist.id)")
+        XCTAssertEqual(store.filtered.map(\.id), [second.id, first.id])
+
+        store.navigateTo("songs")
+        store.tracks[0].favorite = false
+        store.playlists[0].trackIDs.reverse()
+        store.navigateTo("favorites")
+        XCTAssertTrue(store.filtered.isEmpty)
+        store.navigateTo("playlist:\(playlist.id)")
+        XCTAssertEqual(store.filtered.map(\.id), [first.id, second.id])
+    }
+
     func testKeyboardSelectionHandlesBoundariesAndChangedResults() {
         let ids = ["a", "b", "c"]
         XCTAssertNil(SongSelection.moved(from: "a", in: [], by: 1))

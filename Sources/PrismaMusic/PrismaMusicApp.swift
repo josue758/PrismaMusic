@@ -70,19 +70,30 @@ final class PrismaAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var localizingMenu = false
+    private var menuRefreshScheduled = false
 
     func applicationDidBecomeActive(_ notification: Notification) { refreshMenu() }
 
     func refreshMenu() {
         // SwiftUI installs commands after the scene updates.
-        DispatchQueue.main.async { [weak self] in self?.localizeMenu() }
+        guard !localizingMenu, !menuRefreshScheduled else { return }
+        menuRefreshScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.menuRefreshScheduled = false
+            self.localizeMenu()
+        }
     }
 
     @objc private func menuChanged(_ notification: Notification) {
         guard let menu = notification.object as? NSMenu, let main = NSApp.mainMenu,
             menu === main || menu.supermenu === main
         else { return }
-        localizeMenu()
+        if notification.name == NSMenu.didBeginTrackingNotification {
+            localizeMenu()
+        } else {
+            refreshMenu()
+        }
     }
 
     private func localizeMenu() {

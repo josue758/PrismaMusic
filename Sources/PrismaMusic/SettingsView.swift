@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var store: LibraryStore
     @Environment(\.dismiss) var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let pages = ["sound", "playback", "library", "metadata", "appearance", "experience", "shortcuts"]
     private let icons = [
         "sound": "slider.vertical.3", "playback": "play.circle", "library": "square.stack", "metadata": "sparkles",
@@ -27,7 +28,7 @@ struct SettingsView: View {
                         VStack(spacing: 5) {
                             ForEach(pages, id: \.self) { page in
                                 Button {
-                                    withAnimation(.easeInOut(duration: 0.18)) { store.settingsPage = page }
+                                    store.settingsPage = page
                                 } label: {
                                     HStack(spacing: 10) {
                                         Image(systemName: icons[page]!).frame(width: 18)
@@ -43,7 +44,9 @@ struct SettingsView: View {
                                             store.settingsPage == page ? store.effectiveAccent : .primary.opacity(0.7))
                                 }.buttonStyle(.plain)
                             }
-                        }
+                        }.animation(
+                            reduceMotion || !store.preferences.microInteractions ? nil : .easeOut(duration: 0.12),
+                            value: store.settingsPage)
                         Spacer()
                         Button(store.t("welcome")) {
                             store.openWelcome()
@@ -88,7 +91,7 @@ struct SettingsView: View {
                                 default: shortcuts
                                 }
                             }.padding(2).padding(.bottom, 16)
-                        }.scrollIndicators(.hidden).clipped()
+                        }.id(store.settingsPage).scrollIndicators(.hidden).clipped()
                         HStack(spacing: 6) {
                             Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint)
                             Text(store.t("settingsSaved"))

@@ -1,5 +1,11 @@
 # Cambios
 
+## 0.13.3
+
+- Inicio, Canciones, Álbumes y Artistas reutilizan el orden de la biblioteca y los resultados recientes al cambiar de sección.
+- Las transiciones de la biblioteca y los paneles son más breves. En Ajustes cambia el contenido al instante y se anima la selección.
+- La barra de menús agrupa las actualizaciones de idioma para evitar repetir trabajo al cambiar sus opciones.
+
 ## 0.13.2
 
 - La barra de menús sigue el idioma de Prisma y conserva una sola entrada de Ajustes con el atajo ⌘ + coma.
