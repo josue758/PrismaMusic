@@ -1,5 +1,9 @@
 # Cambios
 
+## 0.13.2
+
+- La barra de menús sigue el idioma de Prisma y conserva una sola entrada de Ajustes con el atajo ⌘ + coma.
+
 ## 0.13.1
 
 - La búsqueda reutiliza el orden de la biblioteca al escribir y difiere el cálculo de los índices de las filas hasta que se usan.

@@ -40,6 +40,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>CFBundleIdentifier</key><string>local.prisma.music</string>
 <key>CFBundleName</key><string>Prisma Music</string>
 <key>CFBundleDisplayName</key><string>Prisma Music</string>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleLocalizations</key><array><string>en</string><string>es</string><string>pt</string></array>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>${PRISMA_VERSION}</string>
 <key>CFBundleVersion</key><string>${PRISMA_BUILD}</string>

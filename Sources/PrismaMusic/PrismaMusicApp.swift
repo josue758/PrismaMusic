@@ -17,7 +17,11 @@ struct PrismaMusicApp: App {
         WindowGroup("Prisma Music") {
             ContentView().environmentObject(store).tint(store.effectiveAccent).preferredColorScheme(store.colorScheme)
                 .frame(minWidth: 1060, minHeight: 740)
-                .onAppear { delegate.store = store }
+                .onAppear {
+                    delegate.store = store
+                    delegate.refreshMenu()
+                }
+                .onChange(of: store.language) { _, _ in delegate.refreshMenu() }
                 .sheet(isPresented: $showUpdates) { AppUpdateView().environmentObject(store) }
                 .onOpenURL { url in Task { await store.openAudioURL(url) } }
         }
@@ -50,15 +54,44 @@ struct PrismaMusicApp: App {
                 Button(store.t("full")) { store.fullScreen() }.keyboardShortcut("f", modifiers: [.command, .control])
             }
         }
-        Settings {
-            SettingsView().environmentObject(store).tint(store.effectiveAccent).preferredColorScheme(store.colorScheme)
-        }
     }
 }
 
 @MainActor
 final class PrismaAppDelegate: NSObject, NSApplicationDelegate {
     weak var store: LibraryStore?
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        for name in [
+            NSMenu.didBeginTrackingNotification, NSMenu.didAddItemNotification, NSMenu.didChangeItemNotification,
+        ] {
+            NotificationCenter.default.addObserver(self, selector: #selector(menuChanged), name: name, object: nil)
+        }
+    }
+
+    private var localizingMenu = false
+
+    func applicationDidBecomeActive(_ notification: Notification) { refreshMenu() }
+
+    func refreshMenu() {
+        // SwiftUI installs commands after the scene updates.
+        DispatchQueue.main.async { [weak self] in self?.localizeMenu() }
+    }
+
+    @objc private func menuChanged(_ notification: Notification) {
+        guard let menu = notification.object as? NSMenu, let main = NSApp.mainMenu,
+            menu === main || menu.supermenu === main
+        else { return }
+        localizeMenu()
+    }
+
+    private func localizeMenu() {
+        guard !localizingMenu, let store, let menu = NSApp.mainMenu else { return }
+        localizingMenu = true
+        defer { localizingMenu = false }
+        MenuLocalization.apply(to: menu, language: store.language)
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let store else { return .terminateNow }
         Task {
