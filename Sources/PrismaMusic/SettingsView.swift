@@ -100,6 +100,18 @@ struct SettingsView: View {
                 }.padding(20)
             }
         }.frame(width: 920, height: 740).tint(store.effectiveAccent).preferredColorScheme(store.colorScheme)
+            .alert(
+                "Prisma Music",
+                isPresented: Binding(
+                    get: { store.error != nil },
+                    set: {
+                        if !$0 { store.error = nil }
+                    })
+            ) {
+                Button("OK") { store.error = nil }
+            } message: {
+                Text(store.error ?? "")
+            }
     }
     private var sound: some View {
         VStack(spacing: 16) {
@@ -291,6 +303,12 @@ struct SettingsView: View {
                         } label: {
                             Image(systemName: "arrow.up.forward")
                         }.buttonStyle(.plain).help(store.t("reveal"))
+                        Button {
+                            store.pickReplacement(for: source)
+                        } label: {
+                            Image(systemName: "folder.badge.gearshape")
+                        }.buttonStyle(.plain).disabled(store.scanning).help(store.t("relocateSource"))
+                            .accessibilityLabel(store.t("relocateSource"))
                         Button {
                             store.removeSource(source)
                         } label: {
@@ -598,30 +616,61 @@ struct EqualizerGraph: View {
 struct NASView: View {
     @EnvironmentObject var store: LibraryStore
     @Environment(\.dismiss) var dismiss
-    @State private var address = "smb://"
+    let retry: LibraryStore.NASRetry?
+    @State private var address: String
+    @State private var job: Task<Void, Never>?
+    @State private var failed = false
+
+    init(retry: LibraryStore.NASRetry? = nil, initialAddress: String = "smb://") {
+        self.retry = retry
+        _address = State(initialValue: initialAddress)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Label(store.t("connect"), systemImage: "externaldrive.connected.to.line.below").font(.title2.bold())
-            Text(store.t("nasHelp")).foregroundStyle(.secondary)
-            TextField("smb://NAS/Music", text: $address).textFieldStyle(.roundedBorder)
+            Label(
+                store.t(retry == nil ? "connect" : "reconnectNAS"), systemImage: "externaldrive.connected.to.line.below"
+            )
+            .font(.title2.bold())
+            Text(store.t(retry == nil ? "nasHelp" : "reconnectHelp")).foregroundStyle(.secondary)
+            TextField("smb://NAS/Music", text: $address).textFieldStyle(.roundedBorder).disabled(job != nil)
+            if job != nil {
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text(store.t("reconnectWaiting"))
+                }
+            }
+            if failed { Text(store.t("reconnectFailed")).foregroundStyle(.secondary) }
             HStack {
                 Button(store.t("cancel")) { dismiss() }
                 Spacer()
-                Button(store.t("connectButton")) {
-                    if let url = URL(string: address), ["smb", "afp", "nfs"].contains(url.scheme?.lowercased() ?? ""),
-                        url.host?.isEmpty == false
-                    {
-                        NSWorkspace.shared.open(url)
+                Button(store.t(retry == nil ? "connectButton" : "reconnectNAS")) {
+                    guard let server else { return }
+                    if let retry {
+                        failed = false
+                        job = Task {
+                            defer { job = nil }
+                            do { try await store.reconnect(retry, server: server) } catch {
+                                if !Task.isCancelled { failed = true }
+                            }
+                        }
+                    } else if NSWorkspace.shared.open(server) {
                         dismiss()
+                    } else {
+                        failed = true
                     }
-                }.buttonStyle(.glassProminent).disabled(!valid)
+                }.buttonStyle(.glassProminent).disabled(server == nil || job != nil)
             }
-        }.padding(28).frame(width: 460)
+        }.padding(28).frame(width: 480)
+            .onDisappear { job?.cancel() }
     }
-    private var valid: Bool {
-        guard let url = URL(string: address) else { return false }
-        return ["smb", "afp", "nfs"].contains(url.scheme?.lowercased() ?? "") && url.host?.isEmpty == false
-            && url.user == nil && url.password == nil
+
+    private var server: URL? {
+        guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
+            ["smb", "afp", "nfs"].contains(url.scheme?.lowercased() ?? ""), url.host?.isEmpty == false,
+            url.user == nil, url.password == nil, url.query == nil, url.fragment == nil
+        else { return nil }
+        return url
     }
 }
 struct TagEditor: View {

@@ -28,6 +28,54 @@ enum Accent: String, CaseIterable, Identifiable {
     }
 }
 let translations: [String: [String]] = [
+    "checkUpdates": ["Buscar actualizaciones…", "Check for Updates…", "Buscar atualizações…"],
+    "installedVersion": ["Versión instalada", "Installed version", "Versão instalada"],
+    "updateAvailable": ["Disponible la versión", "Available version", "Versão disponível"],
+    "checkingUpdate": ["Buscando actualizaciones…", "Checking for updates…", "Buscando atualizações…"],
+    "updateCurrent": [
+        "Ya tienes la versión más reciente.", "You have the latest version.", "Você já tem a versão mais recente.",
+    ],
+    "downloadUpdate": ["Descargar", "Download", "Baixar"],
+    "openInstaller": ["Abrir instalador", "Open Installer", "Abrir instalador"],
+    "downloadingUpdate": [
+        "Descargando y verificando el instalador…", "Downloading and verifying installer…",
+        "Baixando e verificando o instalador…",
+    ],
+    "installerReady": [
+        "Abre el instalador, cierra Prisma Music y arrástrala a Aplicaciones.",
+        "Open the installer, quit Prisma Music, then drag it to Applications.",
+        "Abra o instalador, encerre o Prisma Music e arraste-o para Aplicativos.",
+    ],
+    "updateFailed": [
+        "No se pudo completar la actualización. Intenta de nuevo.", "The update could not be completed. Try again.",
+        "Não foi possível concluir a atualização. Tente novamente.",
+    ],
+    "closeUpdate": ["Cerrar", "Close", "Fechar"],
+    "relocateSource": ["Reubicar fuente…", "Relocate Source…", "Mudar local da fonte…"],
+    "relocateConflict": [
+        "Esa ubicación coincide con otra fuente de la biblioteca.", "That location overlaps another library source.",
+        "Esse local coincide com outra fonte da biblioteca.",
+    ],
+    "relocateMissing": [
+        "Faltan archivos en la nueva ubicación. Elige la carpeta con la misma estructura que la original.",
+        "Files are missing at the new location. Choose the folder with the same structure as the original.",
+        "Faltam arquivos no novo local. Escolha a pasta com a mesma estrutura da original.",
+    ],
+    "reconnectNAS": ["Reconectar y reintentar", "Reconnect and Retry", "Reconectar e tentar novamente"],
+    "reconnectHelp": [
+        "El archivo de red no está disponible. Introduce la dirección del recurso original y completa la conexión en Finder.",
+        "The network file is unavailable. Enter the original share address and finish connecting in Finder.",
+        "O arquivo de rede está indisponível. Informe o endereço original e conclua a conexão no Finder.",
+    ],
+    "reconnectWaiting": [
+        "Esperando que Finder conecte el recurso…", "Waiting for Finder to connect the share…",
+        "Aguardando a conexão no Finder…",
+    ],
+    "reconnectFailed": [
+        "El archivo sigue sin estar disponible. Comprueba la dirección y el inicio de sesión en Finder.",
+        "The file is still unavailable. Check the address and sign-in in Finder.",
+        "O arquivo continua indisponível. Confira o endereço e o acesso no Finder.",
+    ],
     "detectedLanguage": ["Idioma detectado", "Detected language", "Idioma detectado"],
     "lyricsShown": ["Letras visibles", "Lyrics visible", "Letras visíveis"],
     "retryTranslation": ["Reintentar traducción", "Retry translation", "Tentar tradução novamente"],

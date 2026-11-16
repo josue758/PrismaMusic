@@ -7,6 +7,8 @@ struct PrismaMusicApp: App {
     @MainActor static let sharedStore = LibraryStore()
     @StateObject private var store = PrismaMusicApp.sharedStore
 
+    @State private var showUpdates = false
+
     init() {
         PrismaShortcuts.updateAppShortcutParameters()
     }
@@ -16,11 +18,15 @@ struct PrismaMusicApp: App {
             ContentView().environmentObject(store).tint(store.effectiveAccent).preferredColorScheme(store.colorScheme)
                 .frame(minWidth: 1060, minHeight: 740)
                 .onAppear { delegate.store = store }
+                .sheet(isPresented: $showUpdates) { AppUpdateView().environmentObject(store) }
                 .onOpenURL { url in Task { await store.openAudioURL(url) } }
         }
         .defaultSize(width: 1360, height: 900)
         .windowStyle(.hiddenTitleBar)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button(store.t("checkUpdates")) { showUpdates = true }
+            }
             CommandGroup(replacing: .appSettings) {
                 Button(store.t("welcome")) { store.openWelcome() }
                 Button(store.t("settings")) { store.openSettings() }.keyboardShortcut(",")

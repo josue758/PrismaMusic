@@ -1,5 +1,11 @@
 # Cambios
 
+## 0.13.0
+
+- **Buscar actualizaciones…** muestra las novedades y permite descargar, verificar y abrir el instalador desde Prisma Music.
+- **Reconectar y reintentar** abre el recurso del NAS en Finder y vuelve a iniciar la pista en la posición solicitada cuando el archivo está disponible.
+- **Reubicar fuente…** comprueba los archivos en la nueva ubicación y conserva los favoritos, listas y etiquetas guardadas.
+
 ## 0.12.3
 
 - Reflejo más suave y pequeño al mover el cursor, con menos brillo sobre las carátulas.

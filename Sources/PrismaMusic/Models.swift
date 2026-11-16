@@ -50,6 +50,7 @@ struct MusicSource: Identifiable, Codable, Equatable, Sendable {
     var id = UUID()
     var url: URL
     var bookmark: Data?
+    var serverAddress: URL? = nil
     var name: String { url.lastPathComponent }
 }
 enum LibraryQuery {

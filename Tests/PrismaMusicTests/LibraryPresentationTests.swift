@@ -27,6 +27,65 @@ final class LibraryPresentationTests: XCTestCase {
         XCTAssertTrue(PlaySongIntent.matches("???", in: tracks).isEmpty)
         XCTAssertTrue(PlaySongIntent.matches("No existe", in: tracks).isEmpty)
     }
+    @MainActor
+    func testRelocationKeepsFavoritePlaylistAndEditedTrackAcrossReload() async throws {
+        let directory = try root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = MusicSource(url: directory.appendingPathComponent("old"))
+        let destination = directory.appendingPathComponent("new")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let store = LibraryStore(directory: directory, autoStart: false)
+        var song = track("a.flac", "Original")
+        song.url = source.url.appendingPathComponent("a.flac")
+        song.favorite = true
+        store.sources = [source]
+        store.tracks = [song]
+        song.title = "Edited title"
+        store.update(song)
+        let playlist = Playlist(name: "Mix", trackIDs: [song.id])
+        store.playlists = [playlist]
+
+        await store.relocateSource(source, to: destination)
+        XCTAssertEqual(store.sources.first?.url, source.url)
+        store.error = nil
+
+        let movedFile = destination.appendingPathComponent("a.flac")
+        try Data([1]).write(to: movedFile)
+        await store.relocateSource(source, to: destination)
+        let restored = LibraryStore(directory: directory, autoStart: false)
+        XCTAssertEqual(restored.sources.first?.id, source.id)
+        let relocated = try XCTUnwrap(restored.tracks.first)
+        XCTAssertEqual(relocated.url.lastPathComponent, "a.flac")
+        XCTAssertEqual(relocated.url.deletingLastPathComponent().lastPathComponent, "new")
+        XCTAssertEqual(try Data(contentsOf: relocated.url), Data([1]))
+        XCTAssertEqual(relocated.title, "Edited title")
+        XCTAssertTrue(relocated.favorite)
+        XCTAssertEqual(restored.playlists.first?.trackIDs, [relocated.id])
+    }
+
+    @MainActor
+    func testUnavailableNetworkTrackOffersRetryAtRequestedPosition() async throws {
+        let directory = try root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = LibraryStore(
+            directory: directory, autoStart: false,
+            openAudioFile: { _ in
+                throw URLError(.fileDoesNotExist)
+            })
+        let source = MusicSource(url: directory.appendingPathComponent("offline"))
+        var song = track("a.flac", "Network")
+        song.url = source.url.appendingPathComponent("a.flac")
+        song.sourceIsNetwork = true
+        store.sources = [source]
+        store.tracks = [song]
+        store.play(song, from: 12)
+        await store.waitForPlaybackLoad()
+        XCTAssertEqual(store.nasRetry?.sourceID, source.id)
+        XCTAssertEqual(store.nasRetry?.trackID, song.id)
+        XCTAssertEqual(store.nasRetry?.position, 12)
+        XCTAssertNil(store.error)
+    }
+
     func testKeyboardSelectionHandlesBoundariesAndChangedResults() {
         let ids = ["a", "b", "c"]
         XCTAssertNil(SongSelection.moved(from: "a", in: [], by: 1))

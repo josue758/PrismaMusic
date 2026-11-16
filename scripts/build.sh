@@ -9,11 +9,11 @@ PRISMA_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :version' "$VERSION_FILE")"
 PRISMA_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :build' "$VERSION_FILE")"
 swift build --build-system swiftbuild -c "$BUILD_MODE"
 BIN_DIR="$(swift build --build-system swiftbuild -c "$BUILD_MODE" --show-bin-path)"
-APP="build/Prisma Music.app"
+APP="${PRISMA_APP_PATH:-build/Prisma Music.app}"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/PrismaMusic" "$APP/Contents/MacOS/PrismaMusic"
 RESOURCE_BUNDLE="$(find "$BIN_DIR" -maxdepth 1 -name '*.bundle' -print -quit)"
-if [ -n "$RESOURCE_BUNDLE" ]; then cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"; fi
+if [ -n "$RESOURCE_BUNDLE" ]; then ditto --norsrc --noextattr "$RESOURCE_BUNDLE" "$APP/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"; fi
 # SwiftPM builds an executable rather than an app bundle. Extract the App Shortcuts
 # metadata from its compiler output before signing the bundle.
 PRISMA_INTERMEDIATES="$(dirname "$(dirname "$BIN_DIR")")/Intermediates.noindex/PrismaMusic.build/$(basename "$BIN_DIR")"

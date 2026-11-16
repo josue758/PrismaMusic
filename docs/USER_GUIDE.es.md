@@ -1,19 +1,25 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.12.3** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.13.0** para probar e iterar.
 
-[Descargar la versión 0.12.3 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.12.3) · [Ver el código](https://github.com/josue758/PrismaMusic)
+[Descargar la versión 0.13.0 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.13.0) · [Ver el código](https://github.com/josue758/PrismaMusic)
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.12.3.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.13.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación y sigue la bienvenida para elegir idioma, biblioteca y estilo. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
 
 En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.11. La actualización conserva tus datos.
+
+## Actualizar Prisma Music
+
+En el menú **Prisma Music → Buscar actualizaciones…**, revisa la versión y sus cambios. Descarga y abre el DMG desde Prisma. Luego cierra Prisma Music, arrástrala a Aplicaciones y vuelve a abrirla.
+
+Si el NAS se desconecta al abrir una pista, usa **Reconectar y reintentar** e indica el recurso original. Completa la conexión en Finder. Para mover la biblioteca a otro disco o carpeta, usa **Ajustes → Biblioteca → Reubicar fuente…** y selecciona la carpeta nueva con la misma estructura.
 
 ## Novedades de la versión 0.11
 

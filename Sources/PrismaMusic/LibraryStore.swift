@@ -44,6 +44,14 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published private(set) var sourceStates: [UUID: String] = [:]
     @Published var status = ""
     @Published var error: String?
+    struct NASRetry: Identifiable {
+        let id = UUID()
+        let sourceID: UUID
+        let trackID: String
+        let position: Double
+        let request: UUID
+    }
+    @Published var nasRetry: NASRetry?
     @Published var search = ""
     @Published private(set) var searchFocusRequest = 0
     func focusSearch() { searchFocusRequest &+= 1 }
@@ -508,7 +516,7 @@ final class LibraryStore: NSObject, ObservableObject {
             }
         }
     }
-    private func remapSource(_ old: URL, to new: URL) {
+    private func remapSource(_ old: URL, to new: URL, isNetwork: Bool? = nil) {
         let prefix = old.path.hasSuffix("/") ? old.path : old.path + "/"
         func relocated(_ url: URL) -> URL? {
             if url.path == old.path { return new }
@@ -520,6 +528,7 @@ final class LibraryStore: NSObject, ObservableObject {
             guard let url = relocated(track.url) else { return track }
             var value = track
             value.url = url
+            if let isNetwork { value.sourceIsNetwork = isNetwork }
             ids[track.id] = value.id
             return value
         }
@@ -531,6 +540,11 @@ final class LibraryStore: NSObject, ObservableObject {
         edited = Set(edited.map { ids[$0] ?? $0 })
         queue = queue.map { ids[$0] ?? $0 }
         if let id = currentID { currentID = ids[id] ?? id }
+        if let id = inspectedID { inspectedID = ids[id] ?? id }
+        if let id = selectedAlbumID { selectedAlbumID = ids[id] ?? id }
+        detailHistory = detailHistory.map { origin in
+            .init(section: origin.section, artist: origin.artist, albumID: origin.albumID.map { ids[$0] ?? $0 })
+        }
         if let (id, time) = savedPlayback { savedPlayback = (ids[id] ?? id, time) }
     }
     func save() {
@@ -593,6 +607,135 @@ final class LibraryStore: NSObject, ObservableObject {
         save()
         await scan()
     }
+    func pickReplacement(for source: MusicSource) {
+        let panel = NSOpenPanel()
+        let isFile =
+            (try? source.url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile)
+            ?? tracks.contains { $0.id == source.url.path }
+        panel.canChooseDirectories = !isFile
+        panel.canChooseFiles = isFile
+        panel.allowedContentTypes = isFile ? [.audio] : [.folder]
+        panel.prompt = t("relocateSource")
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in await self?.relocateSource(source, to: url.standardizedFileURL) }
+        }
+    }
+
+    func relocateSource(_ source: MusicSource, to destination: URL) async {
+        guard !loading, !scanning, !saveBlocked, let index = sources.firstIndex(of: source),
+            destination.isFileURL, destination.path != source.url.path
+        else { return }
+        guard
+            !sources.contains(where: {
+                $0.id != source.id
+                    && (SourceScanner.isWithin(destination, source: $0.url)
+                        || SourceScanner.isWithin($0.url, source: destination))
+            })
+        else {
+            error = t("relocateConflict")
+            return
+        }
+        let sourceTracks = tracks.filter { SourceScanner.isWithin($0.url, source: source.url) }
+        let prefix = source.url.path.hasSuffix("/") ? source.url.path : source.url.path + "/"
+        let destinations = sourceTracks.map {
+            $0.id == source.url.path
+                ? destination : destination.appendingPathComponent(String($0.id.dropFirst(prefix.count)))
+        }
+        let accessible = destination.startAccessingSecurityScopedResource()
+        var keepAccess = false
+        defer { if accessible && !keepAccess { destination.stopAccessingSecurityScopedResource() } }
+        let originalSources = sources
+        let (exists, isNetwork) = await Task.detached(priority: .userInitiated) {
+            let exists =
+                FileManager.default.isReadableFile(atPath: destination.path)
+                && destinations.allSatisfy { FileManager.default.isReadableFile(atPath: $0.path) }
+            let isNetwork = (try? destination.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal) == false
+            return (exists, isNetwork)
+        }.value
+        guard !loading, !scanning, !saveBlocked, sources == originalSources,
+            tracks.filter({ SourceScanner.isWithin($0.url, source: source.url) }).map(\.id) == sourceTracks.map(\.id)
+        else { return }
+        let originalIDs = Set(sourceTracks.map(\.id))
+        let destinationIDs = Set(destinations.map(\.path))
+        guard !tracks.contains(where: { !originalIDs.contains($0.id) && destinationIDs.contains($0.id) }) else {
+            error = t("relocateConflict")
+            return
+        }
+        guard exists else {
+            error = t("relocateMissing")
+            return
+        }
+        let affected = [currentID, loadingTrackID].compactMap { $0 }.contains {
+            SourceScanner.isWithin(URL(fileURLWithPath: $0), source: source.url)
+        }
+        if affected {
+            pausePlayback()
+            player?.stop()
+            player = nil
+            preparedOutput = nil
+        }
+        var replacement = source
+        replacement.url = destination
+        replacement.bookmark = try? destination.bookmarkData(
+            options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+        replacement.serverAddress = nil
+        if accessible {
+            scopeURLs.append(destination)
+            keepAccess = true
+        }
+        sources[index] = replacement
+        remapSource(source.url, to: destination, isNetwork: isNetwork)
+        sourceStates[source.id] = "ready"
+        save()
+        do {
+            try await flushSaving()
+            rememberPlayback()
+            updateNowPlaying()
+        } catch { self.error = error.localizedDescription }
+    }
+
+    func rememberedServer(for retry: NASRetry) -> URL? {
+        sources.first { $0.id == retry.sourceID }?.serverAddress
+    }
+
+    func reconnect(_ retry: NASRetry, server: URL) async throws {
+        guard playbackRequest == retry.request, let song = track(for: retry.trackID),
+            let index = sources.firstIndex(where: { $0.id == retry.sourceID }),
+            NSWorkspace.shared.open(server)
+        else { throw URLError(.cannotConnectToHost) }
+        for _ in 0..<60 {
+            try Task.checkCancellation()
+            guard playbackRequest == retry.request else { throw CancellationError() }
+            let available = await Task.detached(priority: .utility) {
+                FileManager.default.isReadableFile(atPath: song.url.path)
+            }.value
+            try Task.checkCancellation()
+            guard playbackRequest == retry.request else { throw CancellationError() }
+            if available {
+                guard sources.indices.contains(index), sources[index].id == retry.sourceID else {
+                    throw URLError(.fileDoesNotExist)
+                }
+                sources[index].serverAddress = server
+                sourceStates[retry.sourceID] = "ready"
+                save()
+                nasRetry = nil
+                play(song, from: retry.position)
+                return
+            }
+            try await Task.sleep(for: .milliseconds(500))
+        }
+        throw URLError(.timedOut)
+    }
+
+    private func reconnectRequest(for track: Track, position: Double) -> NASRetry? {
+        guard track.sourceIsNetwork == true,
+            let source = sources.filter({ SourceScanner.isWithin(track.url, source: $0.url) })
+                .max(by: { $0.url.path.count < $1.url.path.count })
+        else { return nil }
+        return NASRetry(sourceID: source.id, trackID: track.id, position: position, request: playbackRequest)
+    }
+
     func openAudioURL(_ url: URL) async {
         await addSources([url])
         if let track = track(for: url.path) {
@@ -1047,6 +1190,7 @@ final class LibraryStore: NSObject, ObservableObject {
         cancelPlaybackLoad()
         let token = playbackRequest
         loadingTrackID = track.id
+        nasRetry = nil
         let opener = openAudioFile
         playbackLoadTask = Task { [weak self] in
             defer {
@@ -1114,9 +1258,15 @@ final class LibraryStore: NSObject, ObservableObject {
                 }
             } catch {
                 guard let self, self.playbackRequest == token, !Task.isCancelled else { return }
-                self.loadingTrackID = nil
-                self.playbackLoadTask = nil
-                self.error = "\(self.t("audioLoadFailed")) · \(track.title)\n\(self.t(error.localizedDescription))"
+                let unavailable = await Task.detached(priority: .utility) {
+                    track.sourceIsNetwork == true && !FileManager.default.isReadableFile(atPath: track.id)
+                }.value
+                guard self.playbackRequest == token, !Task.isCancelled else { return }
+                if unavailable, let retry = self.reconnectRequest(for: track, position: start) {
+                    self.nasRetry = retry
+                } else {
+                    self.error = "\(self.t("audioLoadFailed")) · \(track.title)\n\(self.t(error.localizedDescription))"
+                }
                 self.updateActivity()
                 self.updateNowPlaying()
             }

@@ -5,15 +5,15 @@
 
 A native macOS music player for local collections and mounted NAS libraries. Built with Swift, SwiftUI, AVAudioEngine and Core Audio, with an artwork-driven Liquid Glass interface.
 
-**Apple Silicon · macOS 26+ · Beta 0.12.3**
+**Apple Silicon · macOS 26+ · Beta 0.13.0**
 
-[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.12.3) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md)
+[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.13.0) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md)
 
 ## Try it
 
 Download the DMG, drag **Prisma Music** to Applications, and open it. The welcome flow lets you choose Spanish, English or Portuguese, appearance and a music folder. Three redistributable instrumental demos are included; a NAS is optional.
 
-The beta is ad hoc signed. It does not yet have Apple Developer ID signing or notarization. A [local signing/notarization workflow](docs/NOTARIZATION.md) is prepared and requires the owner’s Apple Developer membership and signing assets. No account or subscription is required. Updates preserve the library and preferences.
+The beta is ad hoc signed. It does not yet have Apple Developer ID signing or notarization. A [local signing/notarization workflow](docs/NOTARIZATION.md) is prepared and requires the owner’s Apple Developer membership and signing assets. No account or subscription is required. Updates preserve the library and preferences. Use **Prisma Music → Check for Updates…** to download and open a newer installer without visiting GitHub.
 
 ## Listening and browsing
 

@@ -96,6 +96,10 @@ struct ContentView: View {
             SettingsView().environmentObject(store)
         }
         .sheet(isPresented: $nas) { NASView().environmentObject(store) }
+        .sheet(item: $store.nasRetry) { retry in
+            NASView(retry: retry, initialAddress: store.rememberedServer(for: retry)?.absoluteString ?? "smb://")
+                .environmentObject(store)
+        }
         .sheet(item: $editing) { track in TagEditor(track: track).environmentObject(store) }
         .sheet(isPresented: $newPlaylist) {
             VStack(alignment: .leading, spacing: 20) {
