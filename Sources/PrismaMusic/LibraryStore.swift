@@ -117,6 +117,8 @@ final class LibraryStore: NSObject, ObservableObject {
     private var queueIndexCache: [String: Int]?
     private var statisticsCache: LibraryStatistics?
     private var queryCache: LibraryQueryCache?
+    private var orderedSearchBase: (section: String, sort: String, tracks: [Track])?
+    private var volumeUnmountObserver: AnyCancellable?
     private var albumCollectionCache: (revision: Int, id: String, value: AlbumCollection)?
     func albumCollection(_ id: String) -> AlbumCollection? {
         if let cached = albumCollectionCache, cached.revision == revision, cached.id == id { return cached.value }
@@ -294,6 +296,7 @@ final class LibraryStore: NSObject, ObservableObject {
         trackIndex = nil
         statisticsCache = nil
         queryCache = nil
+        orderedSearchBase = nil
     }
     var statistics: LibraryStatistics {
         if let statisticsCache { return statisticsCache }
@@ -322,40 +325,33 @@ final class LibraryStore: NSObject, ObservableObject {
         let key = LibraryQueryKey(
             revision: revision, search: search, artist: artist, genre: genre, year: year, section: section, sort: sort)
         if let queryCache, lastQueryKey == key { return queryCache }
-        var base = tracks
-        if section == "lossless" { base = base.filter(\.isLossless) }
-        if section.hasPrefix("playlist:"), let id = UUID(uuidString: String(section.dropFirst(9))),
-            let list = playlists.first(where: { $0.id == id })
-        {
-            base = list.trackIDs.compactMap { track(for: $0) }
-        }
-        var value = LibraryQuery.filter(
-            base, search: search, artist: artist, genre: genre, year: year, favorites: section == "favorites")
-        if section == "recent" {
-            value = value.filter { $0.lastPlayed != nil }.sorted {
-                ($0.lastPlayed ?? .distantPast) > ($1.lastPlayed ?? .distantPast)
-            }
-        } else if !section.hasPrefix("playlist:") {
-            value.sort { a, b in
-                let x: String
-                let y: String
-                switch sort {
-                case "artist":
-                    x = a.artist + a.album + a.title
-                    y = b.artist + b.album + b.title
-                case "album":
-                    x = a.album + a.title
-                    y = b.album + b.title
-                case "year":
-                    x = a.year + a.title
-                    y = b.year + b.title
-                default:
-                    x = a.title
-                    y = b.title
+        let base: [Track]
+        if section.hasPrefix("playlist:") {
+            let id = UUID(uuidString: String(section.dropFirst(9)))
+            base = playlists.first(where: { $0.id == id })?.trackIDs.compactMap { track(for: $0) } ?? tracks
+        } else if let orderedSearchBase, orderedSearchBase.section == section, orderedSearchBase.sort == sort {
+            base = orderedSearchBase.tracks
+        } else {
+            let candidates = section == "lossless" ? tracks.filter(\.isLossless) : tracks
+            if section == "recent" {
+                base = candidates.filter { $0.lastPlayed != nil }.sorted {
+                    ($0.lastPlayed ?? .distantPast) > ($1.lastPlayed ?? .distantPast)
                 }
-                return x.localizedStandardCompare(y) == .orderedAscending
+            } else {
+                let order = sort
+                base = candidates.map { track -> (Track, String) in
+                    switch order {
+                    case "artist": return (track, track.artist + track.album + track.title)
+                    case "album": return (track, track.album + track.title)
+                    case "year": return (track, track.year + track.title)
+                    default: return (track, track.title)
+                    }
+                }.sorted { $0.1.localizedStandardCompare($1.1) == .orderedAscending }.map { $0.0 }
             }
+            orderedSearchBase = (section, sort, base)
         }
+        let value = LibraryQuery.filter(
+            base, search: search, artist: artist, genre: genre, year: year, favorites: section == "favorites")
         let cache = LibraryQueryCache(tracks: value, albumSort: sort)
         queryCache = cache
         lastQueryKey = key
@@ -435,6 +431,13 @@ final class LibraryStore: NSObject, ObservableObject {
             timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.tick() }
             }
+            volumeUnmountObserver = NSWorkspace.shared.notificationCenter
+                .publisher(for: NSWorkspace.didUnmountNotification)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] message in
+                    guard let url = message.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL else { return }
+                    self?.volumeUnmounted(url)
+                }
             setupRemoteCommands()
             readyTask = Task { [weak self] in
                 guard let self else { return }
@@ -734,6 +737,28 @@ final class LibraryStore: NSObject, ObservableObject {
                 .max(by: { $0.url.path.count < $1.url.path.count })
         else { return nil }
         return NASRetry(sourceID: source.id, trackID: track.id, position: position, request: playbackRequest)
+    }
+
+    func volumeUnmounted(_ url: URL) {
+        guard isPlaying, !playbackLoading, let current,
+            SourceScanner.isWithin(current.url, source: url),
+            let retry = reconnectRequest(for: current, position: position)
+        else { return }
+        offerPlaybackRecovery(retry)
+    }
+
+    private func offerPlaybackRecovery(_ retry: NASRetry) {
+        player?.stop()
+        player = nil
+        preparedOutput = nil
+        playbackBuffering = false
+        isPlaying = false
+        position = retry.position
+        rememberPlayback()
+        sourceStates[retry.sourceID] = "offline"
+        nasRetry = retry
+        updateActivity()
+        updateNowPlaying()
     }
 
     func openAudioURL(_ url: URL) async {
@@ -1263,6 +1288,7 @@ final class LibraryStore: NSObject, ObservableObject {
                 }.value
                 guard self.playbackRequest == token, !Task.isCancelled else { return }
                 if unavailable, let retry = self.reconnectRequest(for: track, position: start) {
+                    self.sourceStates[retry.sourceID] = "offline"
                     self.nasRetry = retry
                 } else {
                     self.error = "\(self.t("audioLoadFailed")) · \(track.title)\n\(self.t(error.localizedDescription))"
@@ -1317,15 +1343,23 @@ final class LibraryStore: NSObject, ObservableObject {
             seek(0)
             return
         }
+        let selected = loadingTrackID ?? currentID
+        let step = back ? -1 : 1
+        if !automatic || repeatMode != 2, let selected, track(for: selected) != nil,
+            let index = queueIndex(selected), queue.indices.contains(index + step),
+            let adjacentTrack = track(for: queue[index + step])
+        {
+            play(adjacentTrack)
+            return
+        }
         let list = queue.compactMap { track(for: $0) }
         guard !list.isEmpty else { return }
         if automatic && repeatMode == 2, let current {
             play(current)
             return
         }
-        let selected = loadingTrackID ?? currentID
         let i = list.firstIndex { $0.id == selected } ?? -1
-        let nextIndex = i + (back ? -1 : 1)
+        let nextIndex = i + step
         if nextIndex >= list.count && automatic && repeatMode == 0 {
             isPlaying = false
             position = min(current?.duration ?? player?.duration ?? 0, player?.duration ?? 0)
@@ -1382,12 +1416,14 @@ final class LibraryStore: NSObject, ObservableObject {
         }
         audio.volume = volume
         audio.apply(preferences)
-        audio.onFinish = { [weak self] in self?.playbackDidFinish() }
+        audio.onFinish = { [weak self, weak audio] in
+            guard let self, let audio, self.player === audio else { return }
+            self.playbackDidFinish()
+        }
         audio.onError = { [weak self, weak audio] error in
             guard let self, let audio, self.player === audio else { return }
             self.isPlaying = false
             self.position = audio.currentTime
-            self.error = self.t(error.localizedDescription)
             if self.directOutputActive {
                 audio.stop()
                 self.player = nil
@@ -1395,6 +1431,26 @@ final class LibraryStore: NSObject, ObservableObject {
             }
             self.updateActivity()
             self.updateNowPlaying()
+            let message = self.t(error.localizedDescription)
+            guard !self.playbackLoading,
+                let retry = self.reconnectRequest(for: track, position: self.position)
+            else {
+                self.error = message
+                return
+            }
+            Task { [weak self] in
+                let readable = await Task.detached(priority: .utility) {
+                    FileManager.default.isReadableFile(atPath: track.id)
+                }.value
+                guard let self, self.playbackRequest == retry.request,
+                    self.currentID == retry.trackID, !self.isPlaying, self.nasRetry == nil
+                else { return }
+                if readable {
+                    self.error = message
+                } else {
+                    self.offerPlaybackRecovery(retry)
+                }
+            }
         }
         return audio
     }

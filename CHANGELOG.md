@@ -1,5 +1,11 @@
 # Cambios
 
+## 0.13.1
+
+- La búsqueda reutiliza el orden de la biblioteca al escribir y difiere el cálculo de los índices de las filas hasta que se usan.
+- Siguiente y Anterior acceden a la pista contigua sin reconstruir la cola en el caso habitual.
+- Al desmontarse el NAS durante la reproducción, Prisma conserva la pista y la posición y ofrece reconectar.
+
 ## 0.13.0
 
 - **Buscar actualizaciones…** muestra las novedades y permite descargar, verificar y abrir el instalador desde Prisma Music.

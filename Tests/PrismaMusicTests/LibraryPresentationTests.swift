@@ -86,6 +86,56 @@ final class LibraryPresentationTests: XCTestCase {
         XCTAssertNil(store.error)
     }
 
+    @MainActor
+    func testUnmountingPlayingNASPreservesTrackAndPosition() throws {
+        let directory = try root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = LibraryStore(directory: directory, autoStart: false)
+        let volume = directory.appendingPathComponent("NAS")
+        let source = MusicSource(url: volume.appendingPathComponent("Music"))
+        var song = track("a.flac", "Network")
+        song.url = source.url.appendingPathComponent("a.flac")
+        song.sourceIsNetwork = true
+        store.sources = [source]
+        store.tracks = [song]
+        store.currentID = song.id
+        store.queue = [song.id]
+        store.position = 32.5
+        store.isPlaying = true
+
+        store.volumeUnmounted(directory.appendingPathComponent("Different"))
+        XCTAssertTrue(store.isPlaying)
+        store.volumeUnmounted(volume)
+
+        XCTAssertFalse(store.isPlaying)
+        XCTAssertEqual(store.nasRetry?.sourceID, source.id)
+        XCTAssertEqual(store.nasRetry?.trackID, song.id)
+        XCTAssertEqual(store.nasRetry?.position, 32.5)
+        XCTAssertEqual(store.queue, [song.id])
+        XCTAssertEqual(store.sourceStates[source.id], "offline")
+    }
+
+    @MainActor
+    func testSearchRetainsSortOrderAndRefreshesAfterTrackEdits() throws {
+        let directory = try root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = LibraryStore(directory: directory, autoStart: false)
+        var first = track("one.flac", "Night 10")
+        var second = track("two.flac", "Night 2")
+        first.artist = "Alba"
+        second.artist = "Vera"
+        store.tracks = [first, second]
+        store.search = "night"
+        XCTAssertEqual(store.filtered.map(\.id), [second.id, first.id])
+        store.search = "night album"
+        XCTAssertEqual(store.filtered.map(\.id), [second.id, first.id])
+        store.sort = "artist"
+        XCTAssertEqual(store.filtered.map(\.id), [first.id, second.id])
+        second.artist = "Aaron"
+        store.tracks[1] = second
+        XCTAssertEqual(store.filtered.map(\.id), [second.id, first.id])
+    }
+
     func testKeyboardSelectionHandlesBoundariesAndChangedResults() {
         let ids = ["a", "b", "c"]
         XCTAssertNil(SongSelection.moved(from: "a", in: [], by: 1))

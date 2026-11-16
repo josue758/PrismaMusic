@@ -59,13 +59,15 @@ enum LibraryQuery {
         favorites: Bool = false
     ) -> [Track] {
         let words = search.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        if words.isEmpty && artist.isEmpty && genre.isEmpty && year.isEmpty && !favorites { return tracks }
         return tracks.filter { track in
+            guard !favorites || track.favorite, genre.isEmpty || track.genre == genre,
+                year.isEmpty || track.year == year,
+                artist.isEmpty || ArtistIdentity.contains(track.artist, name: artist)
+            else { return false }
+            guard !words.isEmpty else { return true }
             let haystack = [track.title, track.artist, track.album, track.genre, track.year].joined(separator: " ")
             return words.allSatisfy { haystack.localizedStandardContains($0) }
-                && (artist.isEmpty || ArtistIdentity.contains(track.artist, name: artist))
-                && (genre.isEmpty || track.genre == genre)
-                && (year.isEmpty || track.year == year)
-                && (!favorites || track.favorite)
         }
     }
 }

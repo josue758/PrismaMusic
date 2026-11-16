@@ -12,7 +12,8 @@ struct LibraryQueryKey: Hashable {
 final class LibraryQueryCache {
     let tracks: [Track]
     lazy var duration: Double = tracks.reduce(0) { $0 + $1.duration }
-    let indices: [String: Int]
+    lazy var indices = Dictionary(
+        tracks.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
     private let albumSort: String
     lazy var albums: [(key: String, value: [Track])] = {
         let groups = Dictionary(grouping: tracks, by: AlbumIdentity.key)
@@ -45,8 +46,6 @@ final class LibraryQueryCache {
     init(tracks: [Track], albumSort: String = "album") {
         self.tracks = tracks
         self.albumSort = albumSort
-        indices = Dictionary(
-            tracks.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
     }
 }
 struct LibraryStatistics {
