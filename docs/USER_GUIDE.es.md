@@ -1,19 +1,23 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.13.3** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.13.4** para probar e iterar.
 
-[Descargar la versión 0.13.3 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.13.3) · [Ver el código](https://github.com/josue758/PrismaMusic)
+[Descargar la versión 0.13.4 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.13.4) · [Ver el código](https://github.com/josue758/PrismaMusic)
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.13.3.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.13.4.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación y sigue la bienvenida para elegir idioma, biblioteca y estilo. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
 
 En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba abierta, ciérrala por completo (`⌘Q`) y vuelve a abrirla para cargar la versión 0.11. La actualización conserva tus datos.
+
+## Añadir canciones nuevas del NAS
+
+Tras copiar música al NAS, usa **Archivo → Buscar canciones nuevas** o pulsa **⌘ + R**. Prisma recorre las carpetas y lee las etiquetas de los archivos nuevos. Si cambiaste etiquetas o eliminaste archivos, usa **Ajustes → Biblioteca → Volver a leer todas las etiquetas**.
 
 ## Actualizar Prisma Music
 

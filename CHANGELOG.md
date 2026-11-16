@@ -1,5 +1,10 @@
 # Cambios
 
+## 0.13.4
+
+- **Buscar canciones nuevas** recorre las carpetas sin volver a leer las etiquetas de las pistas ya importadas. La lectura completa sigue disponible en Ajustes.
+- El menú Prisma Music muestra un engranaje junto a **Ajustes**.
+
 ## 0.13.3
 
 - Inicio, Canciones, Álbumes y Artistas reutilizan el orden de la biblioteca y los resultados recientes al cambiar de sección.

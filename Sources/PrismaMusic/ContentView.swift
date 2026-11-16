@@ -424,7 +424,7 @@ struct ContentView: View {
                 ).font(.system(size: 9)).lineLimit(1).foregroundStyle(.tertiary)
                 Spacer()
                 Button {
-                    Task { await store.scan() }
+                    Task { await store.scanNewMusic() }
                 } label: {
                     Image(systemName: "arrow.clockwise").font(.system(size: 10))
                 }.buttonStyle(.plain).disabled(store.scanning).help(store.t("scan"))

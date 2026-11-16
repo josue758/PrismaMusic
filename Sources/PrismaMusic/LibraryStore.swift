@@ -468,7 +468,7 @@ final class LibraryStore: NSObject, ObservableObject {
                     showWelcome = true
                     return
                 }
-                if !saveBlocked && (scanOnLaunch || tracks.isEmpty) { await scan() }
+                if !saveBlocked && (scanOnLaunch || tracks.isEmpty) { await scanNewMusic() }
                 restorePlaybackIfNeeded()
             }
         } else {
@@ -624,7 +624,7 @@ final class LibraryStore: NSObject, ObservableObject {
                         options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)))
         }
         save()
-        await scan()
+        await scanNewMusic()
     }
     func pickReplacement(for source: MusicSource) {
         let panel = NSOpenPanel()
@@ -807,26 +807,28 @@ final class LibraryStore: NSObject, ObservableObject {
         preferences.hasCompletedWelcome = true
         showWelcome = false
         navigateTo(preferences.startSection)
-        if scanAfter && scanOnLaunch && !scanning { Task { await scan() } }
+        if scanAfter && scanOnLaunch && !scanning { Task { await scanNewMusic() } }
     }
     func retryFailedScan() async {
         guard let audit = scanAudit, !audit.issues.isEmpty else { return }
         await scan(force: true, retrying: audit)
     }
-    func scan(force: Bool = false, retrying: ScanAudit? = nil) async {
+    func scanNewMusic() async { await scan(newOnly: true) }
+
+    func scan(force: Bool = false, retrying: ScanAudit? = nil, newOnly: Bool = false) async {
         if loading { await readyTask?.value }
         guard !scanning, !saveBlocked else { return }
         scanning = true
         scanDiscovered = 0
         scanProcessed = 0
         scanCancellation = ScanCancellation()
-        let task = Task { await performScan(force: force, retrying: retrying) }
+        let task = Task { await performScan(force: force, retrying: retrying, newOnly: newOnly) }
         scanTask = task
         await task.value
         scanTask = nil
         scanning = false
     }
-    private func performScan(force: Bool, retrying: ScanAudit?) async {
+    private func performScan(force: Bool, retrying: ScanAudit?, newOnly: Bool) async {
         var failures = 0
         var unavailable = 0
         var audit = ScanAudit()
@@ -856,9 +858,11 @@ final class LibraryStore: NSObject, ObservableObject {
                         complete: identity != nil, errors: [])
                 }.value
             } else {
+                let knownPaths: Set<String> = newOnly ? Set(tracks.map(\.id)) : []
                 report = await Task.detached(priority: .utility) { [weak self] in
                     SourceScanner.enumerate(
-                        source.url, recursive: recursive, cancellation: cancellation, readModificationDates: false
+                        source.url, recursive: recursive, cancellation: cancellation, readModificationDates: false,
+                        excludingKnownPaths: knownPaths
                     ) { [weak self] count in
                         Task { @MainActor in
                             guard let self, self.scanning, self.scanCancellation === cancellation,
@@ -870,7 +874,8 @@ final class LibraryStore: NSObject, ObservableObject {
                     }
                 }.value
             }
-            audit.discovered += report.files.count
+            audit.discovered += report.files.count + report.knownFiles
+            audit.unchanged += report.knownFiles
             if !report.complete {
                 unavailable += 1
                 for message in report.errors where audit.issues.count < 500 {
@@ -960,9 +965,13 @@ final class LibraryStore: NSObject, ObservableObject {
                 break
             }
             let reconciled = await Task.detached(priority: .utility) {
-                SourceScanner.canReconcile(report, cancelled: cancellation.isCancelled)
+                if newOnly {
+                    return report.complete && !cancellation.isCancelled && report.identity != nil
+                        && SourceIdentity.read(report.source) == report.identity
+                }
+                return SourceScanner.canReconcile(report, cancelled: cancellation.isCancelled)
             }.value
-            if retrying != nil {
+            if retrying != nil || newOnly {
                 sourceStates[source.id] = reconciled ? "ready" : "offline"
                 if !reconciled && report.complete { unavailable += 1 }
             } else if reconciled && !Task.isCancelled {

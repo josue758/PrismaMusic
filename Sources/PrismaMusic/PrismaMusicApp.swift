@@ -33,7 +33,11 @@ struct PrismaMusicApp: App {
             }
             CommandGroup(replacing: .appSettings) {
                 Button(store.t("welcome")) { store.openWelcome() }
-                Button(store.t("settings")) { store.openSettings() }.keyboardShortcut(",")
+                Button {
+                    store.openSettings()
+                } label: {
+                    Label(store.t("settings"), systemImage: "gearshape").labelStyle(.titleAndIcon)
+                }.keyboardShortcut(",")
             }
             CommandGroup(after: .newItem) {
                 Button(store.t("findMusic")) { store.focusSearch() }.keyboardShortcut("f")
@@ -43,7 +47,8 @@ struct PrismaMusicApp: App {
                     store.showLyrics = false
                     store.showQueue = false
                 }.keyboardShortcut("i")
-                Button(store.t("scan")) { Task { await store.scan() } }.keyboardShortcut("r").disabled(store.scanning)
+                Button(store.t("scan")) { Task { await store.scanNewMusic() } }.keyboardShortcut("r").disabled(
+                    store.scanning)
             }
             CommandMenu(store.t("play")) {
                 Button(store.playbackControlLabel) { store.togglePlay() }.keyboardShortcut(

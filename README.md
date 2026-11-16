@@ -5,9 +5,9 @@
 
 A native macOS music player for local collections and mounted NAS libraries. Built with Swift, SwiftUI, AVAudioEngine and Core Audio, with an artwork-driven Liquid Glass interface.
 
-**Apple Silicon · macOS 26+ · Beta 0.13.3**
+**Apple Silicon · macOS 26+ · Beta 0.13.4**
 
-[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.13.3) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md)
+[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.13.4) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md)
 
 ## Try it
 

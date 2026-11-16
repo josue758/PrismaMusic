@@ -608,7 +608,7 @@ let translations: [String: [String]] = [
     "lyrics": ["Letras", "Lyrics", "Letras"], "visualizer": ["Visualizador", "Visualizer", "Visualizador"],
     "settings": ["Ajustes", "Settings", "Ajustes"], "full": ["Pantalla completa", "Full screen", "Tela cheia"],
     "mini": ["Minirreproductor flotante", "Floating mini player", "Minirreprodutor flutuante"],
-    "scan": ["Actualizar biblioteca", "Refresh library", "Atualizar biblioteca"],
+    "scan": ["Buscar canciones nuevas", "Find New Songs", "Buscar novas músicas"],
     "demo": [
         "Sesiones Prisma · música de demostración", "Prisma Sessions · demo music",
         "Sessões Prisma · músicas de demonstração",
@@ -638,7 +638,7 @@ let translations: [String: [String]] = [
     "appearance": ["Apariencia", "Appearance", "Aparência"], "language": ["Idioma", "Language", "Idioma"],
     "theme": ["Tema", "Theme", "Tema"], "system": ["Sistema", "System", "Sistema"],
     "dark": ["Oscuro", "Dark", "Escuro"], "light": ["Claro", "Light", "Claro"],
-    "startScan": ["Leer etiquetas al iniciar", "Read tags on launch", "Ler etiquetas ao iniciar"],
+    "startScan": ["Buscar canciones nuevas al iniciar", "Find new songs on launch", "Buscar novas músicas ao iniciar"],
     "connect": ["Conectar a un NAS…", "Connect to a NAS…", "Conectar a um NAS…"],
     "nasHelp": [
         "Introduce smb://servidor/recurso. Finder gestiona el acceso; después añade la carpeta montada.",

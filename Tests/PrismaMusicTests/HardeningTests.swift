@@ -382,6 +382,37 @@ final class HardeningTests: XCTestCase {
     }
 
     @MainActor
+    func testNewMusicScanSkipsKnownFilesAndKeepsMissingEntries() async throws {
+        let root = try temporary()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let music = root.appendingPathComponent("Music", isDirectory: true)
+        try FileManager.default.createDirectory(at: music, withIntermediateDirectories: true)
+        let kept = music.appendingPathComponent("kept.m4a")
+        let missing = music.appendingPathComponent("missing.m4a")
+        let added = music.appendingPathComponent("added.m4a")
+        for file in [kept, missing] { try FileManager.default.copyItem(at: demo, to: file) }
+
+        let store = LibraryStore(directory: root.appendingPathComponent("State"), autoStart: false)
+        await store.addSources([music])
+        let original = try XCTUnwrap(store.track(for: kept.path))
+        try Data([0]).write(to: kept)
+        try FileManager.default.removeItem(at: missing)
+        try FileManager.default.copyItem(at: demo, to: added)
+
+        await store.scanNewMusic()
+        XCTAssertEqual(store.track(for: kept.path), original)
+        XCTAssertNotNil(store.track(for: missing.path))
+        XCTAssertNotNil(store.track(for: added.path))
+        XCTAssertEqual(store.scanProcessed, 1)
+        XCTAssertEqual(store.scanAudit?.imported, 1)
+        XCTAssertEqual(store.scanAudit?.unchanged, 1)
+        XCTAssertEqual(store.scanAudit?.failed, 0)
+
+        await store.scan(force: true)
+        XCTAssertNil(store.track(for: missing.path))
+    }
+
+    @MainActor
     func testParallelScanImportsEveryFileAndSkipsUnchangedOnRepeat() async throws {
         let root = try temporary()
         defer { try? FileManager.default.removeItem(at: root) }

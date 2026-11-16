@@ -27,6 +27,7 @@ struct SourceScanReport: Sendable {
     var files: [ScannedAudioFile]
     var complete: Bool
     var errors: [String]
+    var knownFiles = 0
 }
 final class ScanCancellation: @unchecked Sendable {
     private let value = Atomic<Bool>(false)
@@ -37,7 +38,7 @@ enum SourceScanner {
     /// Use directory entries rather than NSURL's bulk attribute prefetch, which can be very slow on SMB.
     static func enumerate(
         _ source: URL, recursive: Bool, cancellation: ScanCancellation = .init(), readModificationDates: Bool = true,
-        progress: (@Sendable (Int) -> Void)? = nil
+        excludingKnownPaths knownPaths: Set<String> = [], progress: (@Sendable (Int) -> Void)? = nil
     ) -> SourceScanReport {
         var report = SourceScanReport(source: source, identity: nil, files: [], complete: true, errors: [])
         var lastProgress = Date()
@@ -75,7 +76,11 @@ enum SourceScanner {
         let rootType = root.st_mode & S_IFMT
         if rootType == S_IFREG {
             if MetadataReader.extensions.contains(source.pathExtension.lowercased()) {
-                report.files.append(.init(url: source, modified: modified(root), sourceIsNetwork: network))
+                if knownPaths.contains(source.path) {
+                    report.knownFiles += 1
+                } else {
+                    report.files.append(.init(url: source, modified: modified(root), sourceIsNetwork: network))
+                }
             } else {
                 record(source, EINVAL)
             }
@@ -137,6 +142,10 @@ enum SourceScanner {
                     if kind == DT_DIR {
                         if recursive && !packages.contains(url.pathExtension.lowercased()) { pending.append(url) }
                     } else if kind == DT_REG && MetadataReader.extensions.contains(url.pathExtension.lowercased()) {
+                        if knownPaths.contains(url.path) {
+                            report.knownFiles += 1
+                            continue
+                        }
                         let value = readModificationDates ? (attributes ?? info(url)) : nil
                         // Retain a discovered path even if stat fails; an incomplete read must never prune it.
                         audio.append(.init(url: url, modified: value.map(modified)))
