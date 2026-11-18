@@ -382,7 +382,7 @@ final class HardeningTests: XCTestCase {
     }
 
     @MainActor
-    func testNewMusicScanSkipsKnownFilesAndKeepsMissingEntries() async throws {
+    func testNewMusicScanRefreshesChangedFilesAndKeepsMissingEntries() async throws {
         let root = try temporary()
         defer { try? FileManager.default.removeItem(at: root) }
         let music = root.appendingPathComponent("Music", isDirectory: true)
@@ -395,17 +395,19 @@ final class HardeningTests: XCTestCase {
         let store = LibraryStore(directory: root.appendingPathComponent("State"), autoStart: false)
         await store.addSources([music])
         let original = try XCTUnwrap(store.track(for: kept.path))
-        try Data([0]).write(to: kept)
+        let changedDate = Date(timeIntervalSince1970: 1_700_000_000)
+        try FileManager.default.setAttributes([.modificationDate: changedDate], ofItemAtPath: kept.path)
         try FileManager.default.removeItem(at: missing)
         try FileManager.default.copyItem(at: demo, to: added)
 
         await store.scanNewMusic()
-        XCTAssertEqual(store.track(for: kept.path), original)
+        XCTAssertNotEqual(store.track(for: kept.path)?.modified, original.modified)
+        XCTAssertEqual(store.track(for: kept.path)?.modified, changedDate)
         XCTAssertNotNil(store.track(for: missing.path))
         XCTAssertNotNil(store.track(for: added.path))
-        XCTAssertEqual(store.scanProcessed, 1)
-        XCTAssertEqual(store.scanAudit?.imported, 1)
-        XCTAssertEqual(store.scanAudit?.unchanged, 1)
+        XCTAssertEqual(store.scanProcessed, 2)
+        XCTAssertEqual(store.scanAudit?.imported, 2)
+        XCTAssertEqual(store.scanAudit?.unchanged, 0)
         XCTAssertEqual(store.scanAudit?.failed, 0)
 
         await store.scan(force: true)
