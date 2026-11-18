@@ -24,7 +24,7 @@ struct ScannedTrackResult: Sendable {
     static func read(_ file: ScannedAudioFile, cached: Track? = nil, force: Bool = false) async -> Self {
         do {
             try Task.checkCancellation()
-            var modified: Date?
+            var modified: Date? = file.modified
             if !force, let cached, let oldDate = cached.modified, cached.format != nil, cached.sourceIsNetwork != nil,
                 cached.bitrate != nil, cached.albumArtist != nil, !cached.isLossless || cached.bitDepth != nil
             {
