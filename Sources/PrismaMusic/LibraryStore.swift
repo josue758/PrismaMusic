@@ -858,10 +858,11 @@ final class LibraryStore: NSObject, ObservableObject {
                         complete: identity != nil, errors: [])
                 }.value
             } else {
-                let knownPaths: Set<String> = newOnly ? Set(tracks.map(\.id)) : []
+                // Check cached file timestamps and sizes even during incremental scans.
+                let knownPaths: Set<String> = []
                 report = await Task.detached(priority: .utility) { [weak self] in
                     SourceScanner.enumerate(
-                        source.url, recursive: recursive, cancellation: cancellation, readModificationDates: false,
+                        source.url, recursive: recursive, cancellation: cancellation, readModificationDates: true,
                         excludingKnownPaths: knownPaths
                     ) { [weak self] count in
                         Task { @MainActor in
@@ -987,7 +988,12 @@ final class LibraryStore: NSObject, ObservableObject {
             save()
         }
         save()
-        do { try await persistence.flush() } catch { self.error = error.localizedDescription }
+        var persistenceFailed = false
+        do { try await persistence.flush() } catch {
+            persistenceFailed = true
+            self.error = error.localizedDescription
+            audit.issues.append(.init(url: dataDirectory, message: error.localizedDescription))
+        }
         audit.failed = failures
         audit.unavailableSources = unavailable
         audit.cancelled = cancellation.isCancelled || Task.isCancelled
@@ -1015,7 +1021,7 @@ final class LibraryStore: NSObject, ObservableObject {
         status =
             cancellation.isCancelled
             ? t("scanCancelled")
-            : unavailable > 0 ? t("offline") : failures > 0 ? "\(t("scanErrors")): \(failures)" : t("ready")
+            : persistenceFailed ? t("scanErrors") : unavailable > 0 ? t("offline") : failures > 0 ? "\(t("scanErrors")): \(failures)" : t("ready")
     }
     private func upsertTracks(_ values: [Track]) {
         var updated = tracks
