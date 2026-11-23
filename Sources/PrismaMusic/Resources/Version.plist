@@ -3,8 +3,8 @@
 <plist version="1.0">
 <dict>
 	<key>build</key>
-	<string>34</string>
+	<string>36</string>
 	<key>version</key>
-	<string>0.14.7</string>
+	<string>0.15.0</string>
 </dict>
 </plist>

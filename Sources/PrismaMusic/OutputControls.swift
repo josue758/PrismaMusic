@@ -43,9 +43,10 @@ struct PlaybackVolumeControl: View {
                     .font(.caption2).accessibilityHidden(true)
                 Slider(value: store.outputVolume, in: 0...1)
                     .accessibilityLabel(store.t("volume"))
+                    .accessibilityValue(Double(store.volume).formatted(.percent.precision(.fractionLength(0))))
                 if showsPercentage {
                     Text("\(Int(store.volume * 100))").font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(.tertiary).frame(width: 22)
+                        .foregroundStyle(.tertiary).frame(width: 22).accessibilityHidden(true)
                 }
             }.foregroundStyle(.secondary)
         }
@@ -80,7 +81,7 @@ struct OutputSettingsView: View {
                     store.outputs.refresh()
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                }.buttonStyle(.glass).help(store.t("refreshDevices"))
+                }.buttonStyle(.glass).help(store.t("refreshDevices")).accessibilityLabel(store.t("refreshDevices"))
             }
             Picker(
                 store.t("outputDevice"),

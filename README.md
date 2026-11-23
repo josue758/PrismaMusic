@@ -5,15 +5,15 @@
 
 A native macOS music player for local collections and mounted NAS libraries. Built with Swift, SwiftUI, AVAudioEngine and Core Audio, with an artwork-driven Liquid Glass interface.
 
-**Apple Silicon · macOS 26+ · Beta 0.14.7**
+**Apple Silicon · macOS 26+ · Stable 0.15.0**
 
-[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.14.7) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md) · [Windows feature adaptation](docs/WINDOWS_PARITY.md)
+[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.15.0) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md) · [Windows feature adaptation](docs/WINDOWS_PARITY.md)
 
 ## Try it
 
 Download the DMG, drag **Prisma Music** to Applications, and open it. The welcome flow lets you choose Spanish, English or Portuguese, appearance and a music folder. Three redistributable instrumental demos are included; a NAS is optional.
 
-The beta is ad hoc signed. It does not yet have Apple Developer ID signing or notarization. A [local signing/notarization workflow](docs/NOTARIZATION.md) is prepared and requires the owner’s Apple Developer membership and signing assets. No account or subscription is required. Updates preserve the library and preferences. Use **Prisma Music → Check for Updates…** to download and open a newer installer without visiting GitHub.
+This release uses an ad hoc signature. Prisma Music requires no account or subscription. Updates preserve the library and preferences. Use **Prisma Music → Check for Updates…** to download and open a newer installer from the app.
 
 ## Library maintenance
 
@@ -78,14 +78,14 @@ To run the same offline validation as CI, including a release build, signature c
 ./scripts/verify.sh
 ```
 
-**80 tests** currently cover persistence and migration, scan cancellation, metadata parsing, playback races, offline DSP, direct PCM output, album identity, keyboard selection and artist-photo data. Ten integration tests are opt-in; CI skips them so it does not require your network, NAS or audio hardware. All 80 tests passed locally with external resources enabled, including real Japanese/Portuguese lyric lookups and native English/Japanese translation; see [validation](VALIDACION.md) for the exact scope.
+For 0.15.0, **103 tests passed locally** and seven optional checks were skipped. The run included a real NAS FLAC during an incremental scan, verified update downloads, and direct PCM playback through two USB outputs. The wake-recovery test uses a simulated macOS notification. See [validation](VALIDACION.md) for previous test runs and their scope.
 
 GitHub Actions runs this check on the standard [macOS 26 Apple Silicon runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), with read-only repository permissions and actions pinned to commit IDs. Each run retains its log and installer for 14 days.
 
 ## Scope and next steps
 
-This is an actively developed beta. It has been exercised against a real SMB library with 7,854 listed files; 7,813 were imported and 41 original-file issues were reported. This is evidence for that collection, not a guarantee for every NAS or format.
+Prisma has been exercised against a real SMB library with 7,854 listed files. It imported 7,813 files and reported 41 original-file issues.
 
-Physical receiver AirPlay transfer, physical DAC bit-perfect output, Intel distribution, Developer ID signing and notarization remain unverified or unfinished. State coordination is still concentrated in `LibraryStore`; separating playback and import coordinators and adopting strict concurrency are the next architectural steps. See [the roadmap](docs/ROADMAP.md).
+Physical AirPlay transfer and bit-perfect output measured at the DAC remain outside the verified scope. The installer targets Apple Silicon. State coordination is concentrated in `LibraryStore`. See [the roadmap](docs/ROADMAP.md) for architectural work.
 
 [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [MIT license](LICENSE)

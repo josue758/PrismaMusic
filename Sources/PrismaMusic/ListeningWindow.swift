@@ -81,12 +81,14 @@ struct ListeningStageView: View {
     @EnvironmentObject private var store: LibraryStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showLyrics = true
+    @State private var nasReconnectSheet: LibraryStore.NASRetry?
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 PrismaBackdrop()
                 VStack(spacing: 28) {
                     header
+                    NASRecoveryBanner { nasReconnectSheet = $0 }
                     if let track = store.visualTrack {
                         HStack(spacing: max(36, geometry.size.width * 0.06)) {
                             artworkColumn(
@@ -120,6 +122,13 @@ struct ListeningStageView: View {
         .preferredColorScheme(.dark)
         .tint(store.artworkPalette.primary.readable(onDark: true).color)
         .onExitCommand { store.closeListeningWindow() }
+        .sheet(item: $nasReconnectSheet) { retry in
+            NASView(retry: retry, initialAddress: store.rememberedServer(for: retry)?.absoluteString ?? "smb://")
+                .environmentObject(store)
+        }
+        .onChange(of: store.nasRetry?.id) { _, id in
+            if nasReconnectSheet?.id != id { nasReconnectSheet = nil }
+        }
     }
     private var header: some View {
         HStack {
@@ -192,5 +201,6 @@ struct ListeningStageView: View {
     private func control(_ image: String, _ key: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { Image(systemName: image).font(.system(size: 16)).frame(width: 26, height: 38) }
             .buttonStyle(.plain).help(store.t(key)).accessibilityLabel(store.t(key))
+            .accessibilityValue(store.transportAccessibilityValue(key))
     }
 }

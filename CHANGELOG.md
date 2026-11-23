@@ -1,5 +1,14 @@
 # Cambios
 
+## 0.15.0
+
+- Prisma programa la pista siguiente antes del final cuando comparte formato PCM y ganancia con la pista actual. Los cambios de frecuencia o de salida usan la transición normal.
+- Una barra de recuperación indica cuándo vuelve a estar accesible la pista del NAS. Reanudar conserva la posición y el orden de la cola.
+- Las listas inteligentes se actualizan por criterios, como género, formato, frecuencia, favoritos y pistas sin reproducir. La fecha de incorporación se registra en las nuevas importaciones.
+- ReplayGain por pista o álbum usa las etiquetas de los FLAC con la salida estándar. El modo directo y AirPlay conservan su comportamiento.
+- VoiceOver identifica los botones de reproducción, el estado de aleatorio y repetición y el volumen en porcentaje.
+- La salida directa retoma la reproducción tras un aviso de Core Audio si el dispositivo y la frecuencia de la pista siguen siendo compatibles.
+
 ## 0.14.7
 
 - La ficha de álbum muestra los géneros de sus canciones junto al año y la duración.

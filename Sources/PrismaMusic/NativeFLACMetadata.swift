@@ -3,6 +3,10 @@ import Foundation
 
 /// Read FLAC headers and Vorbis comments without constructing an audiovisual asset for every track.
 enum NativeFLACMetadata {
+    static func replayGain(_ url: URL) throws -> ReplayGain? {
+        try header(in: url, includeArtwork: false).map { ReplayGain($0.comments) }
+    }
+
     static func read(_ url: URL, sidecars: ScannedAudioFile?) throws -> Track? {
         guard let header = try header(in: url) else { return nil }
         let duration = Double(header.samples) / Double(header.rate)
@@ -67,7 +71,7 @@ enum NativeFLACMetadata {
         var comments: [String: String] = [:]
         var artwork: Data?
     }
-    private static func header(in url: URL) throws -> Header? {
+    private static func header(in url: URL, includeArtwork: Bool = true) throws -> Header? {
         let file = try FileHandle(forReadingFrom: url)
         defer { try? file.close() }
         var info = stat()
@@ -139,7 +143,7 @@ enum NativeFLACMetadata {
                     let comments = parseComments(data), result != nil
                 else { return nil }
                 result?.comments = comments
-            } else if type == 6 && !frontCover {
+            } else if type == 6 && includeArtwork && !frontCover {
                 guard let data = try read(offset, length), data.count == length else { return nil }
                 if let picture = picture(data) {
                     result?.artwork = picture.data

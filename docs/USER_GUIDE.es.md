@@ -1,14 +1,14 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta **0.14.7**.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión estable **0.15.0**.
 
-[Descargar la versión 0.14.7 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.14.7) · [Ver el código](https://github.com/josue758/PrismaMusic)
+[Descargar la versión estable 0.15.0 para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.15.0) · [Ver el código](https://github.com/josue758/PrismaMusic)
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.14.7.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.15.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación y sigue la bienvenida para elegir idioma, biblioteca y estilo. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
@@ -35,7 +35,7 @@ La búsqueda usa LRCLIB para letras originales en distintos idiomas. Normaliza U
 
 La traducción automática puede perder matices. En letras que mezclan idiomas se puede seleccionar la lengua principal; no se promete una traducción correcta de cada lengua dentro de una misma canción.
 
-La firma y notarización requieren una membresía Apple Developer y un certificado Developer ID Application. El [flujo preparado](NOTARIZATION.md) no se ha ejecutado con un certificado real; esta beta sigue firmada ad hoc.
+El instalador de esta versión utiliza firma ad hoc.
 
 ## Novedades de la versión 0.10
 
@@ -155,7 +155,7 @@ La sala de escucha muestra la calidad del archivo y permite consultar las letras
 - Minirreproductor con nivel flotante y visibilidad en todos los escritorios configurables.
 - Búsqueda de carátulas y letras activable por separado; relectura completa de etiquetas, escaneo con/sin subcarpetas y exportación de biblioteca JSON o selección M3U8.
 
-No incluye modo de audio exclusivo, salida bit-perfect, crossfade, ReplayGain ni reproducción sin pausas garantizada. La salida y su frecuencia se gestionan desde macOS. La compensación de EQ conserva margen según el mayor realce, pero no es un limitador de picos. La vista Sin pérdida clasifica el **archivo de origen**, no garantiza una ruta de salida sin procesamiento. La copia JSON es una exportación; esta versión no tiene restauración automática desde ella.
+La vista Sin pérdida clasifica el **archivo de origen**. Ajustes → Sonido muestra las opciones de salida directa y acceso exclusivo compatibles con el dispositivo. La compensación de EQ reserva margen según el mayor realce. La copia JSON es una exportación de la biblioteca.
 
 ## Qué incluye
 
@@ -257,3 +257,10 @@ Se pueden corregir artista, álbum, artista del álbum, género, año y disco, y
 Prisma comprueba SQLite al abrir y conserva hasta siete copias diarias en **Mostrar carpeta de datos → Backups**. Si detecta corrupción, recupera una copia válida y conserva los originales en una carpeta `Damaged-…`. La copia puede ser anterior a los cambios más recientes y no incluye la música ni las carátulas. La exportación JSON manual sigue disponible.
 
 La ficha de cada artista muestra hasta cinco canciones más reproducidas, según el contador local de Prisma, y botones para ir a sus canciones y álbumes.
+
+## Mejoras de la versión 0.15.0
+
+- En **Listas → + → Nueva lista inteligente**, combina criterios como género, formato, frecuencia y pistas sin reproducir. La lista se actualiza con la biblioteca. **Agregadas este mes** usa las fechas registradas a partir de esta versión.
+- En **Ajustes → Sonido → ReplayGain**, activa la normalización por pista o álbum para FLAC con etiquetas compatibles. La salida directa y AirPlay omiten este procesamiento.
+- Prisma prepara la pista siguiente para una transición continua cuando ambas tienen el mismo formato de procesamiento y la misma ganancia. Cambios de frecuencia, salida o ganancia pueden introducir una pausa.
+- Si la pista del NAS deja de estar accesible, Prisma muestra el estado de la conexión. Pulsa **Reanudar pista** cuando vuelva a estar disponible para continuar en la misma posición y con la misma cola.

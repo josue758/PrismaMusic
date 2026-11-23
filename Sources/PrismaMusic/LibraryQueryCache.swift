@@ -8,6 +8,7 @@ struct LibraryQueryKey: Hashable {
     var year: String
     var section: String
     var sort: String
+    var smartPlaylistMonth: Date? = nil
 }
 final class LibraryQueryCache {
     let tracks: [Track]

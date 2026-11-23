@@ -29,6 +29,26 @@ enum Accent: String, CaseIterable, Identifiable {
 }
 let translations: [String: [String]] = [
     "resumeNASTrack": ["Reanudar pista", "Resume Track", "Retomar faixa"],
+    "nasPlaybackReady": ["El NAS volvió a estar disponible", "The NAS is available again", "O NAS está disponível novamente"],
+    "nasPlaybackOffline": ["El NAS no está disponible", "The NAS is unavailable", "O NAS está indisponível"],
+    "newSmartPlaylist": ["Nueva lista inteligente", "New Smart Playlist", "Nova lista inteligente"],
+    "editSmartPlaylist": ["Editar lista inteligente", "Edit Smart Playlist", "Editar lista inteligente"],
+    "anyValue": ["Cualquiera", "Any", "Qualquer"],
+    "smartUnplayed": ["Sin reproducir", "Unplayed", "Nunca reproduzidas"],
+    "smartAddedThisMonth": ["Agregadas este mes", "Added This Month", "Adicionadas este mês"],
+    "smartPlaylistHelp": [
+        "Se actualiza con las canciones que cumplen todos los criterios. La fecha de incorporación se registra en las nuevas importaciones.",
+        "Updates with songs that match all rules. Import dates are recorded for newly imported songs.",
+        "Atualiza com as músicas que correspondem a todos os critérios. A data é registrada nas novas importações.",
+    ],
+    "replayGain": ["ReplayGain", "ReplayGain", "ReplayGain"],
+    "trackGain": ["Por pista", "By Track", "Por faixa"],
+    "albumGain": ["Por álbum", "By Album", "Por álbum"],
+    "replayGainHelp": [
+        "Usa las etiquetas ReplayGain de los FLAC. Disponible con la salida de audio estándar.",
+        "Uses ReplayGain tags in FLAC files. Available with standard audio output.",
+        "Usa as etiquetas ReplayGain de arquivos FLAC. Disponível com a saída de áudio padrão.",
+    ],
     "queueRemoved": ["Quitada de la cola", "Removed from queue", "Removida da fila"],
     "localTagCorrections": ["Etiquetas corregidas en Prisma", "Tags edited in Prisma", "Etiquetas editadas no Prisma"],
     "writeFileTags": [
@@ -605,6 +625,9 @@ let translations: [String: [String]] = [
         "Detener al finalizar la canción actual", "Stop after the current song", "Parar após a música atual",
     ],
     "off": ["Desactivado", "Off", "Desativado"],
+    "on": ["Activado", "On", "Ativado"],
+    "repeatAll": ["Toda la cola", "Entire Queue", "Toda a fila"],
+    "repeatOne": ["Pista actual", "Current Track", "Faixa atual"],
     "remaining": ["restantes", "remaining", "restantes"],
     "cancelTimer": ["Cancelar temporizador", "Cancel timer", "Cancelar temporizador"],
     "recursive": [

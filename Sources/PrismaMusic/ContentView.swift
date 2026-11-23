@@ -13,9 +13,11 @@ struct ContentView: View {
     }
     @FocusState private var searchFocused: Bool
     @State private var nas = false
+    @State private var nasReconnectSheet: LibraryStore.NASRetry?
     @State private var editing: Track?
     @State private var newPlaylist = false
     @State private var playlistName = ""
+    @State private var smartPlaylistDraft: SmartPlaylistDraft?
     @State private var compactInspector = true
     private var inspectorVisible: Bool { store.showInfo || store.showLyrics || store.showQueue }
     @ViewBuilder private var inspector: some View {
@@ -52,6 +54,7 @@ struct ContentView: View {
                         sidebar
                         VStack(spacing: 20) {
                             toolbar
+                            NASRecoveryBanner { nasReconnectSheet = $0 }
                             ZStack(alignment: .topLeading) {
                                 Group {
                                     if let id = store.selectedAlbumID, !store.showVisualizer {
@@ -120,9 +123,12 @@ struct ContentView: View {
             SettingsView().environmentObject(store)
         }
         .sheet(isPresented: $nas) { NASView().environmentObject(store) }
-        .sheet(item: $store.nasRetry) { retry in
+        .sheet(item: $nasReconnectSheet) { retry in
             NASView(retry: retry, initialAddress: store.rememberedServer(for: retry)?.absoluteString ?? "smb://")
                 .environmentObject(store)
+        }
+        .onChange(of: store.nasRetry?.id) { _, id in
+            if nasReconnectSheet?.id != id { nasReconnectSheet = nil }
         }
         .sheet(item: $editing) { track in TagEditor(track: track).environmentObject(store) }
         .sheet(isPresented: $newPlaylist) {
@@ -139,6 +145,9 @@ struct ContentView: View {
                         playlistName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }.padding(30).frame(width: 420)
+        }
+        .sheet(item: $smartPlaylistDraft) { draft in
+            SmartPlaylistEditor(draft: draft).environmentObject(store)
         }
         .alert("Prisma Music", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } }))
         {
@@ -182,26 +191,40 @@ struct ContentView: View {
                         HStack {
                             sidebarLabel("playlists")
                             Spacer()
-                            Button {
-                                newPlaylist = true
+                            Menu {
+                                Button(store.t("newPlaylist")) { newPlaylist = true }
+                                Button(store.t("newSmartPlaylist")) {
+                                    smartPlaylistDraft = .init(
+                                        rules: .init(search: store.search, artist: store.artist, genre: store.genre,
+                                                     year: store.year, favorites: store.section == "favorites"))
+                                }
                             } label: {
                                 Image(systemName: "plus").font(.system(size: 11))
-                            }.buttonStyle(.plain).help(store.t("newPlaylist"))
+                            }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                                .help(store.t("newPlaylist")).accessibilityLabel(store.t("newPlaylist"))
                         }.padding(.trailing, 10)
                         ForEach(store.playlists) { playlist in
                             Button {
                                 store.navigateTo("playlist:\(playlist.id)")
                             } label: {
                                 HStack(spacing: 10) {
-                                    Image(systemName: "music.note").foregroundStyle(store.effectiveAccent.opacity(0.7))
+                                    Image(systemName: playlist.rules == nil ? "music.note" : "line.3.horizontal.decrease")
+                                        .foregroundStyle(store.effectiveAccent.opacity(0.7))
                                     Text(playlist.name).lineLimit(1)
                                     Spacer()
-                                    Text("\(playlist.trackIDs.count)").foregroundStyle(.tertiary)
+                                    if playlist.rules == nil {
+                                        Text("\(playlist.trackIDs.count)").foregroundStyle(.tertiary)
+                                    }
                                 }.font(.system(size: 11)).padding(.horizontal, 12).padding(.vertical, 7).background(
                                     store.section == "playlist:\(playlist.id)"
                                         ? store.effectiveAccent.opacity(0.13) : .clear,
                                     in: RoundedRectangle(cornerRadius: 9))
                             }.buttonStyle(.plain).contextMenu {
+                                if let rules = playlist.rules {
+                                    Button(store.t("editSmartPlaylist")) {
+                                        smartPlaylistDraft = .init(playlist: playlist, rules: rules)
+                                    }
+                                }
                                 Button(store.t("deletePlaylist"), role: .destructive) { store.removePlaylist(playlist) }
                             }
                         }
@@ -640,10 +663,11 @@ struct TrackContextMenu: View {
         Button(store.t("addQueue")) { store.enqueue(track) }.disabled(track.id == store.currentID)
         Divider()
         Menu(store.t("addToPlaylist")) {
-            ForEach(store.playlists) { playlist in Button(playlist.name) { store.add(track, to: playlist) } }
-            if store.playlists.isEmpty { Text(store.t("playlistEmpty")) }
+            let manual = store.playlists.filter { $0.rules == nil }
+            ForEach(manual) { playlist in Button(playlist.name) { store.add(track, to: playlist) } }
+            if manual.isEmpty { Text(store.t("playlistEmpty")) }
         }
-        if store.section.hasPrefix("playlist:") {
+        if let playlist = store.activePlaylist, playlist.rules == nil {
             Button(store.t("removeFromPlaylist")) { store.removeFromPlaylist(track) }
         }
         Button(store.t("favorites")) { store.favorite(track) }

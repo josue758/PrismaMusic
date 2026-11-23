@@ -219,19 +219,19 @@ struct PlayerBar: View {
                             store.preferences.eqEnabled ? store.effectiveAccent : .secondary
                         ).padding(.horizontal, 7).padding(.vertical, 4).background(
                             .primary.opacity(0.045), in: Capsule())
-                    }.buttonStyle(.plain).help(store.t("equalizer"))
+                    }.buttonStyle(.plain).help(store.t("equalizer")).accessibilityLabel(store.t("equalizer"))
                     OutputToolbarButton()
                     AirPlayRouteButton().frame(width: 24, height: 22).help("AirPlay")
                     Button {
                         store.miniPlayer()
                     } label: {
                         Image(systemName: "pip").font(.system(size: 12))
-                    }.buttonStyle(.plain).help(store.t("mini"))
+                    }.buttonStyle(.plain).help(store.t("mini")).accessibilityLabel(store.t("mini"))
                     Button {
                         store.fullScreen()
                     } label: {
                         Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 11))
-                    }.buttonStyle(.plain).help(store.t("full"))
+                    }.buttonStyle(.plain).help(store.t("full")).accessibilityLabel(store.t("full"))
                 }.foregroundStyle(.secondary)
                 PlaybackVolumeControl(showsPercentage: true).controlSize(.mini)
             }.frame(width: 215)
@@ -244,7 +244,17 @@ struct PlayerBar: View {
             Image(systemName: icon).font(.system(size: 12, weight: .medium)).foregroundStyle(
                 active ? store.effectiveAccent : .primary.opacity(0.75)
             ).frame(width: 19, height: 22)
-        }.buttonStyle(PrismaPressStyle()).help(store.t(label))
+        }.buttonStyle(PrismaPressStyle()).help(store.t(label)).accessibilityLabel(store.t(label))
+            .accessibilityValue(store.transportAccessibilityValue(label))
+    }
+}
+extension LibraryStore {
+    func transportAccessibilityValue(_ key: String) -> String {
+        switch key {
+        case "shuffle": return t(shuffle ? "on" : "off")
+        case "repeat": return t(repeatMode == 2 ? "repeatOne" : repeatMode == 1 ? "repeatAll" : "off")
+        default: return ""
+        }
     }
 }
 struct MiniPlayerView: View {

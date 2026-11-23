@@ -166,6 +166,73 @@ final class OutputAndArtistTests: XCTestCase {
         print("PRISMA_OUTPUT devices=\(devices.count) binding-verified=true no-global-settings-changed=true")
     }
     @MainActor
+    func testLiveUSBDirectOutputWithSilentPCMWhenRequested() async throws {
+        guard ProcessInfo.processInfo.environment["PRISMA_USB_HARDWARE"] == "1" else {
+            throw XCTSkip("Opt-in silent playback on connected USB audio devices")
+        }
+        let devices = await Task.detached { CoreAudioOutputs.devices() }.value
+        let usb = devices.filter {
+            $0.transport == kAudioDeviceTransportTypeUSB && $0.channels >= 2 && $0.supports($0.sampleRate)
+        }
+        guard !usb.isEmpty else { throw XCTSkip("No compatible USB audio output is connected") }
+        let originalDefault = CoreAudioOutputs.defaultDevice()
+        let directory = try temporary()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = AudioDeviceController()
+        do {
+            for device in usb {
+                let url = directory.appendingPathComponent("\(device.id).caf")
+                let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: device.sampleRate, channels: 2))
+                let frames = AVAudioFrameCount(device.sampleRate)
+                let pcm = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames))
+                pcm.frameLength = frames
+                for channel in 0..<2 {
+                    pcm.floatChannelData![channel].initialize(repeating: 0, count: Int(frames))
+                }
+                let writer = try AVAudioFile(forWriting: url, settings: format.settings)
+                try writer.write(from: pcm)
+                writer.close()
+                let output = try await controller.prepare(device, direct: true, exclusive: false, rate: device.sampleRate)
+                let audio = try AudioPlayback(file: AVAudioFile(forReading: url), output: output)
+                defer { audio.stop() }
+                var playbackError: Error?
+                audio.onError = { playbackError = $0 }
+                XCTAssertTrue(audio.direct)
+                XCTAssertTrue(audio.play())
+                for _ in 0..<16 {
+                    if audio.currentTime > 0.02 || playbackError != nil { break }
+                    try await Task.sleep(for: .milliseconds(50))
+                }
+                XCTAssertNil(playbackError, "Direct playback error on \(device.name)")
+                XCTAssertGreaterThan(audio.currentTime, 0.02, "\(device.name) should render the silent PCM")
+                let beforeChange = audio.currentTime
+                NotificationCenter.default.post(name: .AVAudioEngineConfigurationChange, object: audio.engine)
+                for _ in 0..<16 {
+                    if audio.currentTime > beforeChange + 0.02 || playbackError != nil { break }
+                    try await Task.sleep(for: .milliseconds(50))
+                }
+                XCTAssertNil(playbackError, "An unchanged USB route must survive an engine notification")
+                XCTAssertGreaterThan(audio.currentTime, beforeChange + 0.02)
+                var bound: AudioDeviceID = 0
+                var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+                XCTAssertEqual(AudioUnitGetProperty(
+                    try XCTUnwrap(audio.engine.outputNode.audioUnit), kAudioOutputUnitProperty_CurrentDevice,
+                    kAudioUnitScope_Global, 0, &bound, &size), noErr)
+                XCTAssertEqual(bound, device.id)
+            }
+        } catch {
+            await controller.release()
+            throw error
+        }
+        await controller.release()
+        XCTAssertEqual(CoreAudioOutputs.defaultDevice(), originalDefault)
+        for device in usb {
+            XCTAssertEqual(CoreAudioOutputs.value(device.id, kAudioDevicePropertyNominalSampleRate, Double(0)),
+                           device.sampleRate)
+        }
+        print("PRISMA_USB silent-direct-output-devices=\(usb.count)")
+    }
+    @MainActor
     func testAirPlayTransportReplacementCannotPauseTheNewItem() async throws {
         let demo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Sources/PrismaMusic/Resources/Demo/01-Orbita.m4a")

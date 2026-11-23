@@ -189,6 +189,12 @@ struct SettingsView: View {
                 }.disabled(!store.preferences.eqEnabled || store.directOutputActive || store.usingAirPlay)
                 toggle("headroom", $store.preferences.autoHeadroom)
                 Text(store.t("headroomNote")).font(.system(size: 10)).foregroundStyle(.secondary)
+                Picker(store.t("replayGain"), selection: $store.preferences.replayGain) {
+                    Text(store.t("off")).tag(ReplayGainMode.off)
+                    Text(store.t("trackGain")).tag(ReplayGainMode.track)
+                    Text(store.t("albumGain")).tag(ReplayGainMode.album)
+                }
+                Text(store.t("replayGainHelp")).font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Text(store.t("effectiveGain"))
                     Spacer()
@@ -648,6 +654,42 @@ struct EqualizerGraph: View {
         }
     }
 }
+struct NASRecoveryBanner: View {
+    @EnvironmentObject private var store: LibraryStore
+    let reconnect: (LibraryStore.NASRetry) -> Void
+    @State private var resuming = false
+
+    var body: some View {
+        if let retry = store.nasRetry {
+            HStack(spacing: 12) {
+                Label(store.t(store.nasRecoveryReady ? "nasPlaybackReady" : "nasPlaybackOffline"),
+                      systemImage: "externaldrive.connected.to.line.below")
+                    .accessibilityElement(children: .combine)
+                Spacer()
+                if store.nasRecoveryReady {
+                    Button(store.t("resumeNASTrack")) {
+                        resuming = true
+                        Task {
+                            defer { resuming = false }
+                            do { try await store.resumeNASPlayback(retry) } catch is CancellationError {
+                            } catch {
+                                store.error = store.t("reconnectFailed")
+                            }
+                        }
+                    }.buttonStyle(.glassProminent).disabled(resuming)
+                } else {
+                    Button(store.t("reconnectNAS")) { reconnect(retry) }.buttonStyle(.glass)
+                }
+                Button {
+                    store.nasRetry = nil
+                } label: {
+                    Image(systemName: "xmark")
+                }.buttonStyle(.glass).accessibilityLabel(store.t("closeUpdate"))
+            }.font(.callout).padding(12).prismaGlass(16)
+        }
+    }
+}
+
 struct NASView: View {
     @EnvironmentObject var store: LibraryStore
     @Environment(\.dismiss) var dismiss

@@ -34,6 +34,10 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var currentID: String? { didSet { refreshArtworkPalette() } }
     @Published private(set) var loadingTrackID: String?
     private var playbackLoadTask: Task<Void, Never>?
+    private var successorTask: Task<Void, Never>?
+    private var successorAttempt: String?
+    private var gainTask: Task<Void, Never>?
+    private let successorLoader = AudioFileLoader()
     private var albumPlayTask: Task<Void, Never>?
     @Published private(set) var preparingAlbumID: String?
     private var playbackRequest = UUID()
@@ -62,7 +66,28 @@ final class LibraryStore: NSObject, ObservableObject {
         let position: Double
         let request: UUID
     }
-    @Published var nasRetry: NASRetry?
+    @Published var nasRetry: NASRetry? {
+        didSet {
+            nasProbeTask?.cancel()
+            nasRecoveryReady = false
+            guard let nasRetry else { return }
+            nasProbeTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    let readable = await Task.detached(priority: .utility) {
+                        FileManager.default.isReadableFile(atPath: nasRetry.trackID)
+                    }.value
+                    if let self, !Task.isCancelled, self.nasRetry?.id == nasRetry.id {
+                        if self.nasRecoveryReady != readable { self.nasRecoveryReady = readable }
+                    } else {
+                        return
+                    }
+                    try? await Task.sleep(for: .seconds(5))
+                }
+            }
+        }
+    }
+    @Published private(set) var nasRecoveryReady = false
+    private var nasProbeTask: Task<Void, Never>?
     @Published var search = ""
     @Published private(set) var searchFocusRequest = 0
     func focusSearch() { searchFocusRequest &+= 1 }
@@ -84,7 +109,7 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var playlists: [Playlist] = [] { didSet { sectionQueries["playlist:"] = nil } }
     @Published var sleepDeadline: Date?
     @Published var sleepRemaining = 0
-    @Published var stopAfterCurrent = false
+    @Published var stopAfterCurrent = false { didSet { if stopAfterCurrent != oldValue { verifySuccessor() } } }
     @Published var peak = 0.0
     @Published var preferences = ListeningPreferences() { didSet { preferencesChanged(previous: oldValue) } }
     @Published var settingsPage = "sound"
@@ -102,7 +127,12 @@ final class LibraryStore: NSObject, ObservableObject {
         }
     }
     @Published var repeatMode = 0 {  // 0 off, 1 all, 2 one
-        didSet { if repeatMode != oldValue { scheduleQueueSave() } }
+        didSet {
+            if repeatMode != oldValue {
+                scheduleQueueSave()
+                verifySuccessor()
+            }
+        }
     }
     @Published var volume: Float = 0.7 {
         didSet {
@@ -137,6 +167,7 @@ final class LibraryStore: NSObject, ObservableObject {
     private var orderedTracks: (sort: String, tracks: [Track])?
     private var recentTracks: [Track]?
     private var volumeUnmountObserver: AnyCancellable?
+    private var wakeObserver: AnyCancellable?
     private var albumCollectionCache: (revision: Int, id: String, value: AlbumCollection)?
     func albumCollection(_ id: String) -> AlbumCollection? {
         if let cached = albumCollectionCache, cached.revision == revision, cached.id == id { return cached.value }
@@ -266,7 +297,10 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var queue: [String] = [] {
         didSet {
             queueIndexCache = nil
-            if queue != oldValue { scheduleQueueSave() }
+            if queue != oldValue {
+                scheduleQueueSave()
+                verifySuccessor()
+            }
         }
     }
     private struct QueueBookmark: Codable {
@@ -376,16 +410,22 @@ final class LibraryStore: NSObject, ObservableObject {
     var libraryBytes: Int64 { statistics.bytes }
     var totalDuration: Double { statistics.duration }
     private var results: LibraryQueryCache {
-        let key = LibraryQueryKey(
-            revision: revision, search: search, artist: artist, genre: genre, year: year, section: section, sort: sort)
+        let playlist = activePlaylist
         let isPlaylist = section.hasPrefix("playlist:")
+        let key = LibraryQueryKey(
+            revision: revision, search: search, artist: artist, genre: genre, year: year, section: section, sort: sort,
+            smartPlaylistMonth: playlist?.rules?.addedThisMonth == true
+                ? Calendar.current.dateInterval(of: .month, for: .now)?.start : nil)
         let cacheSlot = isPlaylist ? "playlist:" : section
         if let cached = sectionQueries[cacheSlot], cached.key == key { return cached.result }
 
         let base: [Track]
         if isPlaylist {
-            let id = UUID(uuidString: String(section.dropFirst(9)))
-            base = playlists.first(where: { $0.id == id })?.trackIDs.compactMap { track(for: $0) } ?? tracks
+            if let rules = playlist?.rules {
+                base = rules.filter(tracksInCurrentOrder)
+            } else {
+                base = playlist?.trackIDs.compactMap { track(for: $0) } ?? []
+            }
         } else if section == "recent" {
             if let recentTracks {
                 base = recentTracks
@@ -508,6 +548,9 @@ final class LibraryStore: NSObject, ObservableObject {
                     guard let url = message.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL else { return }
                     self?.volumeUnmounted(url)
                 }
+            wakeObserver = NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.checkPlayingNASAfterWake() }
             setupRemoteCommands()
             readyTask = Task { [weak self] in
                 guard let self else { return }
@@ -915,6 +958,7 @@ final class LibraryStore: NSObject, ObservableObject {
     }
 
     private func offerPlaybackRecovery(_ retry: NASRetry) {
+        cancelSuccessor()
         player?.stop()
         player = nil
         preparedOutput = nil
@@ -926,6 +970,21 @@ final class LibraryStore: NSObject, ObservableObject {
         nasRetry = retry
         updateActivity()
         updateNowPlaying()
+    }
+
+    private func checkPlayingNASAfterWake() {
+        guard isPlaying, !playbackLoading, let current,
+            let retry = reconnectRequest(for: current, position: position)
+        else { return }
+        Task { [weak self] in
+            let readable = await Task.detached(priority: .utility) {
+                FileManager.default.isReadableFile(atPath: retry.trackID)
+            }.value
+            guard let self, !readable, self.playbackRequest == retry.request,
+                self.currentID == retry.trackID, self.isPlaying, self.nasRetry == nil
+            else { return }
+            self.offerPlaybackRecovery(retry)
+        }
     }
 
     func openAudioURL(_ url: URL) async {
@@ -1243,12 +1302,14 @@ final class LibraryStore: NSObject, ObservableObject {
         let covers = customAlbumArtwork
         var updated = tracks
         var indices = Dictionary(updated.indices.map { (updated[$0].id, $0) }, uniquingKeysWith: { _, last in last })
+        let importedAt = Date()
         for var track in values {
             if let index = indices[track.id] {
                 let old = updated[index]
                 track.favorite = old.favorite
                 track.lastPlayed = old.lastPlayed
                 track.playCount = old.playCount
+                track.addedAt = old.addedAt
                 if let correction = tagEdits[old.id] { track = correction.applying(to: track) }
                 if !track.hasArtwork {
                     track.artworkURL = old.artworkURL
@@ -1262,6 +1323,7 @@ final class LibraryStore: NSObject, ObservableObject {
                 updated[index] = track
             } else {
                 indices[track.id] = updated.count
+                track.addedAt = importedAt
                 track.albumArtworkURL = covers[AlbumIdentity.key(track)]
                 updated.append(track)
             }
@@ -1634,6 +1696,9 @@ final class LibraryStore: NSObject, ObservableObject {
         playbackLoadTask?.cancel()
         playbackLoadTask = nil
         loadingTrackID = nil
+        cancelSuccessor()
+        (player as? AudioPlayback)?.clearSuccessor()
+        if nasRetry != nil { nasRetry = nil }
     }
     func play(_ track: Track, in list: [Track]? = nil, from start: Double = 0) {
         if let list {
@@ -1656,6 +1721,8 @@ final class LibraryStore: NSObject, ObservableObject {
                 guard let self else { return }
                 let airPlay = self.usingAirPlay
                 let opened = airPlay ? nil : try await opener(track.url)
+                let readsGain = !airPlay && !self.directOutputActive && self.preferences.replayGain != .off
+                let gain = readsGain ? await Self.readReplayGain(track) : nil
                 try Task.checkCancellation()
                 guard self.playbackRequest == token, !self.quitting, self.track(for: track.id) != nil else { return }
                 let previous = self.player
@@ -1680,7 +1747,7 @@ final class LibraryStore: NSObject, ObservableObject {
                 }
                 try Task.checkCancellation()
                 guard self.playbackRequest == token else { return }
-                let audio = try self.makePlayer(track, file: opened?.file, output: output)
+                let audio = try self.makePlayer(track, file: opened?.file, output: output, gain: gain)
                 audio.currentTime = start.isFinite ? max(0, start) : 0
                 guard audio.play() else {
                     throw NSError(
@@ -1689,26 +1756,15 @@ final class LibraryStore: NSObject, ObservableObject {
                 self.preparedOutput = output
                 previous?.stop()
                 self.player = audio
+                self.gainTask?.cancel()
+                self.gainTask = nil
                 self.currentID = track.id
                 self.isPlaying = true
                 self.position = airPlay ? min(track.duration, max(0, start.isFinite ? start : 0)) : audio.currentTime
                 self.loadingTrackID = nil
                 self.playbackLoadTask = nil
-                if let i = self.tracks.firstIndex(where: { $0.id == track.id }) {
-                    self.tracks[i].lastPlayed = Date()
-                    self.tracks[i].playCount = (self.tracks[i].playCount ?? 0) + 1
-                    self.save()
-                }
-                self.updateActivity()
-                self.updateNowPlaying()
-                self.rememberPlayback()
-                if self.online && !track.isDemo && !self.attempted.contains(track.id)
-                    && (!track.hasLyrics || !track.hasArtwork)
-                {
-                    self.attempted.insert(track.id)
-                    self.enrichmentTask?.cancel()
-                    self.enrichmentTask = Task { await self.enrich(track) }
-                }
+                self.didStartTrack(track)
+                if !readsGain { self.updateReplayGain() }
             } catch {
                 guard let self, self.playbackRequest == token, !Task.isCancelled else { return }
                 let unavailable = await Task.detached(priority: .utility) {
@@ -1738,6 +1794,7 @@ final class LibraryStore: NSObject, ObservableObject {
             return
         }
         if isPlaying {
+            cancelSuccessor()
             player.pause()
             isPlaying = false
         } else {
@@ -1816,6 +1873,7 @@ final class LibraryStore: NSObject, ObservableObject {
             ambientEnergy = 0
         }
         guard let player else { return }
+        if let audio = player as? AudioPlayback { prepareSuccessor(for: audio) }
         if playbackBuffering != player.isBuffering { playbackBuffering = player.isBuffering }
         let time = min(current?.duration ?? player.duration, player.currentTime)
         if abs(time - position) >= 0.09 || position > (current?.duration ?? player.duration) { position = time }
@@ -1832,13 +1890,15 @@ final class LibraryStore: NSObject, ObservableObject {
             rememberPlayback()
         }
     }
-    private func makePlayer(_ track: Track, file: AVAudioFile?, output: OutputPreparation?) throws -> any MusicPlayback
+    private func makePlayer(
+        _ track: Track, file: AVAudioFile?, output: OutputPreparation?, gain: ReplayGain? = nil
+    ) throws -> any MusicPlayback
     {
         let audio: any MusicPlayback
         if usingAirPlay {
             audio = AirPlayPlayback(player: airPlayPlayer, track: track)
         } else if let file {
-            audio = try AudioPlayback(file: file, output: output)
+            audio = try AudioPlayback(file: file, output: output, replayGain: gain)
         } else {
             throw URLError(.cannotOpenFile)
         }
@@ -1850,6 +1910,7 @@ final class LibraryStore: NSObject, ObservableObject {
         }
         audio.onError = { [weak self, weak audio] error in
             guard let self, let audio, self.player === audio else { return }
+            let track = self.current ?? track
             self.isPlaying = false
             self.position = audio.currentTime
             if self.directOutputActive {
@@ -1883,12 +1944,105 @@ final class LibraryStore: NSObject, ObservableObject {
         return audio
     }
     func playbackDidFinish() {
+        cancelSuccessor()
         isPlaying = false
         position = player?.duration ?? current?.duration ?? position
         updateActivity()
         updateNowPlaying()
         rememberPlayback()
         if !playbackLoading { next(automatic: true) }
+    }
+    private func didStartTrack(_ track: Track) {
+        if let i = tracks.firstIndex(where: { $0.id == track.id }) {
+            var updated = tracks[i]
+            updated.lastPlayed = Date()
+            updated.playCount = (updated.playCount ?? 0) + 1
+            tracks[i] = updated
+            save()
+        }
+        updateActivity()
+        updateNowPlaying()
+        rememberPlayback()
+        if online && !track.isDemo && !attempted.contains(track.id) && (!track.hasLyrics || !track.hasArtwork) {
+            attempted.insert(track.id)
+            enrichmentTask?.cancel()
+            enrichmentTask = Task { await enrich(track) }
+        }
+    }
+    private func updateReplayGain() {
+        gainTask?.cancel()
+        gainTask = nil
+        guard preferences.replayGain != .off, let track = current, track.codecLabel == "FLAC",
+            let audio = player as? AudioPlayback, !audio.direct
+        else { return }
+        gainTask = Task { [weak self, weak audio] in
+            let gain = await Self.readReplayGain(track)
+            guard let self, let audio, !Task.isCancelled, self.player === audio, self.currentID == track.id else {
+                return
+            }
+            self.cancelSuccessor()
+            audio.clearSuccessor()
+            audio.setReplayGain(gain)
+            self.gainTask = nil
+        }
+    }
+    private nonisolated static func readReplayGain(_ track: Track) async -> ReplayGain? {
+        guard track.codecLabel == "FLAC" else { return nil }
+        return await Task.detached(priority: .utility) {
+            try? NativeFLACMetadata.replayGain(track.url)
+        }.value
+    }
+    private func successorTrack() -> Track? {
+        guard !stopAfterCurrent, preferences.continueQueue, let current else { return nil }
+        if repeatMode == 2 { return current }
+        if let index = queueIndex(current.id) {
+            for id in queue.dropFirst(index + 1) {
+                if let track = track(for: id) { return track }
+            }
+        }
+        if repeatMode == 1 { return queue.lazy.compactMap { self.track(for: $0) }.first }
+        return nil
+    }
+    private func cancelSuccessor() {
+        successorTask?.cancel()
+        successorTask = nil
+        successorAttempt = nil
+    }
+    private func verifySuccessor() {
+        guard successorAttempt != nil || (player as? AudioPlayback)?.queuedSuccessorID != nil else { return }
+        let nextID = successorTrack()?.id
+        if successorAttempt != nextID { cancelSuccessor() }
+        if let audio = player as? AudioPlayback, let pending = audio.queuedSuccessorID, pending != nextID {
+            audio.clearSuccessor()
+        }
+    }
+    private func prepareSuccessor(for audio: AudioPlayback) {
+        guard isPlaying, !playbackLoading, !quitting, gainTask == nil, successorTask == nil,
+            audio.queuedSuccessorID == nil, audio.duration - audio.currentTime <= 12,
+            let currentID, let track = successorTrack(), successorAttempt != track.id
+        else { return }
+        successorAttempt = track.id
+        let request = playbackRequest
+        let loader = successorLoader
+        let normalize = preferences.replayGain != .off && !audio.direct
+        successorTask = Task { [weak self, weak audio] in
+            defer {
+                if !Task.isCancelled { self?.successorTask = nil }
+            }
+            guard let opened = try? await loader.open(track.url) else { return }
+            let gain = normalize ? await Self.readReplayGain(track) : nil
+            guard let self, let audio, !Task.isCancelled, self.playbackRequest == request, self.currentID == currentID,
+                self.player === audio, self.isPlaying, self.successorTrack()?.id == track.id
+            else { return }
+            audio.scheduleSuccessor(id: track.id, file: opened.file, gain: gain) { [weak self, weak audio] id in
+                guard let self, let audio, self.player === audio, let next = self.track(for: id) else { return }
+                self.cancelSuccessor()
+                self.currentID = id
+                self.position = audio.currentTime
+                self.lastRememberedSecond = -1
+                self.didStartTrack(next)
+            }
+        }
     }
     func pausePlayback() {
         outputResumeIntent = false
@@ -1918,7 +2072,15 @@ final class LibraryStore: NSObject, ObservableObject {
             restartOutput()
         }
         if !preferences.showFeedback { dismissFeedback() }
+        if previous.replayGain != preferences.replayGain || previous.eqEnabled != preferences.eqEnabled
+            || previous.eqGains != preferences.eqGains || previous.effectivePreamp != preferences.effectivePreamp
+        {
+            cancelSuccessor()
+            (player as? AudioPlayback)?.clearSuccessor()
+        }
         player?.apply(preferences)
+        if previous.continueQueue != preferences.continueQueue { verifySuccessor() }
+        if previous.replayGain != preferences.replayGain { updateReplayGain() }
         updateActivity()
         configureMiniPlayer()
         do { persistence.writeSmallFile("preferences.json", data: try JSONEncoder().encode(preferences)) } catch {
@@ -1944,15 +2106,33 @@ final class LibraryStore: NSObject, ObservableObject {
         settingsPage = page
         showSettings = true
     }
-    func createPlaylist(_ name: String) {
+    var activePlaylist: Playlist? {
+        guard section.hasPrefix("playlist:"), let id = UUID(uuidString: String(section.dropFirst(9))) else {
+            return nil
+        }
+        return playlists.first { $0.id == id }
+    }
+    func createPlaylist(_ name: String, rules: SmartPlaylistRules? = nil, replacing id: UUID? = nil) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        playlists.append(Playlist(name: name))
+        guard !name.isEmpty, rules?.isEmpty != true else { return }
+        if let id {
+            guard let index = playlists.firstIndex(where: { $0.id == id }), playlists[index].rules != nil,
+                let rules
+            else { return }
+            playlists[index].name = name
+            playlists[index].rules = rules
+        } else {
+            let playlist = Playlist(name: name, rules: rules)
+            playlists.append(playlist)
+            if rules != nil { navigateTo("playlist:\(playlist.id)") }
+        }
         save()
         postFeedback("playlistCreated", detail: name, icon: "music.note.list")
     }
     func add(_ track: Track, to playlist: Playlist) {
-        if let i = playlists.firstIndex(where: { $0.id == playlist.id }), !playlists[i].trackIDs.contains(track.id) {
+        if let i = playlists.firstIndex(where: { $0.id == playlist.id }), playlists[i].rules == nil,
+            !playlists[i].trackIDs.contains(track.id)
+        {
             playlists[i].trackIDs.append(track.id)
             save()
             postFeedback(
@@ -1968,7 +2148,7 @@ final class LibraryStore: NSObject, ObservableObject {
         postFeedback("playlistDeleted", detail: playlist.name, icon: "trash", undo: .playlistRemoval(playlist, index))
     }
     func removeFromPlaylist(_ track: Track) {
-        if let i = playlists.firstIndex(where: { section == "playlist:\($0.id)" }) {
+        if let i = playlists.firstIndex(where: { section == "playlist:\($0.id)" && $0.rules == nil }) {
             playlists[i].trackIDs.removeAll { $0 == track.id }
             save()
         }

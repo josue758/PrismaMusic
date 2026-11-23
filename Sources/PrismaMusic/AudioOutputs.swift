@@ -258,7 +258,12 @@ actor AudioDeviceController {
     func release() {
         operation = UUID()
         guard let held else { return }
-        if let originalRate, originalRate > 0 { try? CoreAudioOutputs.setRate(originalRate, device: held) }
+        if let originalRate, originalRate > 0,
+            abs(originalRate - (CoreAudioOutputs.value(held, kAudioDevicePropertyNominalSampleRate, Double(0)) ?? 0))
+                > 0.5
+        {
+            try? CoreAudioOutputs.setRate(originalRate, device: held)
+        }
         if ownsExclusive { try? CoreAudioOutputs.setExclusive(false, device: held) }
         self.held = nil
         originalRate = nil

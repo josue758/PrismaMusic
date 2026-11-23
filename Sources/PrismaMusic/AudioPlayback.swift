@@ -14,7 +14,17 @@ final class AudioPlayback: MusicPlayback {
     let speed = AVAudioUnitTimePitch()
     let balanceMixer = AVAudioMixerNode()
     let balanceEffect: AVAudioUnitEffect
-    let file: AVAudioFile
+    private(set) var file: AVAudioFile
+    private var replayGain: ReplayGain?
+    private var appliedPreferences = ListeningPreferences()
+    private var successor: Successor?
+    private struct Successor {
+        let id: String
+        let file: AVAudioFile
+        let gain: ReplayGain?
+        let advance: (String) -> Void
+    }
+    var queuedSuccessorID: String? { successor?.id }
     var onFinish: (() -> Void)?
     var onError: ((Error) -> Void)?
     private let meter = AudioMeter()
@@ -49,10 +59,11 @@ final class AudioPlayback: MusicPlayback {
     convenience init(contentsOf url: URL) throws {
         try self.init(file: AVAudioFile(forReading: url))
     }
-    init(file: AVAudioFile, output: OutputPreparation? = nil, direct: Bool = false) throws {
+    init(file: AVAudioFile, output: OutputPreparation? = nil, direct: Bool = false, replayGain: ReplayGain? = nil) throws {
         self.direct = output?.direct ?? direct
         balanceEffect = AVAudioUnitEffect(audioComponentDescription: StereoBalanceUnit.component)
         self.file = file
+        self.replayGain = replayGain
         if let output {
             guard let unit = engine.outputNode.audioUnit else {
                 throw CoreAudioOutputs.error(kAudioHardwareBadDeviceError)
@@ -100,7 +111,7 @@ final class AudioPlayback: MusicPlayback {
                 let time = self.currentTime
                 self.stopNode()
                 self.offset = time
-                if self.direct {
+                if self.direct && !self.canResumeDirectPlayback(output) {
                     self.engine.pause()
                     self.onError?(
                         NSError(
@@ -118,14 +129,36 @@ final class AudioPlayback: MusicPlayback {
             }
         }
     }
+    private func canResumeDirectPlayback(_ prepared: OutputPreparation?) -> Bool {
+        guard let prepared, let unit = engine.outputNode.audioUnit else { return false }
+        var device: AudioDeviceID = 0
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        guard AudioUnitGetProperty(
+            unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &device, &size
+        ) == noErr, device == prepared.deviceID,
+            let hardwareRate = CoreAudioOutputs.value(device, kAudioDevicePropertyNominalSampleRate, Double(0)),
+            abs(hardwareRate - file.processingFormat.sampleRate) < 0.5
+        else { return false }
+        let format = engine.outputNode.outputFormat(forBus: 0)
+        guard abs(format.sampleRate - hardwareRate) < 0.5,
+            format.channelCount >= file.processingFormat.channelCount
+        else { return false }
+        return !prepared.exclusive ||
+            CoreAudioOutputs.value(device, kAudioDevicePropertyHogMode, pid_t(-1)) == ProcessInfo.processInfo.processIdentifier
+    }
     func apply(_ preferences: ListeningPreferences) {
         if direct {
             engine.mainMixerNode.outputVolume = 1
             return
         }
-        equalizer.bypass = !preferences.eqEnabled
-        equalizer.globalGain = preferences.effectivePreamp
-        for i in equalizer.bands.indices { equalizer.bands[i].gain = preferences.eqGains[i] }
+        appliedPreferences = preferences
+        let gain = normalization(replayGain)
+        equalizer.bypass = !preferences.eqEnabled && gain == 0
+        equalizer.globalGain = min(24, max(-96, preferences.effectivePreamp + gain))
+        for i in equalizer.bands.indices {
+            equalizer.bands[i].gain = preferences.eqGains[i]
+            equalizer.bands[i].bypass = !preferences.eqEnabled
+        }
         if active && speed.rate != preferences.playbackRate {
             offset = currentTime
             startRenderSample = engine.mainMixerNode.lastRenderTime?.sampleTime
@@ -134,6 +167,27 @@ final class AudioPlayback: MusicPlayback {
         speed.pitch = 0
         desiredBalance = preferences.balance
         applyBalance()
+    }
+    func setReplayGain(_ gain: ReplayGain?) {
+        replayGain = gain
+        apply(appliedPreferences)
+    }
+    private func normalization(_ gain: ReplayGain?) -> Float {
+        guard !direct else { return 0 }
+        let eqBoost = appliedPreferences.effectivePreamp
+            + (appliedPreferences.eqEnabled ? max(0, appliedPreferences.eqGains.max() ?? 0) : 0)
+        return gain?.decibels(appliedPreferences.replayGain, eqBoost: eqBoost) ?? 0
+    }
+    func scheduleSuccessor(id: String, file: AVAudioFile, gain: ReplayGain?, advance: @escaping (String) -> Void) {
+        guard active, successor == nil, file.length > 0, file.processingFormat == self.file.processingFormat,
+            normalization(gain) == normalization(replayGain), currentTime < duration - 0.05
+        else { return }
+        successor = Successor(id: id, file: file, gain: gain, advance: advance)
+        schedule(file, from: 0, token: generation)
+    }
+    func clearSuccessor() {
+        guard successor != nil else { return }
+        currentTime = min(currentTime, max(0, duration - 0.02))
     }
     private func applyBalance() {
         (balanceEffect.auAudioUnit as? StereoBalanceUnit)?.balance = desiredBalance
@@ -149,24 +203,7 @@ final class AudioPlayback: MusicPlayback {
             guard remaining > 0 else { return false }
             generation += 1
             let token = generation
-            // Segments over UInt32.max frames are scheduled as consecutive pieces.
-            var start = frame
-            while start < file.length {
-                let count = AVAudioFrameCount(min(Int64(UInt32.max), file.length - start))
-                let last = start + Int64(count) >= file.length
-                node.scheduleSegment(
-                    file, startingFrame: start, frameCount: count, at: nil, completionCallbackType: .dataPlayedBack
-                ) { [weak self] _ in
-                    guard last else { return }
-                    Task { @MainActor in
-                        guard let self, self.generation == token, self.active else { return }
-                        self.active = false
-                        self.offset = self.duration
-                        self.onFinish?()
-                    }
-                }
-                start += Int64(count)
-            }
+            schedule(file, from: frame, token: token)
             startRenderSample = engine.mainMixerNode.lastRenderTime?.sampleTime
             active = true
             node.play()
@@ -175,6 +212,39 @@ final class AudioPlayback: MusicPlayback {
             onError?(error)
             return false
         }
+    }
+    private func schedule(_ file: AVAudioFile, from frame: AVAudioFramePosition, token: Int) {
+        // With no explicit time, the player node schedules each segment immediately after the previous one.
+        var start = frame
+        while start < file.length {
+            let count = AVAudioFrameCount(min(Int64(UInt32.max), file.length - start))
+            let last = start + Int64(count) >= file.length
+            node.scheduleSegment(
+                file, startingFrame: start, frameCount: count, at: nil, completionCallbackType: .dataPlayedBack
+            ) { [weak self] _ in
+                guard last else { return }
+                Task { @MainActor in self?.segmentFinished(token) }
+            }
+            start += Int64(count)
+        }
+    }
+    private func segmentFinished(_ token: Int) {
+        guard generation == token, active else { return }
+        guard let successor else {
+            active = false
+            offset = duration
+            onFinish?()
+            return
+        }
+        self.successor = nil
+        if let anchor = startRenderSample, let renderTime = engine.mainMixerNode.lastRenderTime {
+            let frames = max(0, duration - offset) * renderTime.sampleRate / Double(direct ? 1 : speed.rate)
+            startRenderSample = anchor + AVAudioFramePosition(frames.rounded())
+        }
+        file = successor.file
+        replayGain = successor.gain
+        offset = 0
+        successor.advance(successor.id)
     }
     func pause() {
         let time = currentTime
@@ -190,6 +260,7 @@ final class AudioPlayback: MusicPlayback {
     private func stopNode() {
         generation += 1
         active = false
+        successor = nil
         node.stop()
     }
     deinit {

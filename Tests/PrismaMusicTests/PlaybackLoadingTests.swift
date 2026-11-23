@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import XCTest
 
@@ -260,6 +261,11 @@ final class PlaybackLoadingTests: XCTestCase {
         } catch {}
         XCTAssertEqual(store.nasRetry?.id, retry.id)
         try Data([0]).write(to: song.url)
+        for _ in 0..<60 where !store.nasRecoveryReady {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertTrue(store.nasRecoveryReady)
+        XCTAssertFalse(store.isPlaying, "Reconnection must wait for the user to resume")
         try await store.resumeNASPlayback(retry)
         await gate.waitForOpen(song.url)
         XCTAssertNil(store.nasRetry)
@@ -270,4 +276,38 @@ final class PlaybackLoadingTests: XCTestCase {
         try await store.prepareForTermination()
     }
 
+    @MainActor
+    func testWakeNotificationRecoversOnlyAnUnavailableNAS() async throws {
+        let folder = try directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = LibraryStore(directory: folder)
+        await store.waitUntilReady()
+        var song = track("Network")
+        song.url = folder.appendingPathComponent("network.flac")
+        song.sourceIsNetwork = true
+        let next = track("Next")
+        store.tracks = [song, next]
+        store.sources = [MusicSource(url: folder)]
+        store.queue = [song.id, next.id]
+        store.currentID = song.id
+        store.position = 25
+        store.isPlaying = true
+        try Data([0]).write(to: song.url)
+        let notifications = NSWorkspace.shared.notificationCenter
+        notifications.post(name: NSWorkspace.didWakeNotification, object: nil)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertTrue(store.isPlaying)
+        XCTAssertNil(store.nasRetry)
+        try FileManager.default.removeItem(at: song.url)
+        notifications.post(name: NSWorkspace.didWakeNotification, object: nil)
+        for _ in 0..<60 {
+            if store.nasRetry != nil { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertFalse(store.isPlaying)
+        XCTAssertEqual(store.nasRetry?.trackID, song.id)
+        XCTAssertEqual(store.nasRetry?.position, 25)
+        XCTAssertEqual(store.queue, [song.id, next.id])
+        try await store.prepareForTermination()
+    }
 }

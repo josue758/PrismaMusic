@@ -10,6 +10,7 @@ struct ListeningPreferences: Codable, Equatable {
     var eqPreset = "flat"
     var preamp: Float = 0
     var autoHeadroom = true
+    var replayGain: ReplayGainMode = .off
     var balance: Float = 0
     var playbackRate: Float = 1
     var continueQueue = true
@@ -47,7 +48,7 @@ struct ListeningPreferences: Codable, Equatable {
     init() {}
     private enum CodingKeys: String, CodingKey {
         case outputDeviceUID, directOutput, exclusiveOutput, hasCompletedWelcome, eqEnabled, eqGains, eqPreset, preamp,
-            autoHeadroom, balance, playbackRate, continueQueue, keepAwake, rememberPosition, startSection, glassStyle,
+            autoHeadroom, replayGain, balance, playbackRate, continueQueue, keepAwake, rememberPosition, startSection, glassStyle,
             atmosphere, adaptiveArtwork, ambientMotion, artworkPulse, glassTransparency, microInteractions, hoverDepth,
             showFeedback, compactRows, showQuality, albumSize, autoArtwork, autoLyrics, watchMusicFolders,
             recursiveScan, scanWorkers,
@@ -67,6 +68,7 @@ struct ListeningPreferences: Codable, Equatable {
         eqPreset = try values.decodeIfPresent(String.self, forKey: .eqPreset) ?? eqPreset
         preamp = try values.decodeIfPresent(Float.self, forKey: .preamp) ?? preamp
         autoHeadroom = try values.decodeIfPresent(Bool.self, forKey: .autoHeadroom) ?? autoHeadroom
+        replayGain = try values.decodeIfPresent(ReplayGainMode.self, forKey: .replayGain) ?? .off
         balance = try values.decodeIfPresent(Float.self, forKey: .balance) ?? balance
         playbackRate = try values.decodeIfPresent(Float.self, forKey: .playbackRate) ?? playbackRate
         continueQueue = try values.decodeIfPresent(Bool.self, forKey: .continueQueue) ?? continueQueue
@@ -148,4 +150,5 @@ struct Playlist: Identifiable, Codable, Equatable {
     var id = UUID()
     var name: String
     var trackIDs: [String] = []
+    var rules: SmartPlaylistRules?
 }

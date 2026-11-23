@@ -218,6 +218,21 @@ final class ListeningTests: XCTestCase {
         }
         XCTAssertTrue(player.play())
         XCTAssertGreaterThan(try renderEnergy(), 0.01, "Actual audio must decode from the network file")
+        let library = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: library) }
+        let store = LibraryStore(directory: library, autoStart: false)
+        store.sources = [MusicSource(url: url)]
+        let scan = Task { await store.scanNewMusic() }
+        for _ in 0..<100 {
+            if store.scanning || !store.tracks.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        XCTAssertTrue(store.scanning)
+        XCTAssertTrue(player.isPlaying)
+        XCTAssertGreaterThan(try renderEnergy(), 0.01, "Network audio must still decode during an incremental scan")
+        await scan.value
+        XCTAssertEqual(store.tracks.map(\.url), [url])
+        try await store.flushSaving()
         let target = min(30, track.duration / 2)
         player.currentTime = target
         XCTAssertEqual(player.currentTime, target, accuracy: 0.1)
@@ -228,7 +243,7 @@ final class ListeningTests: XCTestCase {
         XCTAssertGreaterThan(try renderEnergy(), 0.01)
         player.stop()
         print(
-            "PRISMA_NAS format=\(track.format ?? "?") rate=\(track.sampleRate ?? 0) bits=\(track.bitDepth ?? 0) bitrate=\(track.bitrate ?? 0) decoded-and-seeked=true background-open-seconds=\(openSeconds)"
+            "PRISMA_NAS format=\(track.format ?? "?") rate=\(track.sampleRate ?? 0) bits=\(track.bitDepth ?? 0) bitrate=\(track.bitrate ?? 0) decoded-and-seeked=true incremental-scan=true background-open-seconds=\(openSeconds)"
         )
     }
 
