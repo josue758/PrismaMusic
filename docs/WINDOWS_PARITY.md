@@ -1,6 +1,6 @@
-# Adaptación de Windows a macOS · 0.14.0
+# Adaptación de Windows a macOS · 0.14.6
 
-Referencia examinada: PrismaMusic-Windows 0.62.9, commit `f27806f` (rama main). Se revisaron README, historial y código de revisión/edición de etiquetas, exportación, escaneo, audio y navegación.
+Referencia examinada: PrismaMusic-Windows 0.62.10, commit `ce01993` (rama main). Se revisaron README, historial y código de revisión/edición de etiquetas, exportación, escaneo, audio y navegación.
 
 | Función de Windows | Implementación en Mac |
 | --- | --- |
@@ -14,7 +14,12 @@ Referencia examinada: PrismaMusic-Windows 0.62.9, commit `f27806f` (rama main). 
 | Más reproducidas en artista | Cinco pistas según el contador local. Se añaden botones para ir a canciones/álbumes y se respeta el tamaño de portada elegido. |
 | Exportación JSON y M3U8 | Ya disponible en Mac; la exportación JSON incorpora las nuevas correcciones por campo. Las bibliotecas no se importan automáticamente entre plataformas. |
 | Actualizaciones, letras, retratos, mini, cola, EQ | Mac ya dispone de estas funciones; se conservan los servicios y ventanas nativos. |
-| WASAPI, Mica y Argos | Se mantienen Core Audio, Liquid Glass y Apple Translation. La traducción de Mac continúa destinada al español. Los mecanismos propios de Windows no se trasladan. |
+| Idioma de destino de las letras | En las letras, **Traducir a** permite elegir entre los idiomas que ofrece Apple Translation. Guarda la elección y mantiene cada idioma en su propia caché. |
+| Paneles en ventanas estrechas | Letras, Cola e Información se superponen a la biblioteca. En ventanas anchas quedan a su lado. Esc y pulsar fuera cierran el panel superpuesto. |
+| Restauración de sesión | Mac conserva el orden de la cola, el modo aleatorio y la repetición. El ajuste de posición sigue controlando la pista y el tiempo de reanudación. |
+| Reanudar pista y deshacer en la cola | Si el NAS ya está montado, se retoma la pista directamente con su posición y cola. Quitar una pista ofrece Deshacer. |
+| Correcciones en Información del archivo | El panel muestra los campos que tienen correcciones locales. |
+| WASAPI, Mica y Argos | Mac usa Core Audio, Liquid Glass y Apple Translation. |
 
 Además se completa la búsqueda periódica de música nueva con la app abierta: intervalo nominal de 90 segundos, sin lecturas de etiquetas ya conocidas, dos lectores como máximo y pausa de cinco minutos antes de reintentar archivos fallidos. Se puede desactivar en Biblioteca. Las llamadas SMB del sistema pueden tardar en devolver el control; la cancelación evita continuar después de ellas.
 

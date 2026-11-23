@@ -17,6 +17,11 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published private(set) var usingAirPlay = false
     @Published private(set) var playbackBuffering = false
     @Published private(set) var preparedOutput: OutputPreparation?
+    struct AlbumTrackReveal: Equatable {
+        let trackID: String
+        private let requestID = UUID()
+    }
+    @Published private(set) var albumTrackReveal: AlbumTrackReveal?
     @Published var selectedAlbumID: String?
     @Published var selectedArtist: String?
     @Published var tracks: [Track] = [] {
@@ -38,6 +43,7 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var level = 0.0
     @Published private(set) var loading = true
     @Published private(set) var scanning = false
+    @Published private(set) var writingFileTags = false
     @Published private(set) var scanDiscovered = 0
     @Published private(set) var scanProcessed = 0
     @Published private(set) var scanAudit: ScanAudit?
@@ -87,13 +93,17 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published var showSettings = false
     @Published var shuffle = false {
         didSet {
-            if shuffle {
+            guard !restoringQueue else { return }
+            if shuffle && !oldValue {
                 let rest = queue.filter { $0 != currentID }.shuffled()
                 queue = currentID.map { [$0] + rest } ?? rest
             }
+            if shuffle != oldValue { scheduleQueueSave() }
         }
     }
-    @Published var repeatMode = 0  // 0 off, 1 all, 2 one
+    @Published var repeatMode = 0 {  // 0 off, 1 all, 2 one
+        didSet { if repeatMode != oldValue { scheduleQueueSave() } }
+    }
     @Published var volume: Float = 0.7 {
         didSet {
             player?.volume = volume
@@ -157,11 +167,13 @@ final class LibraryStore: NSObject, ObservableObject {
             return
         }
         guard let origin = detailHistory.popLast() else { return }
+        albumTrackReveal = nil
         section = origin.section
         selectedArtist = origin.artist
         selectedAlbumID = origin.albumID
     }
     func navigateTo(_ destination: String, preservingSearch: Bool = false) {
+        if albumTrackReveal != nil { albumTrackReveal = nil }
         detailHistory.removeAll()
         if selectedAlbumID != nil { selectedAlbumID = nil }
         if selectedArtist != nil { selectedArtist = nil }
@@ -170,8 +182,18 @@ final class LibraryStore: NSObject, ObservableObject {
         if !preservingSearch && !search.isEmpty { search = "" }
         clearMetadataFilters()
     }
-    func openAlbum(_ track: Track) {
-        guard selectedAlbumID != track.id else { return }
+    func openAlbum(_ track: Track, revealTrack: Bool = false) {
+        if revealTrack {
+            albumTrackReveal = AlbumTrackReveal(trackID: track.id)
+            inspectedID = track.id
+        } else if albumTrackReveal != nil {
+            albumTrackReveal = nil
+        }
+        guard selectedAlbumID != track.id || showVisualizer else { return }
+        if selectedAlbumID == track.id {
+            showVisualizer = false
+            return
+        }
         rememberDetailOrigin()
         selectedAlbumID = track.id
         inspectedID = track.id
@@ -184,13 +206,14 @@ final class LibraryStore: NSObject, ObservableObject {
     func openArtist(_ name: String) {
         guard selectedArtist != name || selectedAlbumID != nil else { return }
         rememberDetailOrigin()
+        albumTrackReveal = nil
         selectedAlbumID = nil
         selectedArtist = name
         section = "artists"
         showVisualizer = false
     }
     func readAlbumOrder(_ id: String) async {
-        guard let album = albumCollection(id) else { return }
+        guard !writingFileTags, let album = albumCollection(id) else { return }
         let pending = album.tracks.filter { $0.albumOrderRead != true }
         var positions: [String: (Int?, Int?)] = [:]
         await withTaskGroup(of: (String, Int?, Int?)?.self) { group in
@@ -218,10 +241,10 @@ final class LibraryStore: NSObject, ObservableObject {
                 submit()
             }
         }
-        guard !positions.isEmpty, !Task.isCancelled else { return }
+        guard !writingFileTags, !positions.isEmpty, !Task.isCancelled else { return }
         var updated = tracks
         for i in updated.indices {
-            if let value = positions[updated[i].id] {
+            if updated[i].albumOrderRead != true, let value = positions[updated[i].id] {
                 updated[i].trackNumber = value.0
                 updated[i].discNumber = value.1
                 updated[i].albumOrderRead = true
@@ -240,7 +263,20 @@ final class LibraryStore: NSObject, ObservableObject {
     private var revision = 0
     private var player: (any MusicPlayback)?
     private var timer: Timer?
-    @Published var queue: [String] = [] { didSet { queueIndexCache = nil } }
+    @Published var queue: [String] = [] {
+        didSet {
+            queueIndexCache = nil
+            if queue != oldValue { scheduleQueueSave() }
+        }
+    }
+    private struct QueueBookmark: Codable {
+        var ids: [String]
+        var shuffle: Bool
+        var repeatMode: Int
+    }
+    private var savedQueue: QueueBookmark?
+    private var restoringQueue = false
+    private var queueSaveTask: Task<Void, Never>?
     private var activity: NSObjectProtocol?
     private var lastRememberedSecond = -1
     private var savedPlayback: (String, Double)?
@@ -255,6 +291,7 @@ final class LibraryStore: NSObject, ObservableObject {
         var after: Track
         var previous: TrackTagEdits?
         var applied: TrackTagEdits
+        var carriedAlbumArtwork = false
     }
     private var tagUndo: [TagUndo] = []
     @Published private(set) var canUndoTagEdits = false
@@ -477,6 +514,11 @@ final class LibraryStore: NSObject, ObservableObject {
                 do {
                     let persistence = self.persistence
                     let snapshot = try await Task.detached(priority: .utility) { try persistence.load() }.value
+                    if let data = try? Data(contentsOf: dataDirectory.appendingPathComponent("queue.json")),
+                        let queue = try? JSONDecoder().decode(QueueBookmark.self, from: data)
+                    {
+                        savedQueue = queue
+                    }
                     applyLoaded(snapshot, includeDemo: true)
                 } catch {
                     saveBlocked = true
@@ -485,6 +527,7 @@ final class LibraryStore: NSObject, ObservableObject {
                 loading = false
                 guard !quitting else { return }
                 restorePlaybackIfNeeded()
+                restoreSavedQueue()
                 if !preferences.hasCompletedWelcome {
                     showWelcome = true
                     return
@@ -504,10 +547,42 @@ final class LibraryStore: NSObject, ObservableObject {
         guard player == nil, currentID == nil, !isPlaying, let (id, time) = savedPlayback, let track = track(for: id)
         else { return }
         // Restoring the selection must not contact a sleeping or unavailable NAS.
+        restoringQueue = true
+        defer { restoringQueue = false }
         currentID = id
         position = min(track.duration, max(0, time))
-        queue = filtered.map(\.id)
+        if queue.isEmpty && savedQueue == nil { queue = filtered.map(\.id) }
         updateNowPlaying()
+    }
+
+    private func restoreSavedQueue() {
+        guard let savedQueue else { return }
+        self.savedQueue = nil
+        restoringQueue = true
+        defer { restoringQueue = false }
+        shuffle = savedQueue.shuffle
+        repeatMode = max(0, min(2, savedQueue.repeatMode))
+        var seen = Set<String>()
+        queue = savedQueue.ids.filter { track(for: $0) != nil && seen.insert($0).inserted }
+    }
+
+    private func scheduleQueueSave() {
+        guard !loading, !restoringQueue, !saveBlocked else { return }
+        queueSaveTask?.cancel()
+        queueSaveTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+            self?.storeQueue()
+        }
+    }
+
+    private func storeQueue() {
+        guard !saveBlocked else { return }
+        queueSaveTask?.cancel()
+        queueSaveTask = nil
+        do {
+            let snapshot = QueueBookmark(ids: queue, shuffle: shuffle, repeatMode: repeatMode)
+            persistence.writeSmallFile("queue.json", data: try JSONEncoder().encode(snapshot))
+        } catch { status = error.localizedDescription }
     }
 
     private func applyLoaded(_ snapshot: LibrarySnapshot?, includeDemo: Bool) {
@@ -590,6 +665,7 @@ final class LibraryStore: NSObject, ObservableObject {
             .init(section: origin.section, artist: origin.artist, albumID: origin.albumID.map { ids[$0] ?? $0 })
         }
         if let (id, time) = savedPlayback { savedPlayback = (ids[id] ?? id, time) }
+        if let old = savedQueue?.ids { savedQueue?.ids = old.map { ids[$0] ?? $0 } }
     }
     func save() {
         guard !saveBlocked else { return }
@@ -598,12 +674,14 @@ final class LibraryStore: NSObject, ObservableObject {
     }
     func flushSaving() async throws { try await persistence.flush() }
     func prepareForTermination() async throws {
+        guard !writingFileTags else { throw PersistenceFailure(message: t("writingFileTags")) }
         quitting = true
         defer { quitting = false }
         cancelScan()
         cancelSourceRelocation()
         if loading { await readyTask?.value }
         await scanTask?.value
+        storeQueue()
         pausePlayback()
         player?.stop()
         player = nil
@@ -675,7 +753,7 @@ final class LibraryStore: NSObject, ObservableObject {
     }
 
     func relocateSource(_ source: MusicSource, to destination: URL) async {
-        guard !loading, !scanning, !relocatingSource, !quitting, !saveBlocked,
+        guard !loading, !scanning, !writingFileTags, !relocatingSource, !quitting, !saveBlocked,
             let index = sources.firstIndex(of: source),
             destination.isFileURL, destination.path != source.url.path
         else { return }
@@ -772,6 +850,27 @@ final class LibraryStore: NSObject, ObservableObject {
         sources.first { $0.id == retry.sourceID }?.serverAddress
     }
 
+    func resumeNASPlayback(_ retry: NASRetry) async throws {
+        guard playbackRequest == retry.request, let song = track(for: retry.trackID),
+            sources.contains(where: { $0.id == retry.sourceID })
+        else { throw CancellationError() }
+        let available = await Task.detached(priority: .utility) {
+            FileManager.default.isReadableFile(atPath: song.url.path)
+        }.value
+        try Task.checkCancellation()
+        guard playbackRequest == retry.request, let latest = track(for: retry.trackID), latest.url == song.url,
+            sources.contains(where: { $0.id == retry.sourceID })
+        else { throw CancellationError() }
+        guard available else { throw URLError(.fileDoesNotExist) }
+        finishNASRecovery(retry, song: latest)
+    }
+
+    private func finishNASRecovery(_ retry: NASRetry, song: Track) {
+        sourceStates[retry.sourceID] = "ready"
+        nasRetry = nil
+        play(song, from: retry.position)
+    }
+
     func reconnect(_ retry: NASRetry, server: URL) async throws {
         guard playbackRequest == retry.request, let song = track(for: retry.trackID),
             let index = sources.firstIndex(where: { $0.id == retry.sourceID }),
@@ -790,10 +889,8 @@ final class LibraryStore: NSObject, ObservableObject {
                     throw URLError(.fileDoesNotExist)
                 }
                 sources[index].serverAddress = server
-                sourceStates[retry.sourceID] = "ready"
                 save()
-                nasRetry = nil
-                play(song, from: retry.position)
+                finishNASRecovery(retry, song: song)
                 return
             }
             try await Task.sleep(for: .milliseconds(500))
@@ -882,7 +979,7 @@ final class LibraryStore: NSObject, ObservableObject {
         retryURL: URL? = nil
     ) async {
         if loading { await readyTask?.value }
-        guard !scanning, !relocatingSource, !quitting, !saveBlocked else { return }
+        guard !scanning, !writingFileTags, !relocatingSource, !quitting, !saveBlocked else { return }
         scanning = true
         scanDiscovered = 0
         scanProcessed = 0
@@ -1110,7 +1207,40 @@ final class LibraryStore: NSObject, ObservableObject {
             ? t("scanCancelled")
             : unavailable > 0 ? t("offline") : failures > 0 ? "\(t("scanErrors")): \(failures)" : t("ready")
     }
+    private var customAlbumArtwork: [String: URL] {
+        tracks.reduce(into: [:]) { covers, track in
+            if let url = track.albumArtworkURL { covers[AlbumIdentity.key(track)] = url }
+        }
+    }
+
+    func setAlbumArtwork(_ image: URL?, for trackID: String) async {
+        guard !saveBlocked, let seed = track(for: trackID) else { return }
+        let album = AlbumIdentity.key(seed)
+        do {
+            var asset: URL?
+            if let image {
+                guard let imported = try await persistence.importAlbumArtwork(from: image) else {
+                    error = t("albumArtworkInvalid")
+                    return
+                }
+                asset = imported
+            }
+            guard let current = track(for: trackID), AlbumIdentity.key(current) == album else { return }
+            tracks = tracks.map { track in
+                guard AlbumIdentity.key(track) == album else { return track }
+                var updated = track
+                updated.albumArtworkURL = asset
+                return updated
+            }
+            save()
+            try await persistence.flush()
+            updateNowPlaying()
+            postFeedback(image == nil ? "albumArtworkRestored" : "albumArtworkSaved", detail: displayAlbum(seed.album))
+        } catch { self.error = error.localizedDescription }
+    }
+
     private func upsertTracks(_ values: [Track]) {
+        let covers = customAlbumArtwork
         var updated = tracks
         var indices = Dictionary(updated.indices.map { (updated[$0].id, $0) }, uniquingKeysWith: { _, last in last })
         for var track in values {
@@ -1128,16 +1258,18 @@ final class LibraryStore: NSObject, ObservableObject {
                     track.lyrics = old.lyrics
                     track.lyricsCredit = old.lyricsCredit
                 }
+                track.albumArtworkURL = covers[AlbumIdentity.key(track)]
                 updated[index] = track
             } else {
                 indices[track.id] = updated.count
+                track.albumArtworkURL = covers[AlbumIdentity.key(track)]
                 updated.append(track)
             }
         }
         tracks = updated
     }
     func removeSource(_ source: MusicSource) {
-        guard !scanning, !relocatingSource else { return }
+        guard !scanning, !writingFileTags, !relocatingSource else { return }
         if let id = loadingTrackID, SourceScanner.isWithin(URL(fileURLWithPath: id), source: source.url) {
             cancelPlaybackLoad()
         }
@@ -1173,13 +1305,17 @@ final class LibraryStore: NSObject, ObservableObject {
             save()
         }
     }
-    func applyTagEdits(ids: [String], changes: [TagField: String], numberingFrom: Int? = nil) {
-        guard !saveBlocked, !changes.isEmpty || numberingFrom != nil,
+    func applyTagEdits(
+        ids: [String], changes: [TagField: String], numberingFrom: Int? = nil, carryAlbumArtwork: Bool = false
+    ) {
+        guard !saveBlocked, !writingFileTags, !changes.isEmpty || numberingFrom != nil,
             changes.allSatisfy({ $0.key.isValid($0.value) }),
             numberingFrom.map({ $0 > 0 && $0 <= 9999 && ids.count <= 10000 - $0 }) ?? true
         else { return }
         var updated = tracks
         let indices = Dictionary(tracks.indices.map { (tracks[$0].id, $0) }, uniquingKeysWith: { _, last in last })
+        let covers = customAlbumArtwork
+        let existingAlbums = carryAlbumArtwork ? Set(tracks.map(AlbumIdentity.key)) : []
         var batch: [TagUndo] = []
         var seen = Set<String>()
         for (offset, id) in ids.enumerated() where seen.insert(id).inserted {
@@ -1190,9 +1326,19 @@ final class LibraryStore: NSObject, ObservableObject {
                 edit.values[field.rawValue] = value.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             if let start = numberingFrom { edit.values[TagField.trackNumber.rawValue] = String(start + offset) }
-            let after = edit.applying(to: old)
+            var after = edit.applying(to: old)
+            let destination = AlbumIdentity.key(after)
+            var carriedArtwork = false
+            if destination != AlbumIdentity.key(old) {
+                carriedArtwork =
+                    carryAlbumArtwork && !existingAlbums.contains(destination) && old.albumArtworkURL != nil
+                after.albumArtworkURL = carriedArtwork ? old.albumArtworkURL : covers[destination]
+            }
             guard after != old else { continue }
-            batch.append(.init(before: old, after: after, previous: tagEdits[id], applied: edit))
+            batch.append(
+                .init(
+                    before: old, after: after, previous: tagEdits[id], applied: edit,
+                    carriedAlbumArtwork: carriedArtwork))
             updated[index] = after
             tagEdits[id] = edit
             edited.insert(id)
@@ -1206,7 +1352,7 @@ final class LibraryStore: NSObject, ObservableObject {
         postFeedback("tagsSaved", detail: songCountText(batch.count))
     }
     func undoTagEdits() {
-        guard !scanning, !saveBlocked, !tagUndo.isEmpty else { return }
+        guard !scanning, !writingFileTags, !saveBlocked, !tagUndo.isEmpty else { return }
         // Compare only tags so playback statistics and favorites remain live.
         guard
             tagUndo.allSatisfy({ item in
@@ -1221,10 +1367,17 @@ final class LibraryStore: NSObject, ObservableObject {
             return
         }
         var updated = tracks
+        let covers = customAlbumArtwork
         let before = Dictionary(uniqueKeysWithValues: tagUndo.map { ($0.before.id, $0) })
         for index in updated.indices {
             guard let item = before[updated[index].id] else { continue }
+            let album = AlbumIdentity.key(updated[index])
             for field in TagField.allCases { field.set(field.value(in: item.before), in: &updated[index]) }
+            if AlbumIdentity.key(updated[index]) != album {
+                updated[index].albumArtworkURL =
+                    covers[AlbumIdentity.key(updated[index])]
+                    ?? (item.carriedAlbumArtwork ? updated[index].albumArtworkURL : nil)
+            }
             tagEdits[item.before.id] = item.previous
             if item.previous == nil { edited.remove(item.before.id) }
         }
@@ -1234,8 +1387,90 @@ final class LibraryStore: NSObject, ObservableObject {
         save()
         updateNowPlaying()
     }
+    func canWriteFileTags(_ track: Track) -> Bool {
+        track.format == "FLAC" && !track.isDemo && track.url.isFileURL
+    }
+
+    /// Each replacement is atomic. A failed file leaves that file intact and does not stop the other tracks.
+    func writeFileTags(ids: [String], changes: [TagField: String], numberingFrom: Int? = nil) async -> String? {
+        guard !scanning, !relocatingSource, !quitting, !saveBlocked, !writingFileTags else {
+            return t("fileTagsBusy")
+        }
+        guard changes.allSatisfy({ $0.key.isValid($0.value) }),
+            numberingFrom.map({ $0 > 0 && $0 <= 9999 && ids.count <= 10000 - $0 }) ?? true
+        else { return t("tagValidation") }
+        let selected = ids.compactMap { track(for: $0) }
+        guard !selected.isEmpty, selected.count == ids.count, selected.allSatisfy(canWriteFileTags) else {
+            return t("fileTagsFLACOnly")
+        }
+        writingFileTags = true
+        defer { writingFileTags = false }
+        var refreshed: [Track] = []
+        var failures = 0
+        var firstFailure: String?
+        for (index, track) in selected.enumerated() {
+            var tags = changes.mapValues { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            if let start = numberingFrom { tags[.trackNumber] = String(start + index) }
+            guard !tags.isEmpty else { continue }
+            let request = tags
+            do {
+                var result = try await Task.detached(priority: .utility) {
+                    try FLACTagWriter.write(request, to: track.url)
+                }.value
+                result.artwork = nil
+                result.sourceIsNetwork = track.sourceIsNetwork
+                var remaining = tagEdits[track.id]?.values ?? [:]
+                for field in tags.keys { remaining[field.rawValue] = nil }
+                if remaining.isEmpty {
+                    tagEdits[track.id] = nil
+                    edited.remove(track.id)
+                } else {
+                    tagEdits[track.id] = TrackTagEdits(values: remaining)
+                }
+                refreshed.append(result)
+            } catch {
+                failures += 1
+                if firstFailure == nil {
+                    let reason: String
+                    if let space = error as? FLACTagWriter.InsufficientSpace {
+                        let needed = ByteCountFormatter.string(fromByteCount: space.required, countStyle: .file)
+                        if let available = space.available, available < space.required {
+                            let free = ByteCountFormatter.string(fromByteCount: available, countStyle: .file)
+                            reason = String(format: t("fileTagsNotEnoughSpace"), free, needed)
+                        } else {
+                            reason = String(format: t("fileTagsStorageFull"), needed)
+                        }
+                    } else {
+                        reason = error.localizedDescription
+                    }
+                    firstFailure = track.url.lastPathComponent + " — " + reason
+                }
+            }
+        }
+        if !refreshed.isEmpty {
+            upsertTracks(refreshed)
+            tagUndo = []
+            canUndoTagEdits = false
+            save()
+            updateNowPlaying()
+            do { try await persistence.flush() } catch {
+                return t("fileTagsRefreshFailed") + " " + error.localizedDescription
+            }
+            postFeedback("fileTagsSaved", detail: songCountText(refreshed.count))
+        }
+        if let firstFailure {
+            return "\(t("fileTagsSaved")): \(refreshed.count) · \(t("failedFiles")): \(failures)\n\(firstFailure)"
+        }
+        return nil
+    }
+
+    func locallyEditedFields(for track: Track) -> [TagField] {
+        guard let values = tagEdits[track.id]?.values else { return [] }
+        return TagField.allCases.filter { values[$0.rawValue] != nil }
+    }
+
     func restoreFileTags(_ track: Track) async throws {
-        guard !scanning, !saveBlocked else { return }
+        guard !scanning, !writingFileTags, !saveBlocked else { return }
         let expected = tagEdits[track.id]
         let original = try await Task.detached(priority: .utility) { try await MetadataReader.read(track.url) }.value
         guard !scanning, tagEdits[track.id] == expected, self.track(for: track.id) != nil else { return }
@@ -1283,7 +1518,7 @@ final class LibraryStore: NSObject, ObservableObject {
             }
         case .queue(let previous):
             let currentIndex = currentID.flatMap { queue.firstIndex(of: $0) } ?? 0
-            var restored = previous.filter { id in tracks.contains { $0.id == id } }
+            var restored = previous.filter { track(for: $0) != nil }
             if let currentID, !restored.contains(currentID), tracks.contains(where: { $0.id == currentID }) {
                 restored.insert(currentID, at: min(currentIndex, restored.count))
             }
@@ -1750,18 +1985,21 @@ final class LibraryStore: NSObject, ObservableObject {
         postFeedback(next ? "queuedNext" : "queued", detail: track.title, icon: "list.bullet", undo: .queue(previous))
     }
     func removeQueued(_ track: Track) {
-        guard track.id != currentID else { return }
+        guard track.id != currentID, queueIndex(track.id) != nil else { return }
+        let previous = queue
         queue.removeAll { $0 == track.id }
+        postFeedback("queueRemoved", detail: track.title, icon: "minus.circle", undo: .queue(previous))
     }
     func moveQueued(_ track: Track, direction: Int) {
         guard let index = queue.firstIndex(of: track.id), queue.indices.contains(index + direction) else { return }
         queue.swapAt(index, index + direction)
     }
-    func exportPlaylist() {
+    func exportPlaylist(_ selection: [Track]? = nil) {
+        let list = selection ?? (section == "home" ? tracks : filtered)
+        guard !list.isEmpty else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "m3u8") ?? .plainText]
         panel.nameFieldStringValue = "Prisma Music.m3u8"
-        let list = section == "home" ? tracks : filtered
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             let body =
@@ -1790,6 +2028,7 @@ final class LibraryStore: NSObject, ObservableObject {
                         for index in portable.tracks.indices {
                             portable.tracks[index].artwork = portable.tracks[index].artworkData
                             portable.tracks[index].artworkURL = nil
+                            portable.tracks[index].albumArtworkURL = nil
                         }
                         try JSONEncoder().encode(portable).write(to: url, options: .atomic)
                     }.value
@@ -1914,7 +2153,10 @@ final class LibraryStore: NSObject, ObservableObject {
                 value.artworkCredit = credit
                 do {
                     value = try await persistence.normalized(value)
-                    if let index = tracks.firstIndex(where: { $0.id == value.id }) { tracks[index] = value }
+                    if let index = tracks.firstIndex(where: { $0.id == value.id }), !tracks[index].hasArtwork {
+                        tracks[index].artworkURL = value.artworkURL
+                        tracks[index].artworkCredit = value.artworkCredit
+                    }
                 } catch { hadError = true }
             }
             if let lyrics, let index = tracks.firstIndex(where: { $0.id == track.id }), !tracks[index].hasLyrics {

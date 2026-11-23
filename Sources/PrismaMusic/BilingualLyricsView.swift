@@ -26,17 +26,24 @@ struct BilingualLyricsView: View {
         let texts: [String]
         let cacheKey: String
         let source: Locale.Language
+        let target: Locale.Language
     }
     private struct RequestKey: Equatable {
         let id: String
         let lyrics: String?
         let source: String
+        let target: String
         let enabled: Bool
     }
     private var key: RequestKey {
-        .init(id: track.id, lyrics: track.lyrics, source: sourceOverride, enabled: store.preferences.translateLyrics)
+        .init(
+            id: track.id, lyrics: track.lyrics, source: sourceOverride,
+            target: store.preferences.lyricsTargetLanguage, enabled: store.preferences.translateLyrics)
     }
-    private var cacheKey: String { document.fingerprint + ":" + (sourceLanguage?.minimalIdentifier ?? "auto") + ":es" }
+    private var targetLanguage: Locale.Language { Locale.Language(identifier: key.target) }
+    private func languageName(_ identifier: String) -> String {
+        Locale(identifier: store.language.rawValue).localizedString(forIdentifier: identifier) ?? identifier
+    }
     private var fontSize: Double {
         large ? max(26, store.preferences.lyricsFontSize * 1.5) : store.preferences.lyricsFontSize
     }
@@ -100,7 +107,20 @@ struct BilingualLyricsView: View {
                             } ?? store.t("detectLanguage")
                             : Locale(identifier: store.language.rawValue).localizedString(forIdentifier: sourceOverride)
                                 ?? sourceOverride, systemImage: "character.bubble")
-                }.font(.caption).fixedSize()
+                }.font(.caption)
+                Menu {
+                    let target = store.preferences.lyricsTargetLanguage
+                    Picker(store.t("lyricsTargetLanguage"), selection: $store.preferences.lyricsTargetLanguage) {
+                        if !languages.contains(where: { $0.minimalIdentifier == target }) {
+                            Text(languageName(target)).tag(target)
+                        }
+                        ForEach(languages, id: \.minimalIdentifier) { language in
+                            Text(languageName(language.minimalIdentifier)).tag(language.minimalIdentifier)
+                        }
+                    }.pickerStyle(.inline)
+                } label: {
+                    Label(store.t("lyricsTargetLanguage") + ": " + languageName(key.target), systemImage: "translate")
+                }.font(.caption).disabled(languages.isEmpty)
                 if needsDownload {
                     Button(store.t("downloadTranslation")) { startTranslation(allowDownloads: true) }.buttonStyle(
                         .glass)
@@ -173,6 +193,8 @@ struct BilingualLyricsView: View {
         }.multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
     }
     @MainActor private func prepare() async {
+        let selection = key
+        let target = targetLanguage
         translationWork?.cancel()
         translationWork = nil
         activeSession?.cancel()
@@ -196,7 +218,7 @@ struct BilingualLyricsView: View {
         }
         let availability = LanguageAvailability()
         let supported = await availability.supportedLanguages
-        guard !Task.isCancelled, request == token else { return }
+        guard !Task.isCancelled, request == token, key == selection else { return }
         languages = supported.sorted { $0.minimalIdentifier < $1.minimalIdentifier }
         guard let code = sourceOverride.isEmpty ? document.detectedLanguage : sourceOverride else {
             message = store.t("translationChooseLanguage")
@@ -204,16 +226,18 @@ struct BilingualLyricsView: View {
         }
         let source = Locale.Language(identifier: code)
         sourceLanguage = source
-        if source.languageCode == .spanish {
-            message = store.t("lyricsAlreadySpanish")
+        if source.minimalIdentifier == target.minimalIdentifier {
+            message = store.t("lyricsAlreadyInTarget")
             return
         }
-        if let cached = LyricsTranslationCache.shared.value(for: cacheKey) {
+        if let cached = LyricsTranslationCache.shared.value(
+            for: document.translationCacheKey(source: source, target: target))
+        {
             translated = cached
             return
         }
-        let status = await availability.status(from: source, to: Locale.Language(identifier: "es"))
-        guard !Task.isCancelled, request == token else { return }
+        let status = await availability.status(from: source, to: target)
+        guard !Task.isCancelled, request == token, key == selection else { return }
         switch status {
         case .installed: startTranslation(allowDownloads: false)
         case .supported: needsDownload = true
@@ -227,23 +251,31 @@ struct BilingualLyricsView: View {
         needsDownload = false
         busy = true
         retryAvailable = false
-        let job = TranslationJob(id: request, texts: document.uniqueTexts, cacheKey: cacheKey, source: sourceLanguage)
+        let target = targetLanguage
+        let job = TranslationJob(
+            id: request, texts: document.uniqueTexts,
+            cacheKey: document.translationCacheKey(source: sourceLanguage, target: target),
+            source: sourceLanguage, target: target)
         translationJob = job
         if allowDownloads {
             if configuration == nil {
-                configuration = .init(source: sourceLanguage, target: Locale.Language(identifier: "es"))
+                configuration = .init(source: sourceLanguage, target: job.target)
             } else {
                 configuration?.invalidate()
             }
         } else {
             // Installed models use the offline session; never request a second language download implicitly.
-            let session = TranslationSession(installedSource: sourceLanguage, target: Locale.Language(identifier: "es"))
+            let session = TranslationSession(installedSource: sourceLanguage, target: job.target)
             translationWork = Task { await translate(using: session, job: job, prepareFirst: false) }
         }
     }
     @MainActor private func translate(using session: TranslationSession, job: TranslationJob, prepareFirst: Bool) async
     {
-        guard request == job.id, session.sourceLanguage?.languageCode == job.source.languageCode else { return }
+        guard request == job.id, targetLanguage == job.target,
+            session.sourceLanguage?.languageCode == job.source.languageCode,
+            session.targetLanguage?.languageCode == job.target.languageCode
+        else { return }
+        let selection = key
         let token = job.id
         let texts = job.texts
         let resultKey = job.cacheKey
@@ -260,13 +292,13 @@ struct BilingualLyricsView: View {
             var result: [String: String] = [:]
             for offset in stride(from: 0, to: texts.count, by: 32) {
                 try Task.checkCancellation()
-                guard request == token else { return }
+                guard request == token, key == selection else { return }
                 let end = min(texts.count, offset + 32)
                 let requests = (offset..<end).map {
                     TranslationSession.Request(sourceText: texts[$0], clientIdentifier: String($0))
                 }
                 let responses = try await session.translations(from: requests)
-                guard !Task.isCancelled, request == token else { return }
+                guard !Task.isCancelled, request == token, key == selection else { return }
                 let valid = LyricDocument.translations(
                     texts: texts, responses: responses.map { ($0.clientIdentifier, $0.sourceText, $0.targetText) })
                 result.merge(valid) { _, latest in latest }
@@ -279,11 +311,11 @@ struct BilingualLyricsView: View {
                 message = store.t("translationIncomplete")
             }
         } catch TranslationError.notInstalled {
-            guard !Task.isCancelled, request == token else { return }
+            guard !Task.isCancelled, request == token, key == selection else { return }
             needsDownload = true
             message = store.t("translationDownloadNote")
         } catch {
-            guard !Task.isCancelled, request == token else { return }
+            guard !Task.isCancelled, request == token, key == selection else { return }
             retryAvailable = true
             message = store.t("translationFailed") + " " + error.localizedDescription
         }

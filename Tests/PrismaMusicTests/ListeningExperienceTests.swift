@@ -39,17 +39,26 @@ final class ListeningExperienceTests: XCTestCase {
     @MainActor
     func testTranslationCacheSeparatesLanguageAndContent() {
         let cache = LyricsTranslationCache()
-        cache.insert(["Hello": "Hola"], for: "first:en:es")
-        XCTAssertEqual(cache.value(for: "first:en:es"), ["Hello": "Hola"])
-        XCTAssertNil(cache.value(for: "second:en:es"))
-        XCTAssertNil(cache.value(for: "first:ja:es"))
+        let original = LyricDocument("Hello")
+        let english = Locale.Language(identifier: "en")
+        let spanish = Locale.Language(identifier: "es")
+        let portuguese = Locale.Language(identifier: "pt")
+        let spanishKey = original.translationCacheKey(source: english, target: spanish)
+        cache.insert(["Hello": "Hola"], for: spanishKey)
+        XCTAssertEqual(cache.value(for: spanishKey), ["Hello": "Hola"])
+        XCTAssertNil(cache.value(for: original.translationCacheKey(source: english, target: portuguese)))
+        XCTAssertNil(cache.value(for: original.translationCacheKey(source: portuguese, target: spanish)))
+        XCTAssertNil(cache.value(for: LyricDocument("Edited").translationCacheKey(source: english, target: spanish)))
     }
     func testTranslationPreferenceMigratesAndCanBeDisabled() throws {
         var preferences = try JSONDecoder().decode(ListeningPreferences.self, from: Data("{}".utf8))
         XCTAssertTrue(preferences.translateLyrics)
+        XCTAssertEqual(preferences.lyricsTargetLanguage, "es")
+        preferences.lyricsTargetLanguage = "pt"
         preferences.translateLyrics = false
         let restored = try JSONDecoder().decode(ListeningPreferences.self, from: JSONEncoder().encode(preferences))
         XCTAssertFalse(restored.translateLyrics)
+        XCTAssertEqual(restored.lyricsTargetLanguage, "pt")
     }
     private func candidate(
         _ title: String = "Song", artist: String = "Artist", album: String = "Album", duration: Double = 180,

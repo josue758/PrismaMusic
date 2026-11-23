@@ -28,6 +28,58 @@ enum Accent: String, CaseIterable, Identifiable {
     }
 }
 let translations: [String: [String]] = [
+    "resumeNASTrack": ["Reanudar pista", "Resume Track", "Retomar faixa"],
+    "queueRemoved": ["Quitada de la cola", "Removed from queue", "Removida da fila"],
+    "localTagCorrections": ["Etiquetas corregidas en Prisma", "Tags edited in Prisma", "Etiquetas editadas no Prisma"],
+    "writeFileTags": [
+        "Guardar también en los archivos FLAC", "Also save to FLAC files", "Salvar também nos arquivos FLAC",
+    ],
+    "writeFileTagsNote": [
+        "Modifica las etiquetas de los archivos originales. Deshacer en Prisma no revierte estos cambios.",
+        "Updates tags in the original files. Undo in Prisma cannot reverse these changes.",
+        "Atualiza as etiquetas dos arquivos originais. Desfazer no Prisma não reverte essas alterações.",
+    ],
+    "writingFileTags": [
+        "Guardando etiquetas en los archivos…", "Saving tags to files…", "Salvando etiquetas nos arquivos…",
+    ],
+    "fileTagsSaved": ["Archivos guardados", "Files saved", "Arquivos salvos"],
+    "fileTagsNotEnoughSpace": [
+        "La unidad tiene %@ libres. Guardar este archivo requiere %@ para preparar el reemplazo.",
+        "The drive has %@ free. Saving this file needs %@ to prepare the replacement.",
+        "A unidade tem %@ livres. Salvar este arquivo requer %@ para preparar a substituição.",
+    ],
+    "fileTagsStorageFull": [
+        "La unidad se quedó sin espacio. Preparar el reemplazo requiere %@.",
+        "The drive ran out of space. Preparing the replacement needs %@.",
+        "A unidade ficou sem espaço. Preparar a substituição requer %@.",
+    ],
+    "saveTagsInLibrary": ["Guardar solo en Prisma", "Save Only in Prisma", "Salvar só no Prisma"],
+    "fileTagsBusy": [
+        "Espera a que termine la operación de biblioteca.", "Wait for the library operation to finish.",
+        "Aguarde o fim da operação da biblioteca.",
+    ],
+    "fileTagsFLACOnly": [
+        "La escritura directa admite archivos FLAC.", "Direct editing supports FLAC files.",
+        "A edição direta aceita arquivos FLAC.",
+    ],
+    "fileTagsRefreshFailed": [
+        "Se guardaron las etiquetas, pero falló la actualización de la biblioteca.",
+        "Tags were saved, but the library update failed.",
+        "As etiquetas foram salvas, mas a atualização da biblioteca falhou.",
+    ],
+
+    "editAlbum": ["Editar álbum", "Edit Album", "Editar álbum"],
+    "saveAlbumInfo": ["Guardar datos del álbum", "Save Album Details", "Salvar dados do álbum"],
+    "editAlbumTrack": ["Editar canción", "Edit Track", "Editar faixa"],
+    "editAlbumArtwork": ["Carátula del álbum", "Album Artwork", "Capa do álbum"],
+    "chooseAlbumArtwork": ["Elegir imagen…", "Choose Image…", "Escolher imagem…"],
+    "restoreAlbumArtwork": ["Volver a la carátula original", "Restore Original Artwork", "Restaurar capa original"],
+    "albumArtworkSaved": ["Carátula guardada", "Artwork saved", "Capa salva"],
+    "albumArtworkRestored": ["Carátula original restaurada", "Original artwork restored", "Capa original restaurada"],
+    "albumArtworkInvalid": [
+        "Elige una imagen válida de hasta 32 MB.", "Choose a valid image up to 32 MB.",
+        "Escolha uma imagem válida de até 32 MB.",
+    ],
     "offlineSources": ["Ubicaciones no disponibles", "Unavailable sources", "Locais indisponíveis"],
     "chooseTagFields": [
         "Activa un campo para ver los cambios antes de guardarlos.", "Enable a field to preview changes before saving.",
@@ -143,7 +195,10 @@ let translations: [String: [String]] = [
     "lyricsShown": ["Letras visibles", "Lyrics visible", "Letras visíveis"],
     "retryTranslation": ["Reintentar traducción", "Retry translation", "Tentar tradução novamente"],
     "listeningStage": ["Sala de escucha", "Listening room", "Sala de escuta"],
-    "bilingualLyrics": ["Español junto al original", "Spanish alongside the original", "Espanhol junto ao original"],
+    "bilingualLyrics": [
+        "Traducción junto al original", "Translation alongside the original", "Tradução junto ao original",
+    ],
+    "lyricsTargetLanguage": ["Traducir a", "Translate to", "Traduzir para"],
     "localLyrics": ["Archivo local", "Local file", "Arquivo local"],
     "detectLanguage": ["Detectar idioma", "Detect language", "Detectar idioma"],
     "downloadTranslation": [
@@ -156,9 +211,9 @@ let translations: [String: [String]] = [
     ],
     "translatingLyrics": ["Traduciendo…", "Translating…", "Traduzindo…"],
     "machineTranslationNote": [
-        "Traducción automática de Apple · Español. Puede perder matices; se conserva el original.",
-        "Apple machine translation · Spanish. Nuances may be lost; the original is preserved.",
-        "Tradução automática da Apple · Espanhol. Pode perder nuances; o original é preservado.",
+        "Traducción automática de Apple. Puede perder matices; se conserva el original.",
+        "Apple machine translation. Nuances may be lost; the original is preserved.",
+        "Tradução automática da Apple. Pode perder nuances; o original é preservado.",
     ],
     "translationTooLong": [
         "Esta letra supera el límite de traducción. Se muestra el original completo.",
@@ -170,8 +225,9 @@ let translations: [String: [String]] = [
         "The language could not be detected. Choose it from the menu.",
         "Não foi possível detectar o idioma. Escolha no menu.",
     ],
-    "lyricsAlreadySpanish": [
-        "La letra ya está en español.", "These lyrics are already in Spanish.", "A letra já está em espanhol.",
+    "lyricsAlreadyInTarget": [
+        "La letra ya está en el idioma de destino.", "These lyrics are already in the target language.",
+        "A letra já está no idioma de destino.",
     ],
     "translationUnsupported": [
         "macOS no admite esta combinación de idiomas. El original sigue disponible.",
@@ -190,9 +246,9 @@ let translations: [String: [String]] = [
     "findMusic": ["Buscar música", "Find music", "Buscar música"],
     "clearSearch": ["Borrar búsqueda", "Clear search", "Limpar busca"],
     "listKeyboardHelp": [
-        "Selecciona la lista y usa ↑ y ↓ para recorrer canciones; Intro reproduce la selección. ⌘F busca música y Esc sale de la búsqueda.",
-        "Focus the list and use ↑ and ↓ to browse songs; Return plays the selection. ⌘F finds music and Esc leaves search.",
-        "Selecione a lista e use ↑ e ↓ para navegar; Enter reproduz a seleção. ⌘F busca músicas e Esc sai da busca.",
+        "Arrastra para seleccionar varias pistas. Mayús + ↑ o ↓ amplía la selección, ⌘A selecciona todas e Intro reproduce la pista enfocada.",
+        "Drag to select multiple tracks. Shift + ↑ or ↓ extends selection, ⌘A selects all, and Return plays the focused track.",
+        "Arraste para selecionar várias faixas. Shift + ↑ ou ↓ amplia a seleção, ⌘A seleciona todas e Enter reproduz a faixa em foco.",
     ],
     "albumOrderFallback": [
         "Si no hay número de pista en las etiquetas, se utiliza el orden del nombre de archivo.",
@@ -201,6 +257,7 @@ let translations: [String: [String]] = [
     ],
     "unknownArtist": ["Artista desconocido", "Unknown artist", "Artista desconhecido"],
     "unknownAlbum": ["Álbum sin título", "Untitled album", "Álbum sem título"],
+    "openArtistProfile": ["Ver ficha del artista", "View Artist Profile", "Ver perfil do artista"],
     "openAlbum": ["Ver álbum y canciones", "View album and songs", "Ver álbum e músicas"],
     "albumInLibrary": ["Álbum en tu biblioteca", "Album in your library", "Álbum na sua biblioteca"],
     "readingAlbumOrder": ["Leyendo orden de pistas…", "Reading track order…", "Lendo ordem das faixas…"],

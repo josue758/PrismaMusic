@@ -16,7 +16,22 @@ struct ContentView: View {
     @State private var editing: Track?
     @State private var newPlaylist = false
     @State private var playlistName = ""
+    @State private var compactInspector = true
     private var inspectorVisible: Bool { store.showInfo || store.showLyrics || store.showQueue }
+    @ViewBuilder private var inspector: some View {
+        if store.showInfo {
+            TrackInfoView()
+        } else if store.showLyrics {
+            LyricsView()
+        } else if store.showQueue {
+            QueueView()
+        }
+    }
+    private func dismissInspector() {
+        store.showInfo = false
+        store.showLyrics = false
+        store.showQueue = false
+    }
     private var sectionTitle: String {
         if store.section.hasPrefix("playlist:"),
             let playlist = store.playlists.first(where: { store.section == "playlist:\($0.id)" })
@@ -54,20 +69,24 @@ struct ContentView: View {
                             }.frame(maxWidth: .infinity, maxHeight: .infinity).clipped().animation(
                                 motion ? .easeOut(duration: 0.12) : nil, value: pageKey)
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                        if store.showInfo {
-                            TrackInfoView().frame(width: 278).prismaGlass(24).transition(
-                                motion ? .move(edge: .trailing).combined(with: .opacity) : .opacity)
+                        if inspectorVisible && !compactInspector {
+                            Color.clear.frame(width: 278).accessibilityHidden(true)
                         }
-                        if store.showLyrics {
-                            LyricsView().frame(width: 278).prismaGlass(24).transition(
-                                motion ? .move(edge: .trailing).combined(with: .opacity) : .opacity)
+                    }.frame(maxHeight: .infinity)
+                        .overlay(alignment: .trailing) {
+                            if inspectorVisible {
+                                if compactInspector {
+                                    Button(action: dismissInspector) {
+                                        Color.black.opacity(0.24).contentShape(Rectangle())
+                                    }.buttonStyle(.plain)
+                                        .accessibilityLabel(store.t("closeUpdate"))
+                                        .keyboardShortcut(.cancelAction)
+                                }
+                                inspector.frame(width: 278).prismaGlass(24)
+                                    .transition(motion ? .move(edge: .trailing).combined(with: .opacity) : .opacity)
+                            }
                         }
-                        if store.showQueue {
-                            QueueView().frame(width: 278).prismaGlass(24).transition(
-                                motion ? .move(edge: .trailing).combined(with: .opacity) : .opacity)
-                        }
-                    }.frame(maxHeight: .infinity).animation(
-                        motion ? .smooth(duration: 0.18) : nil, value: inspectorVisible)
+                        .animation(motion ? .smooth(duration: 0.18) : nil, value: inspectorVisible)
                     PlayerBar().padding(.horizontal, 20).padding(.vertical, 14).prismaGlass(26, tinted: true)
                 }.padding(16).padding(.top, 24).prismaCursorLighting()
             }
@@ -81,7 +100,12 @@ struct ContentView: View {
                                 with: .scale(scale: 0.96, anchor: .bottom)) : .opacity)
             }
         }.animation(motion ? .spring(duration: 0.34, bounce: 0.13) : nil, value: store.feedback?.id)
-        .frame(minWidth: inspectorVisible ? 1230 : 1060, minHeight: 720)
+        .frame(minWidth: 1060, minHeight: 720)
+        .onGeometryChange(for: Bool.self) {
+            $0.size.width < 1260
+        } action: {
+            compactInspector = $0
+        }
         .onChange(of: store.searchFocusRequest) { _, _ in searchFocused = true }
         .onChange(of: store.search) { _, text in
             if !text.isEmpty

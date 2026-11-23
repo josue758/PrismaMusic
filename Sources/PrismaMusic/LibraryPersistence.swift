@@ -158,6 +158,26 @@ final class LibraryPersistence: @unchecked Sendable {
             }
         }
     }
+    func importAlbumArtwork(from url: URL) async throws -> URL? {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async {
+                do {
+                    if let openingError = self.openingError { throw openingError }
+                    guard let assets = self.assets else { throw self.failure("Artwork cache") }
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    let limit = 32 * 1024 * 1024
+                    let file = try FileHandle(forReadingFrom: url)
+                    defer { try? file.close() }
+                    guard let data = try file.read(upToCount: limit + 1), data.count <= limit else {
+                        continuation.resume(returning: nil)
+                        return
+                    }
+                    continuation.resume(returning: try assets.store(data))
+                } catch { continuation.resume(throwing: error) }
+            }
+        }
+    }
     private func normalizeOnQueue(_ track: Track) throws -> Track {
         if let openingError { throw openingError }
         guard let assets else { throw failure("Artwork cache") }
@@ -170,7 +190,7 @@ final class LibraryPersistence: @unchecked Sendable {
         lock.unlock()
     }
     func writeSmallFile(_ name: String, data: Data) {
-        guard ["preferences.json", "playback.json"].contains(name) else { return }
+        guard ["preferences.json", "playback.json", "queue.json"].contains(name) else { return }
         lock.lock()
         pendingFiles[name] = data
         scheduleLocked()

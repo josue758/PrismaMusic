@@ -43,7 +43,19 @@ struct ArtistDetailView: View {
                     biography
                     HStack {
                         Button(store.t("artistSongs")) { scroll(to: "artist-songs", reader: reader) }
+                            .keyboardShortcut(.upArrow, modifiers: .option)
+                            .help(store.t("artistSongs") + " (⌥↑)")
+                            .disabled(songs.isEmpty)
                         Button(store.t("artistAlbums")) { scroll(to: "artist-albums", reader: reader) }
+                            .keyboardShortcut(.downArrow, modifiers: .option)
+                            .help(store.t("artistAlbums") + " (⌥↓)")
+                            .disabled(albums.isEmpty)
+                        Button {
+                            store.exportPlaylist(songs)
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                        }.help(store.t("exportPlaylist")).accessibilityLabel(store.t("exportPlaylist"))
+                            .disabled(songs.isEmpty)
                     }.buttonStyle(.glass)
                     if !collection.mostPlayed.isEmpty {
                         SectionHeading(title: store.t("mostPlayed"))

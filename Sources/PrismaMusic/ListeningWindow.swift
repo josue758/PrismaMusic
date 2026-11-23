@@ -146,14 +146,14 @@ struct ListeningStageView: View {
             ReactiveArtwork(track: track).frame(width: size, height: size)
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(track.title).font(.system(size: 29, weight: .semibold, design: .rounded)).lineLimit(2)
                     Button {
-                        store.openArtist(track.artist)
+                        store.openAlbum(track, revealTrack: true)
                         store.closeListeningWindow()
                     } label: {
-                        Text(store.displayArtist(track.artist)).font(.title3).foregroundStyle(store.effectiveAccent)
-                            .lineLimit(1)
-                    }.buttonStyle(.plain)
+                        Text(track.title).font(.system(size: 29, weight: .semibold, design: .rounded)).lineLimit(2)
+                    }.buttonStyle(.plain).help(store.t("openAlbum"))
+                    PlaybackArtistLink(track: track) { store.closeListeningWindow() }
+                        .font(.title3).foregroundStyle(store.effectiveAccent)
                     Text(store.displayAlbum(track.album)).font(.callout).foregroundStyle(.secondary).lineLimit(1)
                     QualityBadge(track: track, showsFormatDetails: true)
                 }

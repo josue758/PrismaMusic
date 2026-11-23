@@ -5,9 +5,9 @@
 
 A native macOS music player for local collections and mounted NAS libraries. Built with Swift, SwiftUI, AVAudioEngine and Core Audio, with an artwork-driven Liquid Glass interface.
 
-**Apple Silicon · macOS 26+ · Beta 0.14.0**
+**Apple Silicon · macOS 26+ · Beta 0.14.7**
 
-[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.14.0) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md) · [Windows feature adaptation](docs/WINDOWS_PARITY.md)
+[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.14.7) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md) · [Windows feature adaptation](docs/WINDOWS_PARITY.md)
 
 ## Try it
 
@@ -17,7 +17,7 @@ The beta is ad hoc signed. It does not yet have Apple Developer ID signing or no
 
 ## Library maintenance
 
-Adapted from the Windows edition: **Settings → Library → Tag Review** groups missing artists/albums, album spelling variants and possible duplicates. Select tracks and preview a batch correction, including album artist and disc/track numbers. In song lists use Command-click or Shift-click for multiple selection and choose **Batch Tag Editor** from the contextual menu. Only enabled fields change; corrections are kept per field through future scans. **Undo Tag Edits** restores the last edit in the current session, while the individual editor can restore tags from the original file. Audio files are never rewritten.
+Adapted from the Windows edition: **Settings → Library → Tag Review** groups missing artists/albums, album spelling variants and possible duplicates. Select tracks and preview a batch correction, including album artist and disc/track numbers. In song lists drag across titles, use Shift + the arrow keys, or press Command-A to select multiple tracks and choose **Batch Tag Editor** from the contextual menu. Only enabled fields change; corrections are kept per field through future scans. **Undo Tag Edits** restores the last edit in the current session, while the individual editor can restore tags from the original file. The editors can also save tags directly to writable FLAC files. The encoded audio is copied without re-encoding.
 
 The scan report can search paths and errors and retry one failed file without losing the other results. Resume an interrupted import with the new-music scan: already imported tracks are skipped during metadata reading, while directories are traversed again. Source relocation verifies the new files with progress and cancellation before changing paths.
 

@@ -1,5 +1,40 @@
 # Cambios
 
+## 0.14.7
+
+- La ficha de álbum muestra los géneros de sus canciones junto al año y la duración.
+
+## 0.14.6
+
+- Prisma recupera la cola con su orden exacto, el modo aleatorio y la repetición al volver a abrir.
+- Si el NAS ya está conectado, **Reanudar pista** retoma la canción con su posición y cola.
+- Quitar una canción de la cola ofrece Deshacer. Información muestra qué etiquetas se corrigieron en Prisma.
+
+## 0.14.5
+
+- El lápiz de la ficha de álbum reúne los datos, la carátula y la edición individual o por lotes de sus canciones.
+
+- El editor detecta si la unidad o el NAS no tiene espacio para guardar un FLAC. Ante un error de escritura, permite conservar la edición en Prisma desde el mismo formulario.
+
+## 0.14.4
+
+- El editor individual y el editor por lotes pueden guardar etiquetas directamente en los archivos FLAC, conservando el audio codificado.
+- Selección de canciones por arrastre sobre los títulos, Mayús con las flechas y ⌘A.
+
+## 0.14.3
+
+- Desde la ficha de un álbum se puede elegir una carátula local y volver a la original. La carátula elegida se guarda en Prisma para todas sus canciones.
+
+## 0.14.2
+
+- Las letras permiten elegir el idioma de destino y guardan la preferencia. El español sigue siendo el idioma inicial.
+- En ventanas estrechas, Letras, Cola e Información se abren sobre la biblioteca. Se cierran con Esc, con el botón de cierre o pulsando fuera.
+
+## 0.14.1
+
+- El título del reproductor abre el álbum y destaca la pista. El nombre del artista abre su ficha o permite elegir entre los artistas acreditados.
+- Las fichas de álbum y artista exportan sus canciones como M3U8. En la ficha de artista, ⌥↑ lleva a las canciones y ⌥↓ a los álbumes.
+
 ## 0.14.0
 
 - Adaptación de funciones de Windows 0.62.9 al diseño nativo de macOS: revisión de etiquetas, selección múltiple con ⌘/Mayús y editor por lotes con vista previa y deshacer.

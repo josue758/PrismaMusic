@@ -50,6 +50,9 @@ struct LyricDocument {
         return entries.last { ($0.time ?? .infinity) <= position }?.id
     }
     /// Match by client identifier and source text, never by response order.
+    func translationCacheKey(source: Locale.Language, target: Locale.Language) -> String {
+        "\(fingerprint):\(source.minimalIdentifier):\(target.minimalIdentifier)"
+    }
     static func translations(texts: [String], responses: [(id: String?, source: String, target: String)]) -> [String:
         String]
     {

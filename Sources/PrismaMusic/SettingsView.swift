@@ -679,6 +679,17 @@ struct NASView: View {
             HStack {
                 Button(store.t("cancel")) { dismiss() }
                 Spacer()
+                if let retry {
+                    Button(store.t("resumeNASTrack")) {
+                        failed = false
+                        job = Task {
+                            defer { job = nil }
+                            do { try await store.resumeNASPlayback(retry) } catch {
+                                if !Task.isCancelled { failed = true }
+                            }
+                        }
+                    }.buttonStyle(.glass).disabled(job != nil)
+                }
                 Button(store.t(retry == nil ? "connectButton" : "reconnectNAS")) {
                     guard let server else { return }
                     if let retry {
@@ -719,8 +730,13 @@ struct TagEditor: View {
             initialValue: Dictionary(uniqueKeysWithValues: TagField.allCases.map { ($0, $0.value(in: track)) }))
     }
     @State private var restoring = false
+    @State private var writeToFile = false
     @State private var failure: String?
+    @State private var fileSaveFailed = false
     private var valid: Bool { TagField.allCases.allSatisfy { $0.isValid(values[$0] ?? "") } }
+    private var changes: [TagField: String] {
+        values.filter { $0.value.trimmingCharacters(in: .whitespacesAndNewlines) != $0.key.value(in: track) }
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text(store.t("edit")).font(.title2.bold())
@@ -733,8 +749,20 @@ struct TagEditor: View {
                             set: { values[field] = $0 }))
                 }
             }.textFieldStyle(.roundedBorder).disabled(restoring)
-            Text(store.t(valid ? "tagNote" : "tagValidation")).font(.caption).foregroundStyle(.secondary)
-            if let failure { Text(failure).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+            if store.canWriteFileTags(track) {
+                Toggle(store.t("writeFileTags"), isOn: $writeToFile).disabled(restoring)
+            }
+            Text(store.t(valid ? writeToFile ? "writeFileTagsNote" : "tagNote" : "tagValidation")).font(.caption)
+                .foregroundStyle(.secondary)
+            if let failure {
+                Text(failure).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                if fileSaveFailed {
+                    Button(store.t("saveTagsInLibrary")) {
+                        store.applyTagEdits(ids: [track.id], changes: changes)
+                        dismiss()
+                    }.buttonStyle(.glass).disabled(!valid || changes.isEmpty || restoring || store.writingFileTags)
+                }
+            }
             HStack {
                 Button(store.t("restoreFileTags")) {
                     restoring = true
@@ -743,6 +771,7 @@ struct TagEditor: View {
                             try await store.restoreFileTags(track)
                             dismiss()
                         } catch {
+                            fileSaveFailed = false
                             failure = error.localizedDescription
                             restoring = false
                         }
@@ -752,14 +781,21 @@ struct TagEditor: View {
                 if restoring { ProgressView().controlSize(.small) }
                 Button(store.t("cancel")) { dismiss() }.keyboardShortcut(.cancelAction).disabled(restoring)
                 Button(store.t("save")) {
-                    let changes = values.filter {
-                        $0.value.trimmingCharacters(in: .whitespacesAndNewlines) != $0.key.value(in: track)
+                    if writeToFile {
+                        restoring = true
+                        Task {
+                            failure = await store.writeFileTags(ids: [track.id], changes: changes)
+                            fileSaveFailed = failure != nil
+                            restoring = false
+                            if failure == nil { dismiss() }
+                        }
+                    } else {
+                        store.applyTagEdits(ids: [track.id], changes: changes)
+                        dismiss()
                     }
-                    store.applyTagEdits(ids: [track.id], changes: changes)
-                    dismiss()
                 }.buttonStyle(.glassProminent)
-                    .disabled(!valid || store.scanning || restoring)
+                    .disabled(!valid || changes.isEmpty || store.scanning || store.writingFileTags || restoring)
             }
-        }.padding(28).frame(width: 530)
+        }.padding(28).frame(width: 530).interactiveDismissDisabled(restoring)
     }
 }

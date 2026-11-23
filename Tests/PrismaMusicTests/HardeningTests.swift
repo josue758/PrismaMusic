@@ -104,6 +104,56 @@ final class HardeningTests: XCTestCase {
             SourceScanner.isWithin(
                 URL(fileURLWithPath: "/Music/Album/a.mp3"), source: URL(fileURLWithPath: "/Music"), recursive: false))
     }
+    @MainActor
+    func testAlbumArtworkSurvivesRescanningAndCanRestoreOriginal() async throws {
+        let root = try temporary()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let music = root.appendingPathComponent("Music", isDirectory: true)
+        try FileManager.default.createDirectory(at: music, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: demo, to: music.appendingPathComponent("first.m4a"))
+        let directory = root.appendingPathComponent("Data")
+        let store = LibraryStore(directory: directory, autoStart: false)
+        await store.addSources([music])
+        let original = try XCTUnwrap(store.tracks.first)
+        var other = original
+        other.url = root.appendingPathComponent("other.m4a")
+        other.albumArtist = "Another artist"
+        store.tracks.append(other)
+
+        let bitmap = try XCTUnwrap(
+            NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: 8, pixelsHigh: 8, bitsPerSample: 8, samplesPerPixel: 4,
+                hasAlpha: true,
+                isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let image = root.appendingPathComponent("cover.png")
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: image)
+        await store.setAlbumArtwork(image, for: original.id)
+        let custom = try XCTUnwrap(store.track(for: original.id)?.albumArtworkURL)
+        XCTAssertNotNil(store.track(for: original.id)?.artworkData)
+        XCTAssertNil(store.track(for: other.id)?.albumArtworkURL)
+        try FileManager.default.removeItem(at: image)
+
+        try FileManager.default.copyItem(at: demo, to: music.appendingPathComponent("second.m4a"))
+        await store.scan(force: true)
+        let album = try XCTUnwrap(store.albumCollection(original.id))
+        XCTAssertEqual(album.tracks.count, 2)
+        XCTAssertEqual(album.tracks.compactMap(\.albumArtworkURL), [custom, custom])
+        let reopened = LibraryStore(directory: directory, autoStart: false)
+        let restoredID = try XCTUnwrap(reopened.tracks.first(where: { $0.url.lastPathComponent == "first.m4a" })?.id)
+        XCTAssertEqual(reopened.albumCollection(restoredID)?.tracks.compactMap(\.albumArtworkURL), [custom, custom])
+
+        let albumIDs = try XCTUnwrap(reopened.albumCollection(restoredID)).tracks.map(\.id)
+        reopened.applyTagEdits(ids: albumIDs, changes: [.album: "Renamed album"], carryAlbumArtwork: true)
+        XCTAssertEqual(reopened.albumCollection(restoredID)?.title, "Renamed album")
+        XCTAssertEqual(reopened.albumCollection(restoredID)?.tracks.compactMap(\.albumArtworkURL), [custom, custom])
+        reopened.undoTagEdits()
+        XCTAssertEqual(reopened.albumCollection(restoredID)?.title, original.album)
+        XCTAssertEqual(reopened.albumCollection(restoredID)?.tracks.compactMap(\.albumArtworkURL), [custom, custom])
+
+        await reopened.setAlbumArtwork(nil, for: restoredID)
+        XCTAssertTrue(reopened.albumCollection(restoredID)?.tracks.allSatisfy { $0.albumArtworkURL == nil } == true)
+        XCTAssertEqual(reopened.track(for: restoredID)?.artworkData, original.artworkData)
+    }
     func testMigrationDeduplicatesArtworkAndIncrementalWritesOneRecord() throws {
         let root = try temporary()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -365,6 +415,48 @@ final class HardeningTests: XCTestCase {
         XCTAssertGreaterThan(track.bitrate ?? 0, 0)
         XCTAssertEqual(track.sampleRate, 48000)
         XCTAssertEqual(track.channels, 2)
+        func audioFrames(_ data: Data) -> Data {
+            var offset = 4
+            while offset + 4 <= data.count {
+                let header = data[offset]
+                let count = Int(data[offset + 1]) << 16 | Int(data[offset + 2]) << 8 | Int(data[offset + 3])
+                offset += 4 + count
+                if header & 128 != 0, offset <= data.count { return Data(data.suffix(from: offset)) }
+            }
+            return Data()
+        }
+        let originalAudio = audioFrames(tagged)
+        XCTAssertFalse(originalAudio.isEmpty)
+        let refreshed = try FLACTagWriter.write([.title: "Órbita", .genre: "", .trackNumber: "7"], to: url)
+        XCTAssertEqual(refreshed.title, "Órbita")
+        XCTAssertEqual(refreshed.album, "Álbum")
+        XCTAssertEqual(refreshed.genre, "—")
+        XCTAssertEqual(refreshed.trackNumber, 7)
+        XCTAssertEqual(refreshed.artwork, front)
+        XCTAssertEqual(refreshed.lyrics, track.lyrics)
+        XCTAssertEqual(audioFrames(try Data(contentsOf: url)), originalAudio)
+        XCTAssertEqual(try NativeFLACMetadata.read(url, sidecars: nil)?.title, "Órbita")
+
+        let invalid = root.appendingPathComponent("invalid.flac")
+        let bytes = Data("invalid audio".utf8)
+        try bytes.write(to: invalid)
+        XCTAssertThrowsError(try FLACTagWriter.write([.title: "Ignored"], to: invalid))
+        XCTAssertEqual(try Data(contentsOf: invalid), bytes)
+    }
+    func testFLACStagingRejectsFullVolumeAndRecognizesUnderlyingSpaceErrors() throws {
+        XCTAssertThrowsError(try FLACTagWriter.requireStagingSpace(28_047_748, available: 15_953_920)) { error in
+            let capacity = error as? FLACTagWriter.InsufficientSpace
+            XCTAssertEqual(capacity?.required, 28_047_748)
+            XCTAssertEqual(capacity?.available, 15_953_920)
+        }
+        XCTAssertNoThrow(try FLACTagWriter.requireStagingSpace(28, available: 28))
+        XCTAssertNoThrow(try FLACTagWriter.requireStagingSpace(28, available: nil))
+        let full = NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))
+        let wrapped = NSError(
+            domain: NSCocoaErrorDomain, code: CocoaError.fileWriteNoPermission.rawValue,
+            userInfo: [NSUnderlyingErrorKey: full])
+        XCTAssertTrue(FLACTagWriter.isStorageFull(wrapped))
+        XCTAssertFalse(FLACTagWriter.isStorageFull(NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))))
     }
     func testProgressReportsFinalCountAndCancellationStopsEnumeration() throws {
         let root = try temporary()

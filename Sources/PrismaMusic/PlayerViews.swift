@@ -102,6 +102,43 @@ struct ArtworkView: View {
         }
     }
 }
+struct PlaybackArtistLink: View {
+    @EnvironmentObject private var store: LibraryStore
+    let track: Track
+    var afterOpen: () -> Void = {}
+
+    private var artists: [String] {
+        ArtistIdentity.names(track.artist).filter { $0 != "—" }
+    }
+
+    var body: some View {
+        if artists.count > 1 {
+            Menu {
+                ForEach(artists, id: \.self) { artist in
+                    Button(artist) { open(artist) }
+                }
+            } label: {
+                Text(artists.joined(separator: " · ")).lineLimit(1)
+            }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize(horizontal: false, vertical: true)
+                .help(store.t("openArtistProfile"))
+        } else if let artist = artists.first {
+            Button {
+                open(artist)
+            } label: {
+                Text(artist).lineLimit(1)
+            }
+            .buttonStyle(.plain).help(store.t("openArtistProfile"))
+        } else {
+            Text(store.displayArtist(track.artist))
+        }
+    }
+
+    private func open(_ artist: String) {
+        store.openArtist(artist)
+        afterOpen()
+    }
+}
+
 struct PlayerBar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var store: LibraryStore
@@ -114,9 +151,18 @@ struct PlayerBar: View {
                     ChangingArtwork(track: store.current).frame(width: 55, height: 55).contentShape(Rectangle())
                 }.buttonStyle(.plain).help(store.t("full")).accessibilityLabel(store.t("full"))
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(store.current?.title ?? store.t("choose")).font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.primary)
-                    Text(store.current?.artist ?? "Prisma Music").font(.system(size: 10)).foregroundStyle(.secondary)
+                    if let track = store.current {
+                        Button {
+                            store.openAlbum(track, revealTrack: true)
+                        } label: {
+                            Text(track.title).foregroundStyle(.primary)
+                        }.buttonStyle(.plain).font(.system(size: 13, weight: .semibold))
+                            .help(store.t("openAlbum"))
+                        PlaybackArtistLink(track: track).font(.system(size: 10)).foregroundStyle(.secondary)
+                    } else {
+                        Text(store.t("choose")).font(.system(size: 13, weight: .semibold))
+                        Text("Prisma Music").font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
                     if let track = store.current, store.preferences.showQuality {
                         Text(track.qualitySummary).font(.system(size: 8, weight: .medium, design: .monospaced))
                             .foregroundStyle(store.effectiveAccent.opacity(0.85))
@@ -124,12 +170,7 @@ struct PlayerBar: View {
                 }.lineLimit(1).id(store.currentID).transition(.opacity).animation(
                     reduceMotion || !store.preferences.microInteractions ? nil : .smooth(duration: 0.25),
                     value: store.currentID
-                ).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture {
-                    store.inspectedID = nil
-                    store.showInfo.toggle()
-                    store.showLyrics = false
-                    store.showQueue = false
-                }
+                ).frame(maxWidth: .infinity, alignment: .leading)
                 if let track = store.current { FavoriteControl(track: track, size: 12) }
             }.frame(width: 275)
             VStack(spacing: 9) {
@@ -429,6 +470,11 @@ struct TrackInfoView: View {
                             track.channels.map { $0 == 1 ? "1 · Mono" : $0 == 2 ? "2 · Stereo" : String($0) })
                         if let bits = track.bitDepth { detail("bitDepth", "\(bits) bit") }
                         detail("duration", clockText(track.duration))
+                        let edited = store.locallyEditedFields(for: track)
+                        if !edited.isEmpty {
+                            Divider()
+                            detail("localTagCorrections", edited.map { store.t($0.rawValue) }.joined(separator: " · "))
+                        }
                         Divider()
                         Text(store.t("bitrateNote")).font(.system(size: 10)).foregroundStyle(.secondary)
                         Text(store.t("location")).font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)

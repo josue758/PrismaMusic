@@ -82,6 +82,9 @@ struct BatchTagEditor: View {
     @State private var enabled = Set<TagField>()
     @State private var values: [TagField: String] = [:]
     @State private var numbering = false
+    @State private var writeToFiles = false
+    @State private var saving = false
+    @State private var failure: String?
     @State private var start = "1"
     private let fields: [TagField] = [.artist, .album, .albumArtist, .genre, .year, .discNumber]
     private var changes: [TagField: String] {
@@ -150,19 +153,50 @@ struct BatchTagEditor: View {
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }.frame(height: 150).padding(12).background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
-            Text(store.t(enabled.isEmpty && !numbering ? "chooseTagFields" : valid ? "tagNote" : "tagValidation")).font(
-                .caption
-            ).foregroundStyle(.secondary)
-            HStack {
-                Button(store.t("cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Spacer()
-                Button(store.t("applyTags")) {
+            if !tracks.isEmpty && tracks.allSatisfy(store.canWriteFileTags) {
+                Toggle(store.t("writeFileTags"), isOn: $writeToFiles).disabled(saving)
+            }
+            if let failure {
+                Text(failure).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                Button(store.t("saveTagsInLibrary")) {
                     store.applyTagEdits(
                         ids: tracks.map(\.id), changes: changes, numberingFrom: numbering ? Int(start) : nil)
                     dismiss()
-                }.buttonStyle(.glassProminent).disabled(!valid || store.scanning || tracks.isEmpty)
+                }.buttonStyle(.glass).disabled(!valid || saving || store.writingFileTags)
             }
-        }.padding(24).frame(width: 650).background { PrismaBackdrop(reactive: false).ignoresSafeArea() }
+            Text(
+                store.t(
+                    enabled.isEmpty && !numbering
+                        ? "chooseTagFields" : valid ? writeToFiles ? "writeFileTagsNote" : "tagNote" : "tagValidation")
+            ).font(
+                .caption
+            ).foregroundStyle(.secondary)
+            HStack {
+                Button(store.t("cancel")) { dismiss() }.keyboardShortcut(.cancelAction).disabled(saving)
+                Spacer()
+                if saving { ProgressView().controlSize(.small) }
+                Button(store.t("applyTags")) {
+                    if writeToFiles {
+                        saving = true
+                        let edits = changes
+                        let first = numbering ? Int(start) : nil
+                        Task {
+                            failure = await store.writeFileTags(
+                                ids: tracks.map(\.id), changes: edits, numberingFrom: first)
+                            saving = false
+                            if failure == nil { dismiss() }
+                        }
+                    } else {
+                        store.applyTagEdits(
+                            ids: tracks.map(\.id), changes: changes, numberingFrom: numbering ? Int(start) : nil)
+                        dismiss()
+                    }
+                }.buttonStyle(.glassProminent).disabled(
+                    !valid || store.scanning || store.writingFileTags || saving || tracks.isEmpty)
+            }
+        }.padding(24).frame(width: 650).interactiveDismissDisabled(saving).background {
+            PrismaBackdrop(reactive: false).ignoresSafeArea()
+        }
     }
     private func display(_ value: String) -> String { value.isEmpty ? "—" : value }
 }

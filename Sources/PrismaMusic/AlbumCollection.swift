@@ -48,6 +48,7 @@ struct AlbumCollection {
     var indices: [String: Int]
     var duration: Double
     var year: String
+    var genres: [String]
     init(seed: Track, library: [Track]) {
         title = seed.album
         artist = AlbumIdentity.artist(seed)
@@ -56,5 +57,9 @@ struct AlbumCollection {
             tracks.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
         duration = tracks.reduce(0) { $0 + $1.duration }
         year = tracks.map(\.year).first { !$0.isEmpty } ?? ""
+        var seenGenres = Set<String>()
+        genres = tracks.map { $0.genre.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { genre in
+            !genre.isEmpty && genre != "—" && seenGenres.insert(genre.lowercased()).inserted
+        }
     }
 }

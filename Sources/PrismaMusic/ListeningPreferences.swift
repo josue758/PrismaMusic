@@ -37,6 +37,7 @@ struct ListeningPreferences: Codable, Equatable {
     var lyricsOffset = 0.0
     var autoScrollLyrics = true
     var translateLyrics = true
+    var lyricsTargetLanguage = "es"
     var visualizerStyle = "aurora"
     var visualizerSensitivity = 1.0
     var visualizerFPS = 30.0
@@ -50,7 +51,8 @@ struct ListeningPreferences: Codable, Equatable {
             atmosphere, adaptiveArtwork, ambientMotion, artworkPulse, glassTransparency, microInteractions, hoverDepth,
             showFeedback, compactRows, showQuality, albumSize, autoArtwork, autoLyrics, watchMusicFolders,
             recursiveScan, scanWorkers,
-            lyricsFontSize, lyricsOffset, autoScrollLyrics, translateLyrics, visualizerStyle, visualizerSensitivity,
+            lyricsFontSize, lyricsOffset, autoScrollLyrics, translateLyrics, lyricsTargetLanguage, visualizerStyle,
+            visualizerSensitivity,
             visualizerFPS,
             animateVisualizer, miniAlwaysOnTop, miniAllSpaces
     }
@@ -93,6 +95,8 @@ struct ListeningPreferences: Codable, Equatable {
         lyricsOffset = try values.decodeIfPresent(Double.self, forKey: .lyricsOffset) ?? lyricsOffset
         autoScrollLyrics = try values.decodeIfPresent(Bool.self, forKey: .autoScrollLyrics) ?? autoScrollLyrics
         translateLyrics = try values.decodeIfPresent(Bool.self, forKey: .translateLyrics) ?? translateLyrics
+        lyricsTargetLanguage =
+            try values.decodeIfPresent(String.self, forKey: .lyricsTargetLanguage) ?? lyricsTargetLanguage
         visualizerStyle = try values.decodeIfPresent(String.self, forKey: .visualizerStyle) ?? visualizerStyle
         visualizerSensitivity =
             try values.decodeIfPresent(Double.self, forKey: .visualizerSensitivity) ?? visualizerSensitivity

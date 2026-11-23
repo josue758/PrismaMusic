@@ -14,6 +14,34 @@ final class LibraryPresentationTests: XCTestCase {
             url: URL(fileURLWithPath: "/Music/" + file), title: title, artist: "Artist", album: "Album", genre: "Jazz",
             year: "2026", duration: 60, trackNumber: number, discNumber: disc)
     }
+    @MainActor
+    func testPlayerAlbumLinkSelectsExactTrackAndPreservesPlayback() throws {
+        let directory = try root()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = LibraryStore(directory: directory, autoStart: false)
+        let first = track("disc1.flac", "Same title", 1, 1)
+        let playing = track("disc2.flac", "Same title", 1, 2)
+        store.tracks = [first, playing]
+        store.currentID = playing.id
+        store.queue = [playing.id, first.id]
+        store.position = 12
+        store.openAlbum(first)
+
+        store.openAlbum(playing, revealTrack: true)
+        XCTAssertEqual(store.albumTrackReveal?.trackID, playing.id)
+        XCTAssertEqual(store.albumCollection(playing.id)?.tracks.map(\.id), [first.id, playing.id])
+        let request = store.albumTrackReveal
+        store.openAlbum(playing, revealTrack: true)
+        XCTAssertNotEqual(store.albumTrackReveal, request)
+        store.openArtist(playing.artist)
+        XCTAssertEqual(store.selectedArtist, playing.artist)
+        XCTAssertNil(store.albumTrackReveal)
+        store.goBack()
+        XCTAssertEqual(store.selectedAlbumID, playing.id)
+        XCTAssertEqual(store.currentID, playing.id)
+        XCTAssertEqual(store.position, 12)
+        XCTAssertEqual(store.queue, [playing.id, first.id])
+    }
     func testSpokenSongPrefersExactTitleAndAcceptsArtist() {
         var first = track("a.flac", "Órbita")
         first.artist = "Björk"

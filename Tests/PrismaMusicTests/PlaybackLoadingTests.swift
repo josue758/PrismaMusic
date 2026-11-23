@@ -203,4 +203,71 @@ final class PlaybackLoadingTests: XCTestCase {
         await gate.fail(a.url)
         try await store.prepareForTermination()
     }
+    @MainActor
+    func testQueueRestoresExactShuffleOrderAndRepeatAcrossSessions() async throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = track("First")
+        let second = track("Second")
+        let third = track("Third")
+        let writer = LibraryStore(directory: root, autoStart: false)
+        writer.tracks = [first, second, third]
+        writer.preferences.hasCompletedWelcome = true
+        writer.shuffle = true
+        let order = [second.id, first.id, third.id]
+        writer.queue = order
+        writer.repeatMode = 2
+        writer.currentID = first.id
+        writer.position = 37
+        try await writer.prepareForTermination()
+
+        let gate = SuspendedAudioOpen()
+        let restored = LibraryStore(directory: root, autoStart: true, openAudioFile: { try await gate.open($0) })
+        await restored.waitUntilReady()
+        XCTAssertEqual(restored.queue, order)
+        XCTAssertEqual(restored.currentID, first.id)
+        XCTAssertEqual(restored.position, 37)
+        XCTAssertTrue(restored.shuffle)
+        XCTAssertEqual(restored.repeatMode, 2)
+        XCTAssertFalse(restored.playbackLoading)
+        XCTAssertFalse(restored.isPlaying)
+        try await restored.prepareForTermination()
+    }
+
+    @MainActor
+    func testMountedNASCanResumeWithoutResettingQueue() async throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = root.appendingPathComponent("Mounted")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let gate = SuspendedAudioOpen()
+        let store = LibraryStore(directory: root, autoStart: false, openAudioFile: { try await gate.open($0) })
+        var song = track("Network")
+        song.url = folder.appendingPathComponent("network.flac")
+        song.sourceIsNetwork = true
+        let next = track("Next")
+        store.tracks = [song, next]
+        store.sources = [MusicSource(url: folder)]
+        store.queue = [song.id, next.id]
+        store.currentID = song.id
+        store.position = 43
+        store.isPlaying = true
+        store.volumeUnmounted(folder)
+        let retry = try XCTUnwrap(store.nasRetry)
+        do {
+            try await store.resumeNASPlayback(retry)
+            XCTFail("An unavailable file must leave recovery pending")
+        } catch {}
+        XCTAssertEqual(store.nasRetry?.id, retry.id)
+        try Data([0]).write(to: song.url)
+        try await store.resumeNASPlayback(retry)
+        await gate.waitForOpen(song.url)
+        XCTAssertNil(store.nasRetry)
+        XCTAssertEqual(store.position, 43)
+        XCTAssertEqual(store.queue, [song.id, next.id])
+        store.pausePlayback()
+        await gate.fail(song.url)
+        try await store.prepareForTermination()
+    }
+
 }

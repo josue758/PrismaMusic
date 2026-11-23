@@ -13,9 +13,15 @@ struct Track: Identifiable, Codable, Equatable, Sendable {
     var duration: Double
     var artwork: Data?
     var artworkURL: URL? = nil
-    var hasArtwork: Bool { artwork != nil || artworkURL != nil }
-    var artworkData: Data? { artwork ?? artworkURL.flatMap { ArtworkCache.shared.data(at: $0) } }
-    var artworkIdentity: String { artworkURL?.absoluteString ?? (id + ":" + String(artwork?.count ?? 0)) }
+    var albumArtworkURL: URL? = nil
+    var hasArtwork: Bool { albumArtworkURL != nil || artwork != nil || artworkURL != nil }
+    var artworkData: Data? {
+        albumArtworkURL.flatMap { ArtworkCache.shared.data(at: $0) }
+            ?? artwork ?? artworkURL.flatMap { ArtworkCache.shared.data(at: $0) }
+    }
+    var artworkIdentity: String {
+        (albumArtworkURL ?? artworkURL)?.absoluteString ?? (id + ":" + String(artwork?.count ?? 0))
+    }
     var lyrics: String?
     var hasLyrics: Bool { lyrics?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
     var artworkCredit: String?
