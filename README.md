@@ -5,15 +5,23 @@
 
 A native macOS music player for local collections and mounted NAS libraries. Built with Swift, SwiftUI, AVAudioEngine and Core Audio, with an artwork-driven Liquid Glass interface.
 
-**Apple Silicon · macOS 26+ · Beta 0.13.4**
+**Apple Silicon · macOS 26+ · Beta 0.14.0**
 
-[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.13.4) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md)
+[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.14.0) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md) · [Windows feature adaptation](docs/WINDOWS_PARITY.md)
 
 ## Try it
 
 Download the DMG, drag **Prisma Music** to Applications, and open it. The welcome flow lets you choose Spanish, English or Portuguese, appearance and a music folder. Three redistributable instrumental demos are included; a NAS is optional.
 
 The beta is ad hoc signed. It does not yet have Apple Developer ID signing or notarization. A [local signing/notarization workflow](docs/NOTARIZATION.md) is prepared and requires the owner’s Apple Developer membership and signing assets. No account or subscription is required. Updates preserve the library and preferences. Use **Prisma Music → Check for Updates…** to download and open a newer installer without visiting GitHub.
+
+## Library maintenance
+
+Adapted from the Windows edition: **Settings → Library → Tag Review** groups missing artists/albums, album spelling variants and possible duplicates. Select tracks and preview a batch correction, including album artist and disc/track numbers. In song lists use Command-click or Shift-click for multiple selection and choose **Batch Tag Editor** from the contextual menu. Only enabled fields change; corrections are kept per field through future scans. **Undo Tag Edits** restores the last edit in the current session, while the individual editor can restore tags from the original file. Audio files are never rewritten.
+
+The scan report can search paths and errors and retry one failed file without losing the other results. Resume an interrupted import with the new-music scan: already imported tracks are skipped during metadata reading, while directories are traversed again. Source relocation verifies the new files with progress and cancellation before changing paths.
+
+SQLite integrity is checked on opening. Prisma retains up to seven daily SQLite snapshots in its data folder, restores a valid snapshot on database corruption, and preserves damaged files for inspection. A snapshot may predate the latest edits; it does not back up audio or artwork files. Manual JSON export remains available. Artist pages include your five most played tracks, based on local play counts, and shortcuts to their songs and albums.
 
 ## Listening and browsing
 

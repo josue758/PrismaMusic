@@ -1,4 +1,16 @@
-# Validación de Prisma Music 0.11.0
+# Validación actual · Prisma Music 0.14.0
+
+22 de noviembre de 2026. Suite completa: **100 pruebas, 11 omitidas intencionalmente y ningún fallo** (89 ejecutadas). Las omisiones corresponden a servicios externos, modelos de traducción y hardware que se activan por variables de entorno. Además se ejecutó la prueba de NAS montado: FLAC de 24 bits/48 kHz, decodificación real, salto de posición, pausa y reanudación; pasó sin fallos. Apertura en segundo plano de ese archivo: 0,064 s en esa ejecución con el recurso montado; no es una medición general en frío.
+
+Las nuevas regresiones cubren edición por campo durante reescaneos, reapertura y migración de correcciones antiguas, deshacer conservando favoritos/contadores, recuperar etiquetas del archivo, detección de variantes/duplicados, validación numérica, reintento selectivo sin perder otras incidencias, cancelación/reubicación conservando correcciones, copias SQLite con rotación y recuperación de corrupción preservando originales. Se comprueba también el descubrimiento en segundo plano con reproducción activa y el interruptor de preferencias.
+
+Se revisaron en la app instalada los grupos de revisión con la biblioteca existente, la selección de pistas y la vista previa sin aplicar cambios a música personal. Se corrigieron campos repetidos y el reconocimiento del marcador de etiquetas faltantes de Mac. Se comprobaron el informe nativo, la localización española, la conservación de la biblioteca al actualizar y el acceso al NAS desde Finder. La app volvió a mostrar reproducción activa desde la biblioteca de red.
+
+Compilación release arm64 completada. Firma ad hoc verificada con `codesign --verify --deep --strict`; instalador validado con `hdiutil verify`. No se repitieron la matriz física de DAC, receptores AirPlay ni los modelos de traducción en esta revisión. Developer ID y notarización siguen pendientes de membresía/certificados. No se afirma ausencia absoluta de errores ni equivalencia total entre las plataformas; [adaptaciones y diferencias](docs/WINDOWS_PARITY.md).
+
+Las evidencias anteriores se conservan como historial:
+
+## Validación de Prisma Music 0.11.0
 
 8 de noviembre de 2026. **80 pruebas sin omisiones ni fallos**, con NAS SMB, inventario independiente, proveedores online, dispositivos Core Audio y modelos de traducción instalados. Se volvieron a encontrar los 7.854 archivos del inventario sin errores de exploración. La ejecución ordinaria pasa 80 pruebas con diez omisiones intencionales de integraciones externas.
 

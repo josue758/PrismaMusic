@@ -86,6 +86,7 @@ struct ArtistCollection {
     var genres: String
     var years: String
     var cover: Track?
+    var mostPlayed: [Track]
     var duration: Double
     init(name: String, library: [Track]) {
         tracks = library.filter { ArtistIdentity.contains($0.artist, name: name) }.sorted {
@@ -103,6 +104,12 @@ struct ArtistCollection {
         } else {
             years = ""
         }
+        mostPlayed = Array(
+            tracks.filter { ($0.playCount ?? 0) > 0 }.sorted {
+                let a = $0.playCount ?? 0
+                let b = $1.playCount ?? 0
+                return a == b ? $0.id < $1.id : a > b
+            }.prefix(5))
         cover = tracks.first(where: \.hasArtwork)
         duration = tracks.reduce(0) { $0 + $1.duration }
     }

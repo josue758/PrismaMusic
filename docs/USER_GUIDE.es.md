@@ -1,14 +1,14 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.13.4** para probar e iterar.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión beta local **0.14.0** para probar e iterar.
 
-[Descargar la versión 0.13.4 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.13.4) · [Ver el código](https://github.com/josue758/PrismaMusic)
+[Descargar la versión 0.14.0 beta para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.14.0) · [Ver el código](https://github.com/josue758/PrismaMusic)
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.13.4.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.14.0.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación y sigue la bienvenida para elegir idioma, biblioteca y estilo. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
@@ -17,7 +17,7 @@ En este Mac se actualiza en `/Applications/Prisma Music.app`. Si Prisma estaba a
 
 ## Añadir canciones nuevas del NAS
 
-Tras copiar música al NAS, usa **Archivo → Buscar canciones nuevas** o pulsa **⌘ + R**. Prisma recorre las carpetas y lee las etiquetas de los archivos nuevos. Si cambiaste etiquetas o eliminaste archivos, usa **Ajustes → Biblioteca → Volver a leer todas las etiquetas**.
+Prisma revisa las carpetas aproximadamente cada minuto y medio mientras está abierta. Puedes desactivar la búsqueda automática en **Ajustes → Biblioteca**. Para buscar en ese momento, usa **Archivo → Buscar canciones nuevas** o pulsa **⌘ + R**. Prisma recorre las carpetas y lee las etiquetas de los archivos nuevos. Si cambiaste etiquetas o eliminaste archivos, usa **Ajustes → Biblioteca → Volver a leer todas las etiquetas**.
 
 ## Actualizar Prisma Music
 
@@ -244,3 +244,16 @@ Los binarios de instalación deben adjuntarse a una Release, no al historial de 
 - [Apple: medición de audio con AVAudioEngine](https://developer.apple.com/documentation/avfaudio/avaudioplayer/updatemeters())
 - [Apple: iTunes Search API](https://performance-partners.apple.com/search-api)
 - [LRCLIB: documentación](https://lrclib.net/docs)
+
+
+## Revisar y corregir la colección
+
+En **Ajustes → Biblioteca → Revisión de etiquetas**, elige etiquetas faltantes, variantes de álbumes o posibles duplicados. Las coincidencias se basan en etiquetas y duración; no se borra música. Selecciona las pistas de un grupo y abre **Vista previa de edición**. Activa solamente los campos que quieras cambiar y comprueba la vista previa antes de aplicar. En Canciones también puedes seleccionar varias filas con ⌘ o Mayús y abrir **Editar etiquetas por lotes** desde su menú contextual.
+
+Se pueden corregir artista, álbum, artista del álbum, género, año y disco, y numerar las pistas. El editor individual añade título y número de pista. Año, disco y pista admiten valores de 1 a 9999 o vacíos. Las correcciones se guardan por campo en Prisma y se conservan al reescanear. **Deshacer edición de etiquetas** recupera el último lote durante la sesión, conservando favoritos y estadísticas posteriores. **Recuperar etiquetas del archivo**, en el editor individual, vuelve a leer el original. Estas acciones no escriben en los archivos de música.
+
+**Ver informe del escaneo** abre las incidencias dentro de la app: busca un archivo, ruta o mensaje y reintenta ese archivo o todas las incidencias. Tras una interrupción, **Continuar buscando canciones nuevas** recorre las carpetas y omite las etiquetas de pistas ya incorporadas. La reubicación de una fuente muestra avance y permite cancelar sin cambiar la ubicación guardada.
+
+Prisma comprueba SQLite al abrir y conserva hasta siete copias diarias en **Mostrar carpeta de datos → Backups**. Si detecta corrupción, recupera una copia válida y conserva los originales en una carpeta `Damaged-…`. La copia puede ser anterior a los cambios más recientes y no incluye la música ni las carátulas. La exportación JSON manual sigue disponible.
+
+La ficha de cada artista muestra hasta cinco canciones más reproducidas, según el contador local de Prisma, y botones para ir a sus canciones y álbumes.

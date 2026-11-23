@@ -6,11 +6,13 @@ struct LibrarySnapshot: Codable, Sendable {
     var sources: [MusicSource]
     var edited: [String]
     var playlists: [Playlist]?
+    var tagEdits: [String: TrackTagEdits]? = nil
 }
 private struct LibraryHeader: Codable, Equatable {
     var sources: [MusicSource]
     var edited: [String]
     var playlists: [Playlist]?
+    var tagEdits: [String: TrackTagEdits]? = nil
 }
 struct PersistenceFailure: LocalizedError {
     var message: String
@@ -32,6 +34,9 @@ final class LibraryPersistence: @unchecked Sendable {
     private var previousHeader: LibraryHeader?
     private var errorHandler: ((String) -> Void)?
     private(set) var lastChangedRows = 0
+    private(set) var recoveredBackup: String?
+    private var backupDay: Date?
+    private var nextBackupAttempt = Date.distantPast
     init(directory: URL) {
         self.directory = directory
         queue.sync {
@@ -39,16 +44,44 @@ final class LibraryPersistence: @unchecked Sendable {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 assets = try ArtworkAssetStore(
                     directory: directory.appendingPathComponent("Artwork", isDirectory: true))
-                guard
-                    sqlite3_open_v2(
-                        directory.appendingPathComponent("library.sqlite").path, &db,
-                        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK
-                else { throw failure("Open database") }
+                try openDatabase()
+                do { try LibraryDatabaseBackups.validate(db) } catch let issue as NSError
+                    where issue.domain == "Prisma.SQLite"
+                    && [Int(SQLITE_CORRUPT), Int(SQLITE_NOTADB)].contains(issue.code)
+                {
+                    sqlite3_close_v2(db)
+                    db = nil
+                    guard let name = try LibraryDatabaseBackups.restore(in: directory) else { throw issue }
+                    recoveredBackup = name
+                    try openDatabase()
+                    try LibraryDatabaseBackups.validate(db)
+                }
                 sqlite3_busy_timeout(db, 3000)
                 try execute(
                     "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS tracks (id TEXT PRIMARY KEY NOT NULL, payload BLOB NOT NULL); CREATE TABLE IF NOT EXISTS metadata (id INTEGER PRIMARY KEY CHECK(id=1), payload BLOB NOT NULL);"
                 )
             } catch { openingError = error }
+        }
+    }
+    private func openDatabase() throws {
+        guard
+            sqlite3_open_v2(
+                directory.appendingPathComponent("library.sqlite").path, &db,
+                SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK
+        else { throw failure("Open database") }
+    }
+    private func backupIfNeeded() {
+        let day = Calendar.current.startOfDay(for: Date())
+        guard backupDay != day, Date() >= nextBackupAttempt else { return }
+        do {
+            try LibraryDatabaseBackups.create(from: db, directory: directory)
+            backupDay = day
+        } catch {
+            nextBackupAttempt = Date().addingTimeInterval(600)
+            lock.lock()
+            let handler = errorHandler
+            lock.unlock()
+            handler?(error.localizedDescription)
         }
     }
     deinit { if let db { sqlite3_close_v2(db) } }
@@ -98,7 +131,10 @@ final class LibraryPersistence: @unchecked Sendable {
             guard result == SQLITE_DONE else { throw failure("Read library records") }
             previous = Dictionary(tracks.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
             previousHeader = header
-            return .init(tracks: tracks, sources: header.sources, edited: header.edited, playlists: header.playlists)
+            backupIfNeeded()
+            return .init(
+                tracks: tracks, sources: header.sources, edited: header.edited, playlists: header.playlists,
+                tagEdits: header.tagEdits)
         }
         guard step == SQLITE_DONE else { throw failure("Read library header") }
         let legacy = directory.appendingPathComponent("library.json")
@@ -197,7 +233,9 @@ final class LibraryPersistence: @unchecked Sendable {
         var current: [String: Track] = [:]
         current.reserveCapacity(snapshot.tracks.count)
         for track in snapshot.tracks { current[track.id] = try normalizeOnQueue(track) }
-        let header = LibraryHeader(sources: snapshot.sources, edited: snapshot.edited, playlists: snapshot.playlists)
+        let header = LibraryHeader(
+            sources: snapshot.sources, edited: snapshot.edited, playlists: snapshot.playlists,
+            tagEdits: snapshot.tagEdits)
         let changed = current.values.filter { previous[$0.id] != $0 }
         let deleted = previous.keys.filter { current[$0] == nil }
         lastChangedRows = changed.count + deleted.count
@@ -245,6 +283,7 @@ final class LibraryPersistence: @unchecked Sendable {
             try execute("COMMIT")
             previous = current
             previousHeader = header
+            backupIfNeeded()
         } catch {
             try? execute("ROLLBACK")
             throw error

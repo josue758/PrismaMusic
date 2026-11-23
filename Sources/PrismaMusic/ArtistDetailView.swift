@@ -41,9 +41,26 @@ struct ArtistDetailView: View {
                         metric(collectionTimeText(collection.duration), "duration")
                     }
                     biography
+                    HStack {
+                        Button(store.t("artistSongs")) { scroll(to: "artist-songs", reader: reader) }
+                        Button(store.t("artistAlbums")) { scroll(to: "artist-albums", reader: reader) }
+                    }.buttonStyle(.glass)
+                    if !collection.mostPlayed.isEmpty {
+                        SectionHeading(title: store.t("mostPlayed"))
+                        LibrarySongList(tracks: collection.mostPlayed, showAlbum: false, subtitleAlbum: true) { track in
+                            (collection.mostPlayed.firstIndex(where: { $0.id == track.id }) ?? 0) + 1
+                        }
+                    }
                     if !albums.isEmpty {
-                        SectionHeading(title: store.t("artistAlbums"))
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 16)], spacing: 16) {
+                        SectionHeading(title: store.t("artistAlbums")).id("artist-albums")
+                        LazyVGrid(
+                            columns: [
+                                GridItem(
+                                    .adaptive(
+                                        minimum: store.preferences.albumSize == "small"
+                                            ? 130 : store.preferences.albumSize == "large" ? 210 : 160), spacing: 16)
+                            ], spacing: 16
+                        ) {
                             ForEach(albums, id: \.key) { album in
                                 VStack(alignment: .leading, spacing: 10) {
                                     Button {
@@ -93,6 +110,13 @@ struct ArtistDetailView: View {
                         await choosePhoto($0)
                     }.environmentObject(store)
                 }
+        }
+    }
+    private func scroll(to id: String, reader: ScrollViewProxy) {
+        if reduceMotion || !store.preferences.microInteractions {
+            reader.scrollTo(id, anchor: .top)
+        } else {
+            withAnimation(.easeOut(duration: 0.18)) { reader.scrollTo(id, anchor: .top) }
         }
     }
     private var hero: some View {

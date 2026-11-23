@@ -30,6 +30,7 @@ struct ListeningPreferences: Codable, Equatable {
     var albumSize = "medium"
     var autoArtwork = true
     var autoLyrics = true
+    var watchMusicFolders = true
     var recursiveScan = true
     var scanWorkers = 4
     var lyricsFontSize = 21.0
@@ -47,7 +48,8 @@ struct ListeningPreferences: Codable, Equatable {
         case outputDeviceUID, directOutput, exclusiveOutput, hasCompletedWelcome, eqEnabled, eqGains, eqPreset, preamp,
             autoHeadroom, balance, playbackRate, continueQueue, keepAwake, rememberPosition, startSection, glassStyle,
             atmosphere, adaptiveArtwork, ambientMotion, artworkPulse, glassTransparency, microInteractions, hoverDepth,
-            showFeedback, compactRows, showQuality, albumSize, autoArtwork, autoLyrics, recursiveScan, scanWorkers,
+            showFeedback, compactRows, showQuality, albumSize, autoArtwork, autoLyrics, watchMusicFolders,
+            recursiveScan, scanWorkers,
             lyricsFontSize, lyricsOffset, autoScrollLyrics, translateLyrics, visualizerStyle, visualizerSensitivity,
             visualizerFPS,
             animateVisualizer, miniAlwaysOnTop, miniAllSpaces
@@ -84,6 +86,7 @@ struct ListeningPreferences: Codable, Equatable {
         albumSize = try values.decodeIfPresent(String.self, forKey: .albumSize) ?? albumSize
         autoArtwork = try values.decodeIfPresent(Bool.self, forKey: .autoArtwork) ?? autoArtwork
         autoLyrics = try values.decodeIfPresent(Bool.self, forKey: .autoLyrics) ?? autoLyrics
+        watchMusicFolders = try values.decodeIfPresent(Bool.self, forKey: .watchMusicFolders) ?? watchMusicFolders
         recursiveScan = try values.decodeIfPresent(Bool.self, forKey: .recursiveScan) ?? recursiveScan
         scanWorkers = try values.decodeIfPresent(Int.self, forKey: .scanWorkers) ?? scanWorkers
         lyricsFontSize = try values.decodeIfPresent(Double.self, forKey: .lyricsFontSize) ?? lyricsFontSize

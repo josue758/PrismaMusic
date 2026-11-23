@@ -1,5 +1,19 @@
 # Cambios
 
+## 0.14.0
+
+- Adaptación de funciones de Windows 0.62.9 al diseño nativo de macOS: revisión de etiquetas, selección múltiple con ⌘/Mayús y editor por lotes con vista previa y deshacer.
+- Correcciones de etiquetas por campo, con migración de las ediciones anteriores, artista del álbum, disco y pista; recuperación de etiquetas del archivo original.
+- Informe de escaneo con búsqueda y reintento de un archivo o de todas las incidencias. Recuperación incremental después de una interrupción.
+- Verificación de reubicaciones con progreso, cancelación y comprobación de identidad de la ubicación.
+- Comprobación de integridad SQLite, hasta siete copias diarias y recuperación conservando los originales dañados.
+- Fichas de artista con las cinco canciones más reproducidas, saltos a canciones/álbumes y portadas que respetan el tamaño de Apariencia.
+- Todas las nuevas opciones están traducidas al español, inglés y portugués.
+
+## 0.13.5 (integrada en 0.14.0)
+
+- Prisma busca canciones nuevas en segundo plano mientras la app está abierta. La búsqueda se puede desactivar desde **Ajustes → Biblioteca**.
+
 ## 0.13.4
 
 - **Buscar canciones nuevas** recorre las carpetas sin volver a leer las etiquetas de las pistas ya importadas. La lectura completa sigue disponible en Ajustes.

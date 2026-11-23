@@ -5,6 +5,8 @@ struct SettingsView: View {
     @EnvironmentObject var store: LibraryStore
     @Environment(\.dismiss) var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var showTagReview = false
+    @State private var showScanReport = false
     private let pages = ["sound", "playback", "library", "metadata", "appearance", "experience", "shortcuts"]
     private let icons = [
         "sound": "slider.vertical.3", "playback": "play.circle", "library": "square.stack", "metadata": "sparkles",
@@ -13,6 +15,8 @@ struct SettingsView: View {
     var body: some View {
         ZStack {
             PrismaBackdrop(reactive: false)
+                .sheet(isPresented: $showTagReview) { TagReviewView().environmentObject(store) }
+                .sheet(isPresented: $showScanReport) { ScanReportView().environmentObject(store) }
             Group {
                 HStack(spacing: 24) {
                     VStack(alignment: .leading, spacing: 24) {
@@ -310,18 +314,35 @@ struct SettingsView: View {
                             store.pickReplacement(for: source)
                         } label: {
                             Image(systemName: "folder.badge.gearshape")
-                        }.buttonStyle(.plain).disabled(store.scanning).help(store.t("relocateSource"))
-                            .accessibilityLabel(store.t("relocateSource"))
+                        }.buttonStyle(.plain).disabled(store.scanning || store.relocatingSource).help(
+                            store.t("relocateSource")
+                        )
+                        .accessibilityLabel(store.t("relocateSource"))
                         Button {
                             store.removeSource(source)
                         } label: {
                             Image(systemName: "minus.circle")
-                        }.buttonStyle(.plain).foregroundStyle(.secondary).disabled(store.scanning).help(
+                        }.buttonStyle(.plain).foregroundStyle(.secondary).disabled(
+                            store.scanning || store.relocatingSource
+                        ).help(
                             store.t("removeSource"))
                     }.padding(.vertical, 4)
                 }
                 Divider()
+                if store.relocatingSource {
+                    ProgressView(value: Double(store.relocationProcessed), total: Double(max(1, store.relocationTotal)))
+                    HStack {
+                        Text(
+                            store.t("verifyingLocation") + " · \(store.relocationProcessed) / \(store.relocationTotal)"
+                        )
+                        .font(.caption.monospacedDigit())
+                        Spacer()
+                        Button(store.t("cancel")) { store.cancelSourceRelocation() }
+                    }
+                }
                 toggle("startScan", $store.scanOnLaunch)
+                toggle("watchMusicFolders", $store.preferences.watchMusicFolders)
+                Text(store.t("watchMusicFoldersNote")).font(.caption).foregroundStyle(.secondary)
                 toggle("recursive", $store.preferences.recursiveScan)
                 Text(store.t("scanWorkers")).font(.caption)
                 Picker(store.t("scanWorkers"), selection: $store.preferences.scanWorkers) {
@@ -359,8 +380,10 @@ struct SettingsView: View {
                                 ? store.t("offline") : audit.failed > 0 ? store.t("scanErrors") : store.t("finished")
                     ).font(.caption).foregroundStyle(.secondary)
                     HStack {
-                        Button(store.t("scanReport")) { store.showScanReport() }.buttonStyle(.glass)
-                        if !audit.issues.isEmpty {
+                        Button(store.t("scanReport")) { showScanReport = true }.buttonStyle(.glass)
+                        if audit.issues.contains(where: {
+                            MetadataReader.extensions.contains($0.url.pathExtension.lowercased())
+                        }) {
                             Button(store.t("retryFailed")) { Task { await store.retryFailedScan() } }.buttonStyle(
                                 .glass)
                         }
@@ -369,7 +392,16 @@ struct SettingsView: View {
                 Text(store.t("rescanNote")).font(.caption).foregroundStyle(.secondary)
             }
             card {
+                SectionHeading(title: store.t("tagReview"), subtitle: store.t("tagReviewNote"))
+                HStack {
+                    Button(store.t("tagReview")) { showTagReview = true }.buttonStyle(.glass)
+                    Button(store.t("undoTags")) { store.undoTagEdits() }.buttonStyle(.glass)
+                        .disabled(!store.canUndoTagEdits || store.scanning)
+                }
+            }
+            card {
                 SectionHeading(title: store.t("backup"), subtitle: store.t("backupNote"))
+                Text(store.t("dailyBackupsNote")).font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Button(store.t("backup")) { store.exportLibraryBackup() }.buttonStyle(.glass)
                     Button(store.t("exportPlaylist")) { store.exportPlaylist() }.buttonStyle(.glass)
@@ -679,26 +711,55 @@ struct NASView: View {
 struct TagEditor: View {
     @EnvironmentObject var store: LibraryStore
     @Environment(\.dismiss) var dismiss
-    @State var track: Track
+    let track: Track
+    @State private var values: [TagField: String]
+    init(track: Track) {
+        self.track = track
+        _values = State(
+            initialValue: Dictionary(uniqueKeysWithValues: TagField.allCases.map { ($0, $0.value(in: track)) }))
+    }
+    @State private var restoring = false
+    @State private var failure: String?
+    private var valid: Bool { TagField.allCases.allSatisfy { $0.isValid(values[$0] ?? "") } }
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text(store.t("edit")).font(.title2.bold())
             Form {
-                TextField(store.t("title"), text: $track.title)
-                TextField(store.t("artist"), text: $track.artist)
-                TextField(store.t("album"), text: $track.album)
-                TextField(store.t("genre"), text: $track.genre)
-                TextField(store.t("year"), text: $track.year)
-            }.textFieldStyle(.roundedBorder)
-            Text(store.t("tagNote")).font(.caption).foregroundStyle(.secondary)
+                ForEach(TagField.allCases) { field in
+                    TextField(
+                        store.t(field.rawValue),
+                        text: Binding(
+                            get: { values[field] ?? "" },
+                            set: { values[field] = $0 }))
+                }
+            }.textFieldStyle(.roundedBorder).disabled(restoring)
+            Text(store.t(valid ? "tagNote" : "tagValidation")).font(.caption).foregroundStyle(.secondary)
+            if let failure { Text(failure).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
-                Button(store.t("cancel")) { dismiss() }
+                Button(store.t("restoreFileTags")) {
+                    restoring = true
+                    Task {
+                        do {
+                            try await store.restoreFileTags(track)
+                            dismiss()
+                        } catch {
+                            failure = error.localizedDescription
+                            restoring = false
+                        }
+                    }
+                }.disabled(store.scanning || restoring)
                 Spacer()
+                if restoring { ProgressView().controlSize(.small) }
+                Button(store.t("cancel")) { dismiss() }.keyboardShortcut(.cancelAction).disabled(restoring)
                 Button(store.t("save")) {
-                    store.update(track)
+                    let changes = values.filter {
+                        $0.value.trimmingCharacters(in: .whitespacesAndNewlines) != $0.key.value(in: track)
+                    }
+                    store.applyTagEdits(ids: [track.id], changes: changes)
                     dismiss()
-                }.buttonStyle(.glassProminent).disabled(track.title.trimmingCharacters(in: .whitespaces).isEmpty)
+                }.buttonStyle(.glassProminent)
+                    .disabled(!valid || store.scanning || restoring)
             }
-        }.padding(28).frame(width: 450)
+        }.padding(28).frame(width: 530)
     }
 }

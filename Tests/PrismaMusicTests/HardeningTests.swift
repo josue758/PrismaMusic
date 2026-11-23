@@ -413,6 +413,38 @@ final class HardeningTests: XCTestCase {
     }
 
     @MainActor
+    func testBackgroundDiscoveryImportsWhilePlayingAndHonorsPreference() async throws {
+        let root = try temporary().resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let music = root.appendingPathComponent("Music", isDirectory: true)
+        try FileManager.default.createDirectory(at: music, withIntermediateDirectories: true)
+        let first = music.appendingPathComponent("first.m4a")
+        let added = music.appendingPathComponent("new.m4a")
+        try FileManager.default.copyItem(at: demo, to: first)
+        let directory = root.appendingPathComponent("State")
+        let store = LibraryStore(directory: directory, autoStart: false)
+        await store.addSources([music])
+        let auditTime = store.scanAudit?.finishedAt
+
+        store.preferences.hasCompletedWelcome = true
+        store.preferences.watchMusicFolders = false
+        store.currentID = first.path
+        store.isPlaying = true
+        try FileManager.default.copyItem(at: demo, to: added)
+        await store.checkForNewMusicInBackground()
+        XCTAssertNil(store.track(for: added.path))
+
+        store.preferences.watchMusicFolders = true
+        await store.checkForNewMusicInBackground()
+        XCTAssertNotNil(store.track(for: added.path))
+        XCTAssertTrue(store.isPlaying)
+        XCTAssertEqual(store.currentID, first.path)
+        XCTAssertEqual(store.scanAudit?.finishedAt, auditTime)
+        let reopened = LibraryStore(directory: directory, autoStart: false)
+        XCTAssertTrue(reopened.tracks.contains { $0.url.lastPathComponent == added.lastPathComponent })
+    }
+
+    @MainActor
     func testParallelScanImportsEveryFileAndSkipsUnchangedOnRepeat() async throws {
         let root = try temporary()
         defer { try? FileManager.default.removeItem(at: root) }

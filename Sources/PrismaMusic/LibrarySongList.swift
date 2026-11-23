@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct LibrarySongList: View {
@@ -10,6 +11,8 @@ struct LibrarySongList: View {
     private var showsAlbumColumns: Bool { showAlbum && hasColumnSpace }
     @State private var selectedID: String?
     @State private var editing: Track?
+    @State private var selectedIDs = Set<String>()
+    @State private var batchEditing = false
     @FocusState private var keyboardFocused: Bool
     var body: some View {
         ScrollViewReader { proxy in
@@ -51,6 +54,9 @@ struct LibrarySongList: View {
             }
             .accessibilityHint(store.t("listKeyboardHelp"))
         }.sheet(item: $editing) { TagEditor(track: $0).environmentObject(store) }
+            .sheet(isPresented: $batchEditing) {
+                BatchTagEditor(tracks: tracks.filter { selectedIDs.contains($0.id) }).environmentObject(store)
+            }
     }
     private func row(_ track: Track) -> some View {
         HStack(spacing: 10) {
@@ -88,27 +94,44 @@ struct LibrarySongList: View {
             }.buttonStyle(.plain).foregroundStyle(.secondary).help(store.t("fileInfo"))
         }.padding(.horizontal, 12).padding(.vertical, store.preferences.compactRows ? 5 : 9)
             .background(
-                selectedID == track.id
+                selectedIDs.contains(track.id)
                     ? store.effectiveAccent.opacity(0.13) : number(track) % 2 == 1 ? .primary.opacity(0.03) : .clear,
                 in: RoundedRectangle(cornerRadius: 12)
             )
             .id(track.id)
             .overlay {
                 RoundedRectangle(cornerRadius: 12).strokeBorder(
-                    selectedID == track.id && keyboardFocused ? store.effectiveAccent.opacity(0.65) : .clear,
+                    selectedIDs.contains(track.id) && keyboardFocused ? store.effectiveAccent.opacity(0.65) : .clear,
                     lineWidth: 1)
             }
             .contentShape(Rectangle()).onTapGesture(count: 2) { store.play(track, in: tracks) }.onTapGesture {
-                selectedID = track.id
+                if NSEvent.modifierFlags.contains(.shift), let anchor = selectedID,
+                    let a = tracks.firstIndex(where: { $0.id == anchor }),
+                    let b = tracks.firstIndex(where: { $0.id == track.id })
+                {
+                    selectedIDs = Set(tracks[min(a, b)...max(a, b)].map(\.id))
+                } else if NSEvent.modifierFlags.contains(.command) {
+                    if !selectedIDs.insert(track.id).inserted { selectedIDs.remove(track.id) }
+                    selectedID = track.id
+                } else {
+                    selectedID = track.id
+                    selectedIDs = [track.id]
+                }
                 store.inspectedID = track.id
                 keyboardFocused = true
             }
             .accessibilityElement(children: .contain)
             .accessibilityLabel(track.title + ", " + store.displayArtist(track.artist))
-            .accessibilityAddTraits(selectedID == track.id ? [.isSelected] : [])
+            .accessibilityAddTraits(selectedIDs.contains(track.id) ? [.isSelected] : [])
             .accessibilityAction(named: store.t("openAlbum")) { store.openAlbum(track) }
             .accessibilityAction(named: store.t("play")) { store.play(track, in: tracks) }
-            .contextMenu { TrackContextMenu(track: track) { editing = track } }
+            .contextMenu {
+                if selectedIDs.count > 1 && selectedIDs.contains(track.id) {
+                    Button(store.t("batchTags")) { batchEditing = true }.disabled(store.scanning)
+                } else {
+                    TrackContextMenu(track: track) { editing = track }
+                }
+            }
     }
     private func songTitle(_ track: Track) -> some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -133,6 +156,7 @@ struct LibrarySongList: View {
             return .ignored
         }
         selectedID = id
+        selectedIDs = [id]
         store.inspectedID = id
         proxy.scrollTo(id)
         return .handled

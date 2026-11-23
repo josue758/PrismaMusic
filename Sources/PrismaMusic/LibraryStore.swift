@@ -41,6 +41,11 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published private(set) var scanDiscovered = 0
     @Published private(set) var scanProcessed = 0
     @Published private(set) var scanAudit: ScanAudit?
+    @Published private(set) var relocatingSource = false
+    @Published private(set) var relocationProcessed = 0
+    @Published private(set) var relocationTotal = 0
+    private var relocationCancellation = ScanCancellation()
+    func cancelSourceRelocation() { relocationCancellation.cancel() }
     @Published private(set) var sourceStates: [UUID: String] = [:]
     @Published var status = ""
     @Published var error: String?
@@ -113,6 +118,8 @@ final class LibraryStore: NSObject, ObservableObject {
     private var readyTask: Task<Void, Never>?
     private var scanTask: Task<Void, Never>?
     private var scanCancellation = ScanCancellation()
+    private var automaticScanTimer: Timer?
+    private var automaticRetryAfter: [String: Date] = [:]
     private var trackIndex: [String: Int]?
     private var queueIndexCache: [String: Int]?
     private var statisticsCache: LibraryStatistics?
@@ -242,6 +249,16 @@ final class LibraryStore: NSObject, ObservableObject {
     private var attempted: Set<String> = []
     private var enrichmentTask: Task<Void, Never>?
     private var edited: Set<String> = []
+    private var tagEdits: [String: TrackTagEdits] = [:]
+    private struct TagUndo {
+        var before: Track
+        var after: Track
+        var previous: TrackTagEdits?
+        var applied: TrackTagEdits
+    }
+    private var tagUndo: [TagUndo] = []
+    @Published private(set) var canUndoTagEdits = false
+
     lazy var artistPhotoStore = ArtistPhotoStore(directory: dataDirectory)
     private let dataDirectory: URL
     func track(for id: String) -> Track? {
@@ -443,6 +460,10 @@ final class LibraryStore: NSObject, ObservableObject {
             timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.tick() }
             }
+            automaticScanTimer = Timer.scheduledTimer(withTimeInterval: 90, repeats: true) { [weak self] _ in
+                Task { @MainActor in await self?.checkForNewMusicInBackground() }
+            }
+            automaticScanTimer?.tolerance = 10
             volumeUnmountObserver = NSWorkspace.shared.notificationCenter
                 .publisher(for: NSWorkspace.didUnmountNotification)
                 .receive(on: DispatchQueue.main)
@@ -494,7 +515,12 @@ final class LibraryStore: NSObject, ObservableObject {
             tracks = snapshot.tracks
             sources = snapshot.sources
             edited = Set(snapshot.edited)
+            tagEdits = snapshot.tagEdits ?? [:]
+            for track in snapshot.tracks where edited.contains(track.id) && tagEdits[track.id] == nil {
+                tagEdits[track.id] = .legacy(track)
+            }
             playlists = snapshot.playlists ?? []
+            if let backup = persistence.recoveredBackup { error = t("libraryRecovered") + " " + backup }
         } else if includeDemo, let demo = Bundle.module.url(forResource: "Demo", withExtension: nil) {
             sources = [MusicSource(url: demo)]
         }
@@ -553,6 +579,9 @@ final class LibraryStore: NSObject, ObservableObject {
             return value
         }
         edited = Set(edited.map { ids[$0] ?? $0 })
+        tagEdits = Dictionary(tagEdits.map { (ids[$0.key] ?? $0.key, $0.value) }, uniquingKeysWith: { _, last in last })
+        tagUndo = []
+        canUndoTagEdits = false
         queue = queue.map { ids[$0] ?? $0 }
         if let id = currentID { currentID = ids[id] ?? id }
         if let id = inspectedID { inspectedID = ids[id] ?? id }
@@ -564,13 +593,15 @@ final class LibraryStore: NSObject, ObservableObject {
     }
     func save() {
         guard !saveBlocked else { return }
-        persistence.save(.init(tracks: tracks, sources: sources, edited: Array(edited), playlists: playlists))
+        persistence.save(
+            .init(tracks: tracks, sources: sources, edited: Array(edited), playlists: playlists, tagEdits: tagEdits))
     }
     func flushSaving() async throws { try await persistence.flush() }
     func prepareForTermination() async throws {
         quitting = true
         defer { quitting = false }
         cancelScan()
+        cancelSourceRelocation()
         if loading { await readyTask?.value }
         await scanTask?.value
         pausePlayback()
@@ -584,6 +615,8 @@ final class LibraryStore: NSObject, ObservableObject {
         try await persistence.flush()
         timer?.invalidate()
         timer = nil
+        automaticScanTimer?.invalidate()
+        automaticScanTimer = nil
         for url in scopeURLs { url.stopAccessingSecurityScopedResource() }
         scopeURLs.removeAll()
     }
@@ -642,7 +675,8 @@ final class LibraryStore: NSObject, ObservableObject {
     }
 
     func relocateSource(_ source: MusicSource, to destination: URL) async {
-        guard !loading, !scanning, !saveBlocked, let index = sources.firstIndex(of: source),
+        guard !loading, !scanning, !relocatingSource, !quitting, !saveBlocked,
+            let index = sources.firstIndex(of: source),
             destination.isFileURL, destination.path != source.url.path
         else { return }
         guard
@@ -665,14 +699,34 @@ final class LibraryStore: NSObject, ObservableObject {
         var keepAccess = false
         defer { if accessible && !keepAccess { destination.stopAccessingSecurityScopedResource() } }
         let originalSources = sources
-        let (exists, isNetwork) = await Task.detached(priority: .userInitiated) {
-            let exists =
-                FileManager.default.isReadableFile(atPath: destination.path)
-                && destinations.allSatisfy { FileManager.default.isReadableFile(atPath: $0.path) }
+        let cancellation = ScanCancellation()
+        relocationCancellation = cancellation
+        relocatingSource = true
+        relocationProcessed = 0
+        relocationTotal = destinations.count
+        defer { relocatingSource = false }
+        let (exists, isNetwork) = await Task.detached(priority: .utility) { [weak self] in
+            let identity = SourceIdentity.read(destination)
+            guard identity != nil, FileManager.default.isReadableFile(atPath: destination.path) else {
+                return (false, false)
+            }
+            for (offset, url) in destinations.enumerated() {
+                guard !cancellation.isCancelled, FileManager.default.isReadableFile(atPath: url.path) else {
+                    return (false, false)
+                }
+                if (offset + 1) % 32 == 0 || offset + 1 == destinations.count {
+                    Task { @MainActor [weak self] in
+                        guard let self, self.relocatingSource, self.relocationCancellation === cancellation else {
+                            return
+                        }
+                        self.relocationProcessed = offset + 1
+                    }
+                }
+            }
             let isNetwork = (try? destination.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal) == false
-            return (exists, isNetwork)
+            return (SourceIdentity.read(destination) == identity, isNetwork)
         }.value
-        guard !loading, !scanning, !saveBlocked, sources == originalSources,
+        guard !cancellation.isCancelled, !loading, !scanning, !quitting, !saveBlocked, sources == originalSources,
             tracks.filter({ SourceScanner.isWithin($0.url, source: source.url) }).map(\.id) == sourceTracks.map(\.id)
         else { return }
         let originalIDs = Set(sourceTracks.map(\.id))
@@ -809,35 +863,52 @@ final class LibraryStore: NSObject, ObservableObject {
         navigateTo(preferences.startSection)
         if scanAfter && scanOnLaunch && !scanning { Task { await scanNewMusic() } }
     }
-    func retryFailedScan() async {
+    func retryFailedScan(only url: URL? = nil) async {
         guard let audit = scanAudit, !audit.issues.isEmpty else { return }
-        await scan(force: true, retrying: audit)
+        await scan(force: true, retrying: audit, retryURL: url)
     }
     func scanNewMusic() async { await scan(newOnly: true) }
 
-    func scan(force: Bool = false, retrying: ScanAudit? = nil, newOnly: Bool = false) async {
+    func checkForNewMusicInBackground() async {
+        guard preferences.watchMusicFolders, preferences.hasCompletedWelcome,
+            !loading, !scanning, !relocatingSource, !quitting, !sources.isEmpty
+        else { return }
+        automaticRetryAfter = automaticRetryAfter.filter { $0.value > Date() }
+        await scan(newOnly: true, automatic: true)
+    }
+
+    func scan(
+        force: Bool = false, retrying: ScanAudit? = nil, newOnly: Bool = false, automatic: Bool = false,
+        retryURL: URL? = nil
+    ) async {
         if loading { await readyTask?.value }
-        guard !scanning, !saveBlocked else { return }
+        guard !scanning, !relocatingSource, !quitting, !saveBlocked else { return }
         scanning = true
         scanDiscovered = 0
         scanProcessed = 0
         scanCancellation = ScanCancellation()
-        let task = Task { await performScan(force: force, retrying: retrying, newOnly: newOnly) }
+        let task = Task {
+            await performScan(
+                force: force, retrying: retrying, newOnly: newOnly, automatic: automatic, retryURL: retryURL)
+        }
         scanTask = task
         await task.value
         scanTask = nil
         scanning = false
     }
-    private func performScan(force: Bool, retrying: ScanAudit?, newOnly: Bool) async {
+    private func performScan(force: Bool, retrying: ScanAudit?, newOnly: Bool, automatic: Bool, retryURL: URL?) async {
         var failures = 0
         var unavailable = 0
         var audit = ScanAudit()
         var recovered = Set<URL>()
         let cancellation = scanCancellation
+        let workers = automatic ? min(2, maximumScanWorkers) : maximumScanWorkers
         for source in sources {
             if Task.isCancelled || cancellation.isCancelled { break }
-            sourceStates[source.id] = "reading"
-            status = "\(t("discovering")) · \(source.name)"
+            if !automatic {
+                sourceStates[source.id] = "reading"
+                status = "\(t("discovering")) · \(source.name)"
+            }
             scanDiscovered = 0
             scanProcessed = 0
             let recursive = preferences.recursiveScan
@@ -845,7 +916,8 @@ final class LibraryStore: NSObject, ObservableObject {
             if let retrying {
                 let root = source.url
                 let selected = retrying.issues.map(\.url).filter {
-                    MetadataReader.extensions.contains($0.pathExtension.lowercased())
+                    (retryURL == nil || $0 == retryURL)
+                        && MetadataReader.extensions.contains($0.pathExtension.lowercased())
                         && SourceScanner.isWithin($0, source: root, recursive: recursive)
                 }
                 if selected.isEmpty { continue }
@@ -858,12 +930,15 @@ final class LibraryStore: NSObject, ObservableObject {
                         complete: identity != nil, errors: [])
                 }.value
             } else {
-                let knownPaths: Set<String> = newOnly ? Set(tracks.map(\.id)) : []
+                var excludedPaths: Set<String> = newOnly ? Set(tracks.map(\.id)) : []
+                if automatic { excludedPaths.formUnion(automaticRetryAfter.keys) }
+                let knownPaths = excludedPaths
                 report = await Task.detached(priority: .utility) { [weak self] in
                     SourceScanner.enumerate(
                         source.url, recursive: recursive, cancellation: cancellation, readModificationDates: false,
                         excludingKnownPaths: knownPaths
                     ) { [weak self] count in
+                        guard !automatic else { return }
                         Task { @MainActor in
                             guard let self, self.scanning, self.scanCancellation === cancellation,
                                 !cancellation.isCancelled
@@ -897,11 +972,14 @@ final class LibraryStore: NSObject, ObservableObject {
                     next += 1
                     running += 1
                     let cached = track(for: file.url.path)
-                    group.addTask { await ScannedTrackResult.read(file, cached: cached, force: force) }
+                    group.addTask(priority: automatic ? .utility : nil) {
+                        await ScannedTrackResult.read(file, cached: cached, force: force)
+                    }
                 }
                 @MainActor func fillSlots() {
-                    while next < files.count, running < maximumScanWorkers, !cancellation.isCancelled, !Task.isCancelled
-                    { submit() }
+                    while next < files.count, running < workers, !cancellation.isCancelled, !Task.isCancelled {
+                        submit()
+                    }
                 }
                 fillSlots()
                 var processed = 0
@@ -949,7 +1027,9 @@ final class LibraryStore: NSObject, ObservableObject {
                             save()
                         }
                         scanProcessed = processed
-                        status = "\(t("reading")) \(processed)/\(report.files.count) · \(source.name)"
+                        if !automatic {
+                            status = "\(t("reading")) \(processed)/\(report.files.count) · \(source.name)"
+                        }
                         lastBatch = Date()
                     }
                     fillSlots()
@@ -984,10 +1064,23 @@ final class LibraryStore: NSObject, ObservableObject {
                 sourceStates[source.id] = "offline"
                 if report.complete { unavailable += 1 }
             }
-            save()
+            if !automatic { save() }
         }
-        save()
-        do { try await persistence.flush() } catch { self.error = error.localizedDescription }
+        if !automatic { save() }
+        if !automatic || audit.imported > 0 {
+            do { try await persistence.flush() } catch { self.error = error.localizedDescription }
+        }
+        for url in recovered { automaticRetryAfter[url.path] = nil }
+        let retryAt = Date().addingTimeInterval(5 * 60)
+        for issue in audit.issues where MetadataReader.extensions.contains(issue.url.pathExtension.lowercased()) {
+            automaticRetryAfter[issue.url.path] = retryAt
+        }
+        if automatic {
+            if audit.imported > 0 {
+                postFeedback("newSongsImported", detail: songCountText(audit.imported), icon: "music.note")
+            }
+            return
+        }
         audit.failed = failures
         audit.unavailableSources = unavailable
         audit.cancelled = cancellation.isCancelled || Task.isCancelled
@@ -1026,13 +1119,7 @@ final class LibraryStore: NSObject, ObservableObject {
                 track.favorite = old.favorite
                 track.lastPlayed = old.lastPlayed
                 track.playCount = old.playCount
-                if edited.contains(old.id) {
-                    track.title = old.title
-                    track.artist = old.artist
-                    track.album = old.album
-                    track.genre = old.genre
-                    track.year = old.year
-                }
+                if let correction = tagEdits[old.id] { track = correction.applying(to: track) }
                 if !track.hasArtwork {
                     track.artworkURL = old.artworkURL
                     track.artworkCredit = old.artworkCredit
@@ -1050,7 +1137,7 @@ final class LibraryStore: NSObject, ObservableObject {
         tracks = updated
     }
     func removeSource(_ source: MusicSource) {
-        guard !scanning else { return }
+        guard !scanning, !relocatingSource else { return }
         if let id = loadingTrackID, SourceScanner.isWithin(URL(fileURLWithPath: id), source: source.url) {
             cancelPlaybackLoad()
         }
@@ -1072,12 +1159,93 @@ final class LibraryStore: NSObject, ObservableObject {
         save()
     }
     func update(_ track: Track) {
-        if let i = tracks.firstIndex(where: { $0.id == track.id }) {
-            tracks[i] = track
-            edited.insert(track.id)
+        guard let current = self.track(for: track.id) else { return }
+        let changes = Dictionary(
+            uniqueKeysWithValues: TagField.allCases.compactMap { field -> (TagField, String)? in
+                let value = field.value(in: track).trimmingCharacters(in: .whitespacesAndNewlines)
+                return value != field.value(in: current) ? (field, value) : nil
+            })
+        applyTagEdits(ids: [track.id], changes: changes)
+        if track.duration.isFinite, track.duration > 0, track.duration != current.duration,
+            let index = tracks.firstIndex(where: { $0.id == track.id })
+        {
+            tracks[index].duration = track.duration
             save()
-            updateNowPlaying()
         }
+    }
+    func applyTagEdits(ids: [String], changes: [TagField: String], numberingFrom: Int? = nil) {
+        guard !saveBlocked, !changes.isEmpty || numberingFrom != nil,
+            changes.allSatisfy({ $0.key.isValid($0.value) }),
+            numberingFrom.map({ $0 > 0 && $0 <= 9999 && ids.count <= 10000 - $0 }) ?? true
+        else { return }
+        var updated = tracks
+        let indices = Dictionary(tracks.indices.map { (tracks[$0].id, $0) }, uniquingKeysWith: { _, last in last })
+        var batch: [TagUndo] = []
+        var seen = Set<String>()
+        for (offset, id) in ids.enumerated() where seen.insert(id).inserted {
+            guard let index = indices[id] else { continue }
+            let old = updated[index]
+            var edit = tagEdits[id] ?? TrackTagEdits()
+            for (field, value) in changes where field.value(in: old) != value {
+                edit.values[field.rawValue] = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if let start = numberingFrom { edit.values[TagField.trackNumber.rawValue] = String(start + offset) }
+            let after = edit.applying(to: old)
+            guard after != old else { continue }
+            batch.append(.init(before: old, after: after, previous: tagEdits[id], applied: edit))
+            updated[index] = after
+            tagEdits[id] = edit
+            edited.insert(id)
+        }
+        guard !batch.isEmpty else { return }
+        tagUndo = batch
+        canUndoTagEdits = true
+        tracks = updated
+        save()
+        updateNowPlaying()
+        postFeedback("tagsSaved", detail: songCountText(batch.count))
+    }
+    func undoTagEdits() {
+        guard !scanning, !saveBlocked, !tagUndo.isEmpty else { return }
+        // Compare only tags so playback statistics and favorites remain live.
+        guard
+            tagUndo.allSatisfy({ item in
+                guard let current = track(for: item.before.id), tagEdits[item.before.id] == item.applied else {
+                    return false
+                }
+                return TagField.allCases.allSatisfy { $0.value(in: current) == $0.value(in: item.after) }
+            })
+        else {
+            tagUndo = []
+            canUndoTagEdits = false
+            return
+        }
+        var updated = tracks
+        let before = Dictionary(uniqueKeysWithValues: tagUndo.map { ($0.before.id, $0) })
+        for index in updated.indices {
+            guard let item = before[updated[index].id] else { continue }
+            for field in TagField.allCases { field.set(field.value(in: item.before), in: &updated[index]) }
+            tagEdits[item.before.id] = item.previous
+            if item.previous == nil { edited.remove(item.before.id) }
+        }
+        tracks = updated
+        tagUndo = []
+        canUndoTagEdits = false
+        save()
+        updateNowPlaying()
+    }
+    func restoreFileTags(_ track: Track) async throws {
+        guard !scanning, !saveBlocked else { return }
+        let expected = tagEdits[track.id]
+        let original = try await Task.detached(priority: .utility) { try await MetadataReader.read(track.url) }.value
+        guard !scanning, tagEdits[track.id] == expected, self.track(for: track.id) != nil else { return }
+        tagEdits[track.id] = nil
+        edited.remove(track.id)
+        upsertTracks([original])
+        tagUndo = []
+        canUndoTagEdits = false
+        save()
+        updateNowPlaying()
     }
     func favorite(_ track: Track) {
         guard let i = tracks.firstIndex(where: { $0.id == track.id }) else { return }
@@ -1614,7 +1782,8 @@ final class LibraryStore: NSObject, ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 let snapshot = LibrarySnapshot(
-                    tracks: self.tracks, sources: self.sources, edited: Array(self.edited), playlists: self.playlists)
+                    tracks: self.tracks, sources: self.sources, edited: Array(self.edited), playlists: self.playlists,
+                    tagEdits: self.tagEdits)
                 do {
                     try await Task.detached(priority: .utility) {
                         var portable = snapshot
