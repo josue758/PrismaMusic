@@ -1,5 +1,11 @@
 import Foundation
 
+enum LibrarySourceFilter: Hashable {
+    case network
+    case local
+    case folder(UUID)
+}
+
 struct LibraryQueryKey: Hashable {
     var revision: Int
     var search: String
@@ -9,6 +15,8 @@ struct LibraryQueryKey: Hashable {
     var section: String
     var sort: String
     var smartPlaylistMonth: Date? = nil
+    var source: LibrarySourceFilter? = nil
+    var sourcePath: String? = nil
 }
 final class LibraryQueryCache {
     let tracks: [Track]

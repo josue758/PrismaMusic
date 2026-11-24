@@ -4,6 +4,8 @@ Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión estable **0.
 
 [Descargar la versión estable 0.15.0 para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.15.0) · [Ver el código](https://github.com/josue758/PrismaMusic)
 
+[Descargar la versión de prueba 0.16.0](https://github.com/josue758/PrismaMusic/releases/tag/v0.16.0) para usar los filtros por fuente, la nueva cola, la migración y el visualizador a pantalla completa.
+
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
@@ -264,3 +266,9 @@ La ficha de cada artista muestra hasta cinco canciones más reproducidas, según
 - En **Ajustes → Sonido → ReplayGain**, activa la normalización por pista o álbum para FLAC con etiquetas compatibles. La salida directa y AirPlay omiten este procesamiento.
 - Prisma prepara la pista siguiente para una transición continua cuando ambas tienen el mismo formato de procesamiento y la misma ganancia. Cambios de frecuencia, salida o ganancia pueden introducir una pausa.
 - Si la pista del NAS deja de estar accesible, Prisma muestra el estado de la conexión. Pulsa **Reanudar pista** cuando vuelva a estar disponible para continuar en la misma posición y con la misma cola.
+
+### Fuentes, cola y migración
+
+- En **Canciones** o **Álbumes**, abre **Todas las fuentes** para mostrar el NAS, los archivos locales o una carpeta concreta. Con una carpeta elegida, **Buscar canciones nuevas aquí** limita el escaneo a esa ubicación.
+- En **Cola**, selecciona varias pistas de **A continuación** con ⌘ o Mayús. Arrástralas sobre una pista para colocarlas antes de ella o suéltalas al final. Los botones de flecha permiten moverlas con teclado. Quitar pistas ofrece Deshacer.
+- Para pasar tu biblioteca de Windows a Mac, exporta el JSON de Prisma en Windows y agrega tus carpetas de música en Mac. Luego abre **Ajustes → Biblioteca → Importar biblioteca de Prisma…** y revisa los favoritos, listas, correcciones y rutas reconocidas antes de confirmar. Prisma conserva las correcciones que ya hiciste en Mac y deja pendientes las rutas ambiguas o faltantes.

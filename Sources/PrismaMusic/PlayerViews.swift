@@ -318,13 +318,7 @@ struct VisualizerView: View {
                         ).tracking(2)
                     }
                     Spacer()
-                    Menu {
-                        ForEach(["aurora", "orbit", "ribbons"], id: \.self) { mode in
-                            Button(store.t(mode)) { store.preferences.visualizerStyle = mode }
-                        }
-                    } label: {
-                        Image(systemName: "circle.hexagongrid").foregroundStyle(.white.opacity(0.6))
-                    }.menuStyle(.borderlessButton).frame(width: 26)
+                    VisualizerOptionsButton()
                 }.foregroundStyle(.white.opacity(0.55))
                 Spacer()
                 VStack(spacing: 10) {
@@ -340,21 +334,24 @@ struct VisualizerView: View {
         }
     }
 }
-/// Audio-reactive geometry driven by measured post-DSP RMS. These are not FFT bins.
+/// Audio-reactive geometry with post-DSP RMS and optional measured spectrum data.
 struct VisualizerCanvas: View {
     @EnvironmentObject var store: LibraryStore
     var level: Double
     var playing: Bool
     var color: Color
+    var bands: [Float] = []
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     private var animated: Bool { playing && !reduceMotion && store.preferences.animateVisualizer }
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / store.preferences.visualizerFPS, paused: !animated)) { timeline in
+        TimelineView(.animation(minimumInterval: store.preferences.visualizerFrameInterval, paused: !animated)) { timeline in
             Canvas { context, size in
                 let time = animated ? timeline.date.timeIntervalSinceReferenceDate : 0
-                let energy = min(1, pow(max(0, level), 0.55) * store.preferences.visualizerSensitivity)
+                let energy = reduceMotion || !store.preferences.animateVisualizer ? 0.18 :
+                    min(1, pow(max(0, level), 0.55) * store.preferences.visualizerSensitivity)
                 let center = CGPoint(x: size.width / 2, y: size.height * 0.43)
                 let radius = min(size.width, size.height) * 0.22
+                let style = store.preferences.visualizerStyle
                 var haze = context
                 haze.addFilter(.blur(radius: radius * 0.55))
                 haze.fill(
@@ -364,33 +361,42 @@ struct VisualizerCanvas: View {
                     with: .radialGradient(
                         Gradient(colors: [color.opacity(0.20 + energy * 0.2), .clear]), center: center, startRadius: 0,
                         endRadius: radius * 1.5))
+                switch style {
+                case "bars", "mirror", "centered":
+                    drawBars(in: context, size: size, style: style, time: time, energy: energy)
+                    return
+                case "nebula":
+                    drawNebula(in: context, size: size, time: time, energy: energy)
+                    return
+                case "orbit":
+                    drawOrbit(in: context, center: center, radius: radius, time: time, energy: energy)
+                    return
+                default:
+                    break
+                }
                 for layer in 0..<14 {
                     var path = Path()
                     for point in 0...200 {
                         let fraction = Double(point) / 200
                         let angle = fraction * .pi * 2
                         let p: CGPoint
-                        if store.preferences.visualizerStyle == "ribbons" {
+                        if style == "ribbons" {
                             p = CGPoint(
                                 x: fraction * size.width,
                                 y: center.y + Double(layer - 7) * 10 + sin(
                                     fraction * 7 + time * 0.5 + Double(layer) * 0.2) * (25 + energy * 75) + cos(
                                         fraction * 11 - time * 0.3) * energy * 20)
                         } else {
-                            let motion =
-                                store.preferences.visualizerStyle == "orbit"
-                                ? sin(angle * 2 + time * 0.35) * energy * 20
-                                : sin(angle * 3 + time * 0.55 + Double(layer) * 0.23) * (12 + energy * 45) + cos(
+                            let motion = sin(angle * 3 + time * 0.55 + Double(layer) * 0.23) * (12 + energy * 45) + cos(
                                     angle * 5 - time * 0.4) * energy * 20
                             let r = radius + Double(layer) * 5 + motion
                             p = CGPoint(
                                 x: center.x + cos(angle) * r * 1.18,
-                                y: center.y + sin(angle) * r
-                                    * (store.preferences.visualizerStyle == "orbit" ? 0.48 : 0.8))
+                                y: center.y + sin(angle) * r * 0.8)
                         }
                         if point == 0 { path.move(to: p) } else { path.addLine(to: p) }
                     }
-                    if store.preferences.visualizerStyle != "ribbons" { path.closeSubpath() }
+                    if style != "ribbons" { path.closeSubpath() }
                     let tint = layer % 3 == 0 ? color : layer % 3 == 1 ? Color.cyan : Color.pink
                     if layer % 4 == 0 {
                         var glow = context
@@ -415,7 +421,61 @@ struct VisualizerCanvas: View {
                         with: .color(.white.opacity(0.12 + energy * 0.35)))
                 }
             }
-        }.accessibilityHidden(true)
+        }.id(store.preferences.visualizerFPS).accessibilityHidden(true)
+    }
+    private func drawBars(in context: GraphicsContext, size: CGSize, style: String, time: Double, energy: Double) {
+        let count = size.width < 350 ? 28 : 72
+        let step = size.width * 0.91 / Double(count)
+        for index in 0..<count {
+            let fraction = Double(index) / Double(max(1, count - 1))
+            let phase = style == "mirror" ? abs(fraction - 0.5) * 2 : fraction
+            let wave = abs(sin(phase * 18 - time * 2) * cos(phase * 8 + time * 0.6))
+            let strength = bandStrength(at: phase, fallback: (0.08 + wave * 0.49) * energy)
+            let height = max(2, size.height * (0.015 + strength * 0.49))
+            let y = style == "bars" ? size.height * 0.69 - height : size.height * 0.43 - height / 2
+            let rect = CGRect(x: size.width * 0.045 + Double(index) * step, y: y, width: step * 0.62, height: height)
+            context.fill(
+                Path(roundedRect: rect, cornerRadius: min(5, step * 0.3)),
+                with: .linearGradient(
+                    Gradient(colors: [.cyan.opacity(0.28), color.opacity(0.8), .white.opacity(0.8)]),
+                    startPoint: CGPoint(x: rect.midX, y: rect.maxY), endPoint: CGPoint(x: rect.midX, y: rect.minY)))
+        }
+    }
+    private func drawNebula(in context: GraphicsContext, size: CGSize, time: Double, energy: Double) {
+        for index in 0..<135 {
+            let seed = Double(index)
+            let dx = abs(sin(seed * 12.9898) * 43758.5453).truncatingRemainder(dividingBy: 1)
+            let dy = abs(sin(seed * 78.233) * 43758.5453).truncatingRemainder(dividingBy: 1)
+            let x = size.width * dx + sin(time * 0.18 + seed) * (4 + energy * 26)
+            let y = size.height * dy + cos(time * 0.18 + seed) * (4 + energy * 18)
+            let radius = 0.8 + Double(index % 5) * (0.3 + energy * 0.65)
+            let tint: Color = index % 3 == 0 ? color : index % 3 == 1 ? .cyan : .purple
+            let glow = CGRect(x: x - radius * 3, y: y - radius * 3, width: radius * 6, height: radius * 6)
+            context.fill(Path(ellipseIn: glow), with: .radialGradient(
+                Gradient(colors: [tint.opacity(0.32 + energy * 0.30), .clear]),
+                center: CGPoint(x: x, y: y), startRadius: 0, endRadius: radius * 3))
+            context.fill(Path(ellipseIn: CGRect(x: x - radius / 2, y: y - radius / 2, width: radius, height: radius)),
+                         with: .color(.white.opacity(0.4 + energy * 0.4)))
+        }
+    }
+    private func drawOrbit(in context: GraphicsContext, center: CGPoint, radius: Double, time: Double, energy: Double) {
+        let ring = CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius)
+        context.stroke(Path(ellipseIn: ring), with: .color(color.opacity(0.53)), lineWidth: 2)
+        for index in 0..<96 {
+            let angle = Double(index) / 96 * 2 * .pi
+            let wave = abs(sin(angle * 5 - time) * cos(angle * 4)) * energy
+            let length = 2 + radius * (0.05 + bandStrength(at: Double(index % 48) / 47, fallback: wave) * 0.65)
+            var ray = Path()
+            ray.move(to: CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius))
+            ray.addLine(to: CGPoint(x: center.x + cos(angle) * (radius + length),
+                                    y: center.y + sin(angle) * (radius + length)))
+            context.stroke(ray, with: .color((index % 4 == 0 ? Color.cyan : color).opacity(0.62)), lineWidth: 2)
+        }
+    }
+    private func bandStrength(at position: Double, fallback: Double) -> Double {
+        guard !bands.isEmpty, !reduceMotion, store.preferences.animateVisualizer else { return fallback }
+        let index = min(bands.count - 1, max(0, Int(position * Double(bands.count - 1))))
+        return min(1, Double(bands[index]) * store.preferences.visualizerSensitivity)
     }
 }
 struct LyricsView: View {

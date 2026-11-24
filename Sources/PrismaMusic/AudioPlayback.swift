@@ -56,6 +56,8 @@ final class AudioPlayback: MusicPlayback {
         }
     }
     var levels: (rms: Float, peak: Float) { meter.read() }
+    var spectrum: [Float] { meter.readSpectrum() }
+    func setSpectrumEnabled(_ enabled: Bool) { meter.setSpectrumEnabled(enabled) }
     convenience init(contentsOf url: URL) throws {
         try self.init(file: AVAudioFile(forReading: url))
     }
@@ -145,6 +147,10 @@ final class AudioPlayback: MusicPlayback {
         else { return false }
         return !prepared.exclusive ||
             CoreAudioOutputs.value(device, kAudioDevicePropertyHogMode, pid_t(-1)) == ProcessInfo.processInfo.processIdentifier
+    }
+    var appliedReplayGain: Float {
+        guard !direct, !equalizer.bypass else { return 0 }
+        return equalizer.globalGain - appliedPreferences.effectivePreamp
     }
     func apply(_ preferences: ListeningPreferences) {
         if direct {
@@ -273,6 +279,21 @@ final class AudioMeter: @unchecked Sendable {
     private let lock = NSLock()
     private var rms: Float = 0
     private var peak: Float = 0
+    private let spectrum = PlaybackSpectrum()
+    private var spectrumEnabled = false
+    private var currentSpectrum = [Float](repeating: 0, count: PlaybackSpectrum.count)
+    private var spectrumAvailable = false
+    func setSpectrumEnabled(_ enabled: Bool) {
+        lock.lock()
+        spectrumEnabled = enabled
+        if !enabled { spectrumAvailable = false }
+        lock.unlock()
+    }
+    func readSpectrum() -> [Float] {
+        lock.lock()
+        defer { lock.unlock() }
+        return spectrumAvailable ? currentSpectrum.map { $0 } : []
+    }
     func measure(_ buffer: AVAudioPCMBuffer) {
         guard let channels = buffer.floatChannelData, buffer.frameLength > 0 else { return }
         var sum: Float = 0
@@ -288,7 +309,18 @@ final class AudioMeter: @unchecked Sendable {
         lock.lock()
         rms = sqrt(sum / Float(buffer.format.channelCount))
         peak = maximum
+        let analyze = spectrumEnabled
         lock.unlock()
+        if analyze {
+            spectrum?.measure(buffer) { bands in
+                lock.lock()
+                if spectrumEnabled {
+                    for index in bands.indices { currentSpectrum[index] = bands[index] }
+                    spectrumAvailable = true
+                }
+                lock.unlock()
+            }
+        }
     }
     func read() -> (rms: Float, peak: Float) {
         lock.lock()

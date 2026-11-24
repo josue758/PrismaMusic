@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject var store: LibraryStore
@@ -7,16 +8,31 @@ struct SettingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showTagReview = false
     @State private var showScanReport = false
+    @State private var showBackups = false
+    @State private var migration: LibraryMigration?
+    @State private var query = ""
+    @State private var confirmingReset = false
     private let pages = ["sound", "playback", "library", "metadata", "appearance", "experience", "shortcuts"]
     private let icons = [
         "sound": "slider.vertical.3", "playback": "play.circle", "library": "square.stack", "metadata": "sparkles",
         "appearance": "paintpalette", "experience": "waveform.path", "shortcuts": "command",
+    ]
+    private let settingTopics = [
+        "sound": ["audioDevices", "directOutput", "exclusiveOutput", "equalizer", "headroom", "replayGain", "balance"],
+        "playback": ["speed", "continueQueue", "gaplessPlayback", "rememberPosition", "keepAwake", "sleepTimer", "mini"],
+        "library": ["sources", "startScan", "watchMusicFolders", "recursive", "scanWorkers", "tagReview", "backup"],
+        "metadata": ["online", "autoArtwork", "autoLyrics", "cache"],
+        "appearance": ["theme", "language", "glassMaterial", "accentColor", "qualityBadges", "albumSize", "startPage"],
+        "experience": ["lyrics", "bilingualLyrics", "visualizer", "visualStyle", "sensitivity", "frameRate"],
+        "shortcuts": ["keyboard", "settings"],
     ]
     var body: some View {
         ZStack {
             PrismaBackdrop(reactive: false)
                 .sheet(isPresented: $showTagReview) { TagReviewView().environmentObject(store) }
                 .sheet(isPresented: $showScanReport) { ScanReportView().environmentObject(store) }
+                .sheet(isPresented: $showBackups) { LibraryBackupsView().environmentObject(store) }
+                .sheet(item: $migration) { LibraryMigrationView(preview: $0).environmentObject(store) }
             Group {
                 HStack(spacing: 24) {
                     VStack(alignment: .leading, spacing: 24) {
@@ -29,9 +45,12 @@ struct SettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }.padding(.top, 15).padding(.leading, 8)
+                        TextField(store.t("searchSettings"), text: $query)
+                            .textFieldStyle(.roundedBorder)
                         VStack(spacing: 5) {
                             ForEach(pages, id: \.self) { page in
                                 Button {
+                                    query = ""
                                     store.settingsPage = page
                                 } label: {
                                     HStack(spacing: 10) {
@@ -69,10 +88,12 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 7) {
-                                Text(store.t(store.settingsPage)).font(
+                                Text(store.t(query.isEmpty ? store.settingsPage : "searchSettings")).font(
                                     .system(size: 30, weight: .bold, design: .rounded))
-                                Text(store.t(store.settingsPage + "Sub")).font(.system(size: 12)).foregroundStyle(
-                                    .secondary)
+                                if query.isEmpty {
+                                    Text(store.t(store.settingsPage + "Sub")).font(.system(size: 12))
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                             Spacer()
                             Button {
@@ -85,14 +106,18 @@ struct SettingsView: View {
                         }.padding(.top, 9)
                         ScrollView {
                             VStack(alignment: .leading, spacing: 16) {
-                                switch store.settingsPage {
-                                case "sound": sound
-                                case "playback": playback
-                                case "library": library
-                                case "metadata": metadata
-                                case "appearance": appearance
-                                case "experience": experience
-                                default: shortcuts
+                                if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    switch store.settingsPage {
+                                    case "sound": sound
+                                    case "playback": playback
+                                    case "library": library
+                                    case "metadata": metadata
+                                    case "appearance": appearance
+                                    case "experience": experience
+                                    default: shortcuts
+                                    }
+                                } else {
+                                    settingSearchResults
                                 }
                             }.padding(2).padding(.bottom, 16)
                         }.id(store.settingsPage).scrollIndicators(.hidden).clipped()
@@ -100,6 +125,9 @@ struct SettingsView: View {
                             Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint)
                             Text(store.t("settingsSaved"))
                             Spacer()
+                            if store.settingsPage != "shortcuts", query.isEmpty {
+                                Button(store.t("resetSection")) { confirmingReset = true }.buttonStyle(.plain)
+                            }
                             Text("PRISMA / " + AppVersion.current).font(.system(size: 8, design: .monospaced)).tracking(
                                 1)
                         }.font(.system(size: 10)).foregroundStyle(.secondary)
@@ -119,6 +147,45 @@ struct SettingsView: View {
             } message: {
                 Text(store.error ?? "")
             }
+            .confirmationDialog(store.t("resetSection"), isPresented: $confirmingReset, titleVisibility: .visible) {
+                Button(store.t("resetSection"), role: .destructive) {
+                    store.preferences.reset(section: store.settingsPage)
+                    switch store.settingsPage {
+                    case "library": store.scanOnLaunch = true
+                    case "metadata": store.online = true
+                    case "appearance":
+                        store.theme = "dark"
+                        store.accent = .violet
+                    default: break
+                    }
+                }
+                Button(store.t("cancel"), role: .cancel) {}
+            } message: {
+                Text(store.t("resetSectionHelp"))
+            }
+    }
+    private var settingSearchResults: some View {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matches = pages.compactMap { page -> (section: String, topics: [String])? in
+            let topics = (settingTopics[page] ?? []).filter { store.t($0).localizedStandardContains(term) }
+            return topics.isEmpty && !store.t(page).localizedStandardContains(term) ? nil : (page, topics)
+        }
+        return VStack(alignment: .leading, spacing: 10) {
+            if matches.isEmpty { Text(store.t("noResults")).foregroundStyle(.secondary) }
+            ForEach(matches, id: \.section) { match in
+                Button {
+                    store.settingsPage = match.section
+                    query = ""
+                } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(store.t(match.section), systemImage: icons[match.section] ?? "gearshape").font(.headline)
+                        if !match.topics.isEmpty {
+                            Text(match.topics.map(store.t).joined(separator: " · ")).foregroundStyle(.secondary)
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                }.buttonStyle(.glass)
+            }
+        }
     }
     private var sound: some View {
         VStack(spacing: 16) {
@@ -195,8 +262,12 @@ struct SettingsView: View {
                     Text(store.t("albumGain")).tag(ReplayGainMode.album)
                 }
                 Text(store.t("replayGainHelp")).font(.caption).foregroundStyle(.secondary)
+                LabeledContent(
+                    store.t("appliedReplayGain"),
+                    value: store.appliedReplayGain.map { String(format: "%+.1f dB", $0) } ?? "—"
+                ).font(.system(size: 10)).monospacedDigit().foregroundStyle(.secondary)
                 HStack {
-                    Text(store.t("effectiveGain"))
+                    Text(store.t("effectivePreamp"))
                     Spacer()
                     Text(String(format: "%+.1f dB", store.preferences.effectivePreamp)).monospacedDigit()
                 }.font(.system(size: 10)).foregroundStyle(.secondary)
@@ -248,6 +319,7 @@ struct SettingsView: View {
                 }
                 Divider()
                 toggle("continueQueue", $store.preferences.continueQueue)
+                toggle("gaplessPlayback", $store.preferences.gaplessPlayback)
                 toggle("rememberPosition", $store.preferences.rememberPosition)
                 Text(store.t("rememberNote")).font(.caption).foregroundStyle(.secondary)
                 toggle("keepAwake", $store.preferences.keepAwake)
@@ -411,10 +483,30 @@ struct SettingsView: View {
                 HStack {
                     Button(store.t("backup")) { store.exportLibraryBackup() }.buttonStyle(.glass)
                     Button(store.t("exportPlaylist")) { store.exportPlaylist() }.buttonStyle(.glass)
+                    Button(store.t("manageBackups")) { showBackups = true }.buttonStyle(.glass)
                 }
+                Button(store.t("importLibraryMigration")) { pickMigration() }.buttonStyle(.glass)
+                    .disabled(!store.canImportLibraryMigration)
                 Button(store.t("dataFolder")) { store.showDataFolder() }.buttonStyle(.plain).foregroundStyle(
                     store.effectiveAccent
                 ).font(.caption)
+            }
+        }
+    }
+    private func pickMigration() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            let tracks = store.tracks
+            Task {
+                do {
+                    migration = try await Task.detached(priority: .userInitiated) {
+                        let scoped = url.startAccessingSecurityScopedResource()
+                        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                        return try LibraryMigration.read(url, tracks: tracks)
+                    }.value
+                } catch { store.error = error.localizedDescription }
             }
         }
     }
@@ -553,21 +645,7 @@ struct SettingsView: View {
             }
             card {
                 SectionHeading(title: store.t("visualizer"))
-                Picker(store.t("visualStyle"), selection: $store.preferences.visualizerStyle) {
-                    ForEach(["aurora", "orbit", "ribbons"], id: \.self) { Text(store.t($0)).tag($0) }
-                }.pickerStyle(.segmented)
-                VisualizerCanvas(
-                    level: max(0.1, store.level), playing: store.preferences.animateVisualizer,
-                    color: store.effectiveAccent
-                ).frame(height: 145).background(.black, in: RoundedRectangle(cornerRadius: 14)).clipped()
-                HStack {
-                    Text(store.t("sensitivity")).font(.caption)
-                    Slider(value: $store.preferences.visualizerSensitivity, in: 0.5...3)
-                }
-                Picker(store.t("frameRate"), selection: $store.preferences.visualizerFPS) {
-                    ForEach([24.0, 30, 60], id: \.self) { Text("\(Int($0)) fps").tag($0) }
-                }
-                toggle("animations", $store.preferences.animateVisualizer)
+                VisualizerOptions(showsPreview: true)
             }
         }
     }

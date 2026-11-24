@@ -35,6 +35,7 @@ final class LibraryPersistence: @unchecked Sendable {
     private var errorHandler: ((String) -> Void)?
     private(set) var lastChangedRows = 0
     private(set) var recoveredBackup: String?
+    private(set) var restoredManually = false
     private var backupDay: Date?
     private var nextBackupAttempt = Date.distantPast
     init(directory: URL) {
@@ -44,6 +45,7 @@ final class LibraryPersistence: @unchecked Sendable {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 assets = try ArtworkAssetStore(
                     directory: directory.appendingPathComponent("Artwork", isDirectory: true))
+                restoredManually = try LibraryDatabaseBackups.applyPending(in: directory)
                 try openDatabase()
                 do { try LibraryDatabaseBackups.validate(db) } catch let issue as NSError
                     where issue.domain == "Prisma.SQLite"
@@ -69,6 +71,13 @@ final class LibraryPersistence: @unchecked Sendable {
                 directory.appendingPathComponent("library.sqlite").path, &db,
                 SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK
         else { throw failure("Open database") }
+    }
+    func stageRestore(_ id: String) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            queue.async {
+                continuation.resume(with: Result { try LibraryDatabaseBackups.stage(id, in: self.directory) })
+            }
+        }
     }
     private func backupIfNeeded() {
         let day = Calendar.current.startOfDay(for: Date())

@@ -9,6 +9,8 @@ A native macOS music player for local collections and mounted NAS libraries. Bui
 
 [Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.15.0) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md) · [Windows feature adaptation](docs/WINDOWS_PARITY.md)
 
+[Try the 0.16.0 preview](https://github.com/josue758/PrismaMusic/releases/tag/v0.16.0) with source filters, batch queue controls, library migration, and the full-screen visualizer.
+
 ## Try it
 
 Download the DMG, drag **Prisma Music** to Applications, and open it. The welcome flow lets you choose Spanish, English or Portuguese, appearance and a music folder. Three redistributable instrumental demos are included; a NAS is optional.

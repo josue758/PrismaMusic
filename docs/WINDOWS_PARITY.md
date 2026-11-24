@@ -1,6 +1,20 @@
-# Adaptación de Windows a macOS · 0.14.6
+# Adaptación de Windows a macOS
 
 Referencia examinada: PrismaMusic-Windows 0.62.10, commit `ce01993` (rama main). Se revisaron README, historial y código de revisión/edición de etiquetas, exportación, escaneo, audio y navegación.
+
+La adaptación de macOS 0.16.0 usa como referencia Windows **0.65.2**, commit `c5ce173`.
+
+| Cambio de Windows 0.63–0.65.2 | Adaptación en macOS 0.16.0 |
+| --- | --- |
+| Editor de álbum, enlaces desde el reproductor, historial y recuperación NAS | Ya existían en macOS. La ficha del álbum muestra el género y el editor reúne carátula, datos y canciones. |
+| Gestión de listas e importación M3U/M3U8 | Vista previa, resolución de rutas locales y coincidencia única por sufijo para rutas trasladadas. Renombrar, reordenar, duplicar y exportar desde la lista. |
+| Listas inteligentes y filtros con etiquetas | Vista previa de cinco coincidencias y total. Selectores a partir de la colección local. |
+| Búsqueda agrupada e Inicio con accesos | Resultados de canciones, artistas y álbumes. Inicio permite continuar escuchando y ofrece listas y música añadida recientemente. |
+| Copias SQLite y duplicados | Vista previa de copias con tamaño, fecha y número de pistas. Restauración al volver a abrir, con preservación de la biblioteca actual. Ocultación reversible de duplicados. |
+| Ajustes y visualizador | Búsqueda por tema y restablecimiento por sección. El escenario completo tiene sus propios ajustes de estilo, sensibilidad y 24, 30 o 60 FPS, compartidos con Ajustes. Espectro local de 48 bandas. |
+| Audio y cambios de dispositivo | Selector Core Audio reactivo con salida elegida y activa. Salida estándar del sistema como alternativa, opción de reproducción sin pausas y ReplayGain local. |
+
+El cursor persistente de carpetas en el escaneo de Windows sigue pendiente. macOS vuelve a recorrer los directorios y reutiliza los metadatos ya importados. WASAPI, Miracast, Mica y Argos corresponden a Windows. macOS conserva Core Audio, AirPlay, Liquid Glass y Apple Translation.
 
 | Función de Windows | Implementación en Mac |
 | --- | --- |

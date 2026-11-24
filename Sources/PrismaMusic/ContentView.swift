@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject var store: LibraryStore
@@ -18,8 +19,12 @@ struct ContentView: View {
     @State private var newPlaylist = false
     @State private var playlistName = ""
     @State private var smartPlaylistDraft: SmartPlaylistDraft?
+    @State private var managingPlaylist: Playlist?
+    @State private var playlistImport: PlaylistImport?
     @State private var compactInspector = true
+    @State private var narrowLibrary = false
     private var inspectorVisible: Bool { store.showInfo || store.showLyrics || store.showQueue }
+    private var inspectorWidth: CGFloat { store.current == nil && !store.showInfo ? 224 : 278 }
     @ViewBuilder private var inspector: some View {
         if store.showInfo {
             TrackInfoView()
@@ -73,7 +78,7 @@ struct ContentView: View {
                                 motion ? .easeOut(duration: 0.12) : nil, value: pageKey)
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
                         if inspectorVisible && !compactInspector {
-                            Color.clear.frame(width: 278).accessibilityHidden(true)
+                            Color.clear.frame(width: inspectorWidth).accessibilityHidden(true)
                         }
                     }.frame(maxHeight: .infinity)
                         .overlay(alignment: .trailing) {
@@ -85,7 +90,7 @@ struct ContentView: View {
                                         .accessibilityLabel(store.t("closeUpdate"))
                                         .keyboardShortcut(.cancelAction)
                                 }
-                                inspector.frame(width: 278).prismaGlass(24)
+                                inspector.frame(width: inspectorWidth).prismaGlass(24)
                                     .transition(motion ? .move(edge: .trailing).combined(with: .opacity) : .opacity)
                             }
                         }
@@ -103,7 +108,8 @@ struct ContentView: View {
                                 with: .scale(scale: 0.96, anchor: .bottom)) : .opacity)
             }
         }.animation(motion ? .spring(duration: 0.34, bounce: 0.13) : nil, value: store.feedback?.id)
-        .frame(minWidth: 1060, minHeight: 720)
+        .frame(minWidth: 900, minHeight: 680)
+        .onGeometryChange(for: Bool.self) { $0.size.width < 1120 } action: { narrowLibrary = $0 }
         .onGeometryChange(for: Bool.self) {
             $0.size.width < 1260
         } action: {
@@ -149,6 +155,8 @@ struct ContentView: View {
         .sheet(item: $smartPlaylistDraft) { draft in
             SmartPlaylistEditor(draft: draft).environmentObject(store)
         }
+        .sheet(item: $playlistImport) { PlaylistImportView(preview: $0).environmentObject(store) }
+        .sheet(item: $managingPlaylist) { PlaylistManagementView(playlist: $0).environmentObject(store) }
         .alert("Prisma Music", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } }))
         {
             Button("OK") { store.error = nil }
@@ -160,6 +168,28 @@ struct ContentView: View {
         store.createPlaylist(playlistName)
         playlistName = ""
         newPlaylist = false
+    }
+    private func openPlaylistImport() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = ["m3u", "m3u8"].compactMap { UTType(filenameExtension: $0) }
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            let tracks = store.tracks
+            Task {
+                do {
+                    playlistImport = try await Task.detached(priority: .userInitiated) {
+                        try PlaylistImport.read(url, tracks: tracks)
+                    }.value
+                } catch { store.error = error.localizedDescription }
+            }
+        }
+    }
+    private func editPlaylist(_ playlist: Playlist) {
+        if let rules = playlist.rules {
+            smartPlaylistDraft = .init(playlist: playlist, rules: rules)
+        } else {
+            managingPlaylist = playlist
+        }
     }
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -198,6 +228,7 @@ struct ContentView: View {
                                         rules: .init(search: store.search, artist: store.artist, genre: store.genre,
                                                      year: store.year, favorites: store.section == "favorites"))
                                 }
+                                Button(store.t("importPlaylist")) { openPlaylistImport() }
                             } label: {
                                 Image(systemName: "plus").font(.system(size: 11))
                             }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
@@ -219,14 +250,9 @@ struct ContentView: View {
                                     store.section == "playlist:\(playlist.id)"
                                         ? store.effectiveAccent.opacity(0.13) : .clear,
                                     in: RoundedRectangle(cornerRadius: 9))
-                            }.buttonStyle(.plain).contextMenu {
-                                if let rules = playlist.rules {
-                                    Button(store.t("editSmartPlaylist")) {
-                                        smartPlaylistDraft = .init(playlist: playlist, rules: rules)
-                                    }
-                                }
-                                Button(store.t("deletePlaylist"), role: .destructive) { store.removePlaylist(playlist) }
-                            }
+                            }.buttonStyle(.plain)
+                                .accessibilityAddTraits(store.activePlaylist?.id == playlist.id ? .isSelected : [])
+                                .contextMenu { playlistActions(playlist) }
                         }
                         if store.playlists.isEmpty {
                             Text(store.t("playlistEmpty")).font(.system(size: 10)).foregroundStyle(.tertiary)
@@ -299,7 +325,7 @@ struct ContentView: View {
                     }.foregroundStyle(.secondary)
                 }.padding(.horizontal, 7)
             }
-        }.padding(14).frame(width: 224).frame(maxHeight: .infinity).prismaGlass(24)
+        }.padding(14).frame(width: narrowLibrary ? 180 : 224).frame(maxHeight: .infinity).prismaGlass(24)
             .animation(motion ? .smooth(duration: 0.14) : nil, value: store.section)
     }
     private func sidebarLabel(_ key: String) -> some View {
@@ -358,11 +384,12 @@ struct ContentView: View {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                     }.buttonStyle(.plain).help(store.t("clearSearch")).accessibilityLabel(store.t("clearSearch"))
                 }
-            }.padding(.horizontal, 13).frame(width: inspectorVisible ? 190 : 255, height: 36).prismaGlass(22)
+            }.padding(.horizontal, 13).frame(width: narrowLibrary ? 170 : inspectorVisible ? 190 : 255, height: 36)
+                .prismaGlass(22)
             GlassEffectContainer(spacing: 7) {
                 HStack(spacing: 7) {
                     GlassIconButton(icon: "waveform.path", label: store.t("visualizer"), active: store.showVisualizer) {
-                        store.showVisualizer.toggle()
+                        store.openVisualizerStage()
                     }
                     GlassIconButton(icon: "quote.bubble", label: store.t("lyrics"), active: store.showLyrics) {
                         store.showLyrics.toggle()
@@ -398,7 +425,15 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 24) {
                         if store.section == "home" && store.search.isEmpty {
                             hero
+                            if let track = store.current {
+                                resumeCard(track)
+                            }
                             collectionStats
+                            if !store.playlists.isEmpty { homePlaylists }
+                            if !store.recentlyAdded.isEmpty {
+                                SectionHeading(title: store.t("recentImports"))
+                                songList(store.recentlyAdded)
+                            }
                             HStack {
                                 SectionHeading(title: store.t("featured"))
                                 Spacer()
@@ -422,6 +457,14 @@ struct ContentView: View {
                                     Text(store.sectionSummary).font(.system(size: 11)).foregroundStyle(.secondary)
                                 }
                                 Spacer()
+                                if let playlist = store.activePlaylist {
+                                    Menu {
+                                        playlistActions(playlist)
+                                    } label: {
+                                        Label(store.t("managePlaylist"), systemImage: "ellipsis.circle").labelStyle(.iconOnly)
+                                    }.menuStyle(.borderlessButton).fixedSize()
+                                        .help(store.t("managePlaylist")).accessibilityLabel(store.t("managePlaylist"))
+                                }
                                 Button {
                                     store.pickMusic()
                                 } label: {
@@ -449,6 +492,10 @@ struct ContentView: View {
                             } else if store.section == "artists" {
                                 artistGrid
                             } else {
+                                if store.section == "songs" && !store.search.trimmingCharacters(in: .whitespaces).isEmpty {
+                                    groupedSearch
+                                    SectionHeading(title: store.t("songs"))
+                                }
                                 songList(store.filtered)
                             }
                         }
@@ -479,6 +526,67 @@ struct ContentView: View {
                     .foregroundStyle(.tertiary)
             }.padding(.horizontal, 4)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    private var homePlaylists: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeading(title: store.t("playlists"))
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], alignment: .leading) {
+                ForEach(store.playlists.prefix(8)) { playlist in
+                    Button {
+                        store.navigateTo("playlist:\(playlist.id)")
+                    } label: {
+                        Label(playlist.name, systemImage: playlist.rules == nil ? "music.note.list" : "line.3.horizontal.decrease")
+                            .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                    }.buttonStyle(.glass)
+                }
+            }
+        }
+    }
+    @ViewBuilder
+    private func playlistActions(_ playlist: Playlist) -> some View {
+        Button(store.t(playlist.rules == nil ? "managePlaylist" : "editSmartPlaylist")) { editPlaylist(playlist) }
+        Button(store.t("duplicatePlaylist")) { store.duplicatePlaylist(playlist) }
+        Button(store.t("exportPlaylist")) { store.exportPlaylist(store.tracks(in: playlist)) }
+        Divider()
+        Button(store.t("deletePlaylist"), role: .destructive) { store.removePlaylist(playlist) }
+    }
+    private func resumeCard(_ track: Track) -> some View {
+        HStack(spacing: 14) {
+            ArtworkView(track: track).frame(width: 58, height: 58).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(store.t("continueListening")).font(.caption).foregroundStyle(.secondary)
+                Text(track.title).font(.headline).lineLimit(1)
+                Text(store.displayArtist(track.artist)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer()
+            Text(clockText(store.position)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            Button {
+                store.togglePlay()
+            } label: {
+                PlaybackControlSymbol().frame(width: 24, height: 24)
+            }.buttonStyle(.glassProminent).accessibilityLabel(store.playbackControlLabel)
+        }.padding(14).prismaGlass(20)
+    }
+    private var groupedSearch: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if !store.groupedArtists.isEmpty {
+                SectionHeading(title: store.t("artists"))
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 145))], alignment: .leading) {
+                    ForEach(store.groupedArtists.prefix(6), id: \.key) { group in
+                        Button {
+                            store.openArtist(group.key)
+                        } label: {
+                            Label(store.displayArtist(group.key), systemImage: "person.crop.circle")
+                                .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                        }.buttonStyle(.glass)
+                    }
+                }
+            }
+            if !store.groupedAlbums.isEmpty {
+                SectionHeading(title: store.t("albums"))
+                albumGrid(limit: 3)
+            }
+        }
     }
     private var hero: some View {
         HStack(spacing: 12) {
@@ -549,6 +657,9 @@ struct ContentView: View {
             filterMenu("allArtists", selection: $store.artist, values: store.statistics.artists)
             filterMenu("allGenres", selection: $store.genre, values: store.statistics.genres)
             filterMenu("allYears", selection: $store.year, values: store.statistics.years)
+            if store.section == "songs" || store.section == "albums" {
+                sourceMenu
+            }
             Spacer(minLength: 0)
             if store.section != "artists" && store.section != "recent" && !store.section.hasPrefix("playlist:") {
                 let isAlbums = store.section == "albums"
@@ -567,7 +678,7 @@ struct ContentView: View {
                     Image(systemName: "arrow.up.arrow.down")
                 }.menuStyle(.borderlessButton).fixedSize().help(store.t("sort"))
             }
-            if !store.artist.isEmpty || !store.genre.isEmpty || !store.year.isEmpty {
+            if !store.artist.isEmpty || !store.genre.isEmpty || !store.year.isEmpty || store.activeSourceFilter != nil {
                 Button {
                     store.clearFilters()
                 } label: {
@@ -575,6 +686,32 @@ struct ContentView: View {
                 }.buttonStyle(.plain).help(store.t("clear"))
             }
         }
+    }
+    private var sourceMenu: some View {
+        Menu {
+            Picker(store.t("sources"), selection: $store.sourceFilter) {
+                Text(store.t("allLocations")).tag(nil as LibrarySourceFilter?)
+                Text(store.t("nasLocations")).tag(LibrarySourceFilter.network as LibrarySourceFilter?)
+                Text(store.t("localLocations")).tag(LibrarySourceFilter.local as LibrarySourceFilter?)
+                ForEach(store.sources) { source in
+                    Text(source.name).tag(LibrarySourceFilter.folder(source.id) as LibrarySourceFilter?)
+                }
+            }
+            if let source = store.selectedLibrarySource {
+                Button(store.t("scanSelectedLocation")) {
+                    Task { await store.scan(newOnly: true, sourceID: source.id) }
+                }.disabled(store.scanning)
+            }
+        } label: {
+            let label = switch store.activeSourceFilter {
+            case .network: store.t("nasLocations")
+            case .local: store.t("localLocations")
+            case .folder: store.selectedLibrarySource?.name ?? store.t("allLocations")
+            case nil: store.t("allLocations")
+            }
+            Label(label, systemImage: "folder").font(.system(size: 10)).lineLimit(1)
+                .frame(maxWidth: 112).padding(.horizontal, 10).padding(.vertical, 9)
+        }.menuStyle(.borderlessButton).prismaGlass(18)
     }
     private func filterMenu(_ key: String, selection: Binding<String>, values: [String]) -> some View {
         Menu {
@@ -681,83 +818,5 @@ struct TrackContextMenu: View {
         Button(store.t("edit"), action: edit)
         Button(store.t("fetch")) { Task { await store.enrich(track) } }.disabled(store.fetching)
         Button(store.t("reveal")) { NSWorkspace.shared.activateFileViewerSelecting([track.url]) }
-    }
-}
-struct QueueView: View {
-    @EnvironmentObject var store: LibraryStore
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                SectionHeading(title: store.t("queue"))
-                Spacer()
-                Button {
-                    store.showQueue = false
-                } label: {
-                    Image(systemName: "xmark")
-                }.buttonStyle(.plain)
-            }
-            HStack {
-                Text(store.t("upNext")).font(.system(size: 8, weight: .medium)).tracking(1.5)
-                Spacer()
-                Text("\(store.queue.count)").font(.system(size: 10, design: .monospaced))
-            }.foregroundStyle(.secondary)
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(store.queue, id: \.self) { id in
-                        if let track = store.track(for: id), let index = store.queueIndex(id) {
-                            VStack(spacing: 9) {
-                                HStack(spacing: 10) {
-                                    ArtworkView(track: track).frame(width: 38, height: 38)
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        Text(track.title).font(.system(size: 11, weight: .medium)).foregroundStyle(
-                                            track.id == store.currentID ? store.effectiveAccent : .primary)
-                                        Text(track.artist).font(.system(size: 9)).foregroundStyle(.secondary)
-                                    }.lineLimit(1)
-                                    Spacer(minLength: 0)
-                                    Button {
-                                        store.play(track)
-                                    } label: {
-                                        Image(
-                                            systemName: track.id == store.currentID && store.isPlaying
-                                                ? "waveform" : "play.fill"
-                                        ).font(.system(size: 10))
-                                    }.buttonStyle(.plain).help(store.t("play"))
-                                }
-                                HStack(spacing: 15) {
-                                    Text(String(format: "%02d / %@", index + 1, clockText(track.duration))).font(
-                                        .system(size: 8, design: .monospaced)
-                                    ).foregroundStyle(.tertiary)
-                                    Spacer()
-                                    Button {
-                                        store.moveQueued(track, direction: -1)
-                                    } label: {
-                                        Image(systemName: "arrow.up")
-                                    }.disabled(index == 0).help(store.t("moveUp"))
-                                    Button {
-                                        store.moveQueued(track, direction: 1)
-                                    } label: {
-                                        Image(systemName: "arrow.down")
-                                    }.disabled(index == store.queue.count - 1).help(store.t("moveDown"))
-                                    Button {
-                                        store.removeQueued(track)
-                                    } label: {
-                                        Image(systemName: "xmark")
-                                    }.disabled(track.id == store.currentID).help(store.t("remove"))
-                                }.buttonStyle(.plain).font(.system(size: 9))
-                            }.padding(12).background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 15))
-                        }
-                    }
-                }
-            }.scrollIndicators(.hidden).clipped()
-            if store.queue.isEmpty {
-                Text(store.t("queueEmpty")).font(.caption).foregroundStyle(.secondary)
-                Spacer()
-            }
-            Button {
-                store.openSettings("playback")
-            } label: {
-                Label(store.t("playback"), systemImage: "slider.horizontal.3").font(.caption)
-            }.buttonStyle(.glass)
-        }.padding(18).padding(.top, 5)
     }
 }

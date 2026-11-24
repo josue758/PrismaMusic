@@ -16,7 +16,7 @@ struct PrismaMusicApp: App {
     var body: some Scene {
         WindowGroup("Prisma Music") {
             ContentView().environmentObject(store).tint(store.effectiveAccent).preferredColorScheme(store.colorScheme)
-                .frame(minWidth: 1060, minHeight: 740)
+                .frame(minWidth: 900, minHeight: 680)
                 .onAppear {
                     delegate.store = store
                     delegate.refreshMenu()
@@ -57,6 +57,8 @@ struct PrismaMusicApp: App {
                 Button(store.t("previous")) { store.next(back: true) }.keyboardShortcut(.leftArrow, modifiers: .command)
                 Button(store.t("mini")) { store.miniPlayer() }.keyboardShortcut("m", modifiers: [.command, .shift])
                 Button(store.t("full")) { store.fullScreen() }.keyboardShortcut("f", modifiers: [.command, .control])
+                Button(store.t("visualizer")) { store.openVisualizerStage() }
+                    .keyboardShortcut("v", modifiers: [.command, .shift])
             }
         }
     }

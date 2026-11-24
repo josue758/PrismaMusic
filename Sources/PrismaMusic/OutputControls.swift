@@ -71,7 +71,11 @@ struct OutputToolbarButton: View {
 }
 struct OutputSettingsView: View {
     @EnvironmentObject var store: LibraryStore
-    private var device: AudioOutputDevice? { store.outputs.device(uid: store.preferences.outputDeviceUID) }
+    private var selectedDevice: AudioOutputDevice? { store.outputs.device(uid: store.preferences.outputDeviceUID) }
+    private var activeDevice: AudioOutputDevice? {
+        guard let prepared = store.preparedOutput else { return nil }
+        return store.outputs.devices.first { $0.id == prepared.deviceID }
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
@@ -84,24 +88,23 @@ struct OutputSettingsView: View {
                 }.buttonStyle(.glass).help(store.t("refreshDevices")).accessibilityLabel(store.t("refreshDevices"))
             }
             Picker(
-                store.t("outputDevice"),
+                store.t("selectedOutput"),
                 selection: Binding(get: { store.preferences.outputDeviceUID }, set: { store.selectOutput($0) })
             ) {
                 Text(store.t("systemOutput")).tag("")
                 ForEach(store.outputs.devices) { device in Text(device.name).tag(device.uid) }
-                if !store.preferences.outputDeviceUID.isEmpty, device == nil {
+                if !store.preferences.outputDeviceUID.isEmpty, selectedDevice == nil {
                     Text(store.t("outputUnavailable")).tag(store.preferences.outputDeviceUID)
                 }
             }
-            if let device {
-                HStack {
-                    Text(device.name).font(.callout.weight(.medium))
-                    Spacer()
-                    Text(String(format: "%.1f kHz · %d ch", device.sampleRate / 1000, device.channels)).font(
-                        .caption.monospacedDigit()
-                    ).foregroundStyle(.secondary)
-                }
-            } else {
+            LabeledContent(store.t("activeOutput"), value: activeOutputName).font(.callout)
+            if !store.usingAirPlay, let device = activeDevice ?? selectedDevice {
+                Text(String(format: "%.1f kHz · %d ch", device.sampleRate / 1000, device.channels))
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            if !store.usingAirPlay, let activeDevice, activeDevice.id != selectedDevice?.id {
+                Text(store.t("outputFallback")).font(.caption).foregroundStyle(.orange)
+            } else if !store.usingAirPlay, selectedDevice == nil {
                 Text(store.t("outputUnavailable")).font(.caption).foregroundStyle(.orange)
             }
             if store.usingAirPlay {
@@ -145,5 +148,10 @@ struct OutputSettingsView: View {
             }
             Text(store.t("airPlayNote")).font(.caption2).foregroundStyle(.secondary)
         }.task { store.outputs.refresh() }
+    }
+    private var activeOutputName: String {
+        if store.usingAirPlay && store.airPlayReceiverActive { return "AirPlay" }
+        if let activeDevice { return activeDevice.name }
+        return store.t("noActiveOutput")
     }
 }

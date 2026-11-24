@@ -8,7 +8,9 @@ final class ListeningWindowController: NSObject, NSWindowDelegate {
     private var entering = false
     private var closeAfterExit = false
     func show(store: LibraryStore) {
+        let title = "Prisma Music · " + store.t(store.fullScreenVisualizer ? "visualizer" : "listeningStage")
         if let window {
+            window.title = title
             window.makeKeyAndOrderFront(nil)
             if !entering && !window.styleMask.contains(.fullScreen) {
                 entering = true
@@ -21,7 +23,7 @@ final class ListeningWindowController: NSObject, NSWindowDelegate {
             contentRect: NSRect(x: 0, y: 0, width: 1200, height: 820),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered,
             defer: false)
-        window.title = "Prisma Music · " + store.t("listeningStage")
+        window.title = title
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.backgroundColor = .black
@@ -31,7 +33,7 @@ final class ListeningWindowController: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.delegate = self
         let hostingView = NSHostingView(
-            rootView: ListeningStageView().environmentObject(store).tint(store.effectiveAccent))
+            rootView: FullScreenStage().environmentObject(store).tint(store.effectiveAccent))
         hostingView.sizingOptions = []
         hostingView.autoresizingMask = [.width, .height]
         window.contentView = hostingView
@@ -77,6 +79,67 @@ final class ListeningWindowController: NSObject, NSWindowDelegate {
     }
 }
 
+private struct FullScreenStage: View {
+    @EnvironmentObject private var store: LibraryStore
+    var body: some View {
+        if store.fullScreenVisualizer { VisualizerStage() } else { ListeningStageView() }
+    }
+}
+
+private struct VisualizerStage: View {
+    @EnvironmentObject private var store: LibraryStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var reconnect: LibraryStore.NASRetry?
+    var body: some View {
+        ZStack {
+            Color.black
+            VisualizerCanvas(level: store.level, playing: store.isPlaying, color: store.effectiveAccent,
+                             bands: store.visualizerBands)
+            VStack(spacing: 12) {
+                HStack {
+                    Button {
+                        store.closeListeningWindow()
+                    } label: {
+                        Label(store.t("backToLibrary"), systemImage: "arrow.down.right.and.arrow.up.left")
+                    }.buttonStyle(.glass)
+                    Spacer()
+                    VisualizerOptionsButton()
+                }
+                NASRecoveryBanner { reconnect = $0 }
+                Spacer()
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 14) {
+                        ArtworkView(track: store.current).frame(width: 58, height: 58)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading) {
+                            Text(store.current?.title ?? store.t("choose")).font(.headline).lineLimit(1)
+                            if let track = store.current {
+                                PlaybackArtistLink(track: track) { store.closeListeningWindow() }
+                                    .font(.subheadline).foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                    }
+                    ListeningStageTransport()
+                }.padding(20).prismaGlass(24, tinted: true)
+            }.padding(.horizontal, 40).padding(.vertical, 34)
+        }.ignoresSafeArea()
+            .environment(\.colorScheme, .dark)
+            .onChange(of: store.preferences.animateVisualizer && !reduceMotion, initial: true) { _, enabled in
+                store.setVisualizerSpectrumActive(enabled)
+            }
+            .onDisappear { store.setVisualizerSpectrumActive(false) }
+            .onExitCommand { store.closeListeningWindow() }
+            .sheet(item: $reconnect) { retry in
+                NASView(retry: retry, initialAddress: store.rememberedServer(for: retry)?.absoluteString ?? "smb://")
+                    .environmentObject(store)
+            }
+            .onChange(of: store.nasRetry?.id) { _, id in
+                if reconnect?.id != id { reconnect = nil }
+            }
+    }
+}
+
 struct ListeningStageView: View {
     @EnvironmentObject private var store: LibraryStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -104,7 +167,7 @@ struct ListeningStageView: View {
                                     .transition(.opacity)
                             }
                         }.frame(maxHeight: .infinity)
-                        transport.padding(22).prismaGlass(24, tinted: true)
+                        ListeningStageTransport().padding(22).prismaGlass(24, tinted: true)
                     } else {
                         ContentUnavailableView { Label(store.t("empty"), systemImage: "music.note") }
                     }
@@ -171,7 +234,11 @@ struct ListeningStageView: View {
             }.frame(width: size, alignment: .leading)
         }
     }
-    private var transport: some View {
+}
+
+private struct ListeningStageTransport: View {
+    @EnvironmentObject private var store: LibraryStore
+    var body: some View {
         HStack(spacing: 28) {
             HStack(spacing: 18) {
                 control("shuffle", "shuffle") { store.shuffle.toggle() }

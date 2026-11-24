@@ -12,7 +12,8 @@ struct TagReviewView: View {
     @State private var editing = false
     @State private var refreshID = UUID()
     private var groups: [TagReviewIssue] { issues.filter { kind.isEmpty || $0.kind.rawValue == kind } }
-    private var songs: [Track] { groups.first { $0.id == issueID }?.tracks ?? [] }
+    private var selectedIssue: TagReviewIssue? { groups.first { $0.id == issueID } }
+    private var songs: [Track] { selectedIssue?.tracks ?? [] }
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Label(store.t("tagReview"), systemImage: "checklist").font(.title2.bold())
@@ -32,6 +33,13 @@ struct TagReviewView: View {
                     TableColumn(store.t("title"), value: \.title)
                     TableColumn(store.t("artist"), value: \.artist)
                     TableColumn(store.t("album"), value: \.album)
+                    TableColumn(store.t("format")) { Text($0.codecLabel).font(.caption) }
+                    TableColumn(store.t("resolution")) { track in
+                        let rate = track.sampleRate.map { ($0 / 1000).formatted() + " kHz" }
+                        let depth = track.bitDepth.map { "\($0) bit" }
+                        Text([depth, rate].compactMap { $0 }.joined(separator: " · ")).font(.caption)
+                    }
+                    TableColumn(store.t("duration")) { Text(collectionTimeText($0.duration)).font(.caption) }
                     TableColumn(store.t("filePath")) { Text($0.url.path).font(.caption).help($0.url.path) }
                 }
             }.frame(minHeight: 270)
@@ -47,6 +55,16 @@ struct TagReviewView: View {
                     refreshID = UUID()
                 }
                 .disabled(!store.canUndoTagEdits || store.scanning)
+                if selectedIssue?.kind == .possibleDuplicate {
+                    Button(store.t("hideCopies")) { setHidden(true) }
+                        .disabled(reviewing || store.scanning || selected.isEmpty ||
+                            !songs.contains { !selected.contains($0.id) && $0.hiddenDuplicate != true })
+                }
+                if selectedIssue?.kind == .hiddenCopies || selectedIssue?.kind == .possibleDuplicate {
+                    Button(store.t("restoreCopies")) { setHidden(false) }
+                        .disabled(reviewing || store.scanning ||
+                            !songs.contains { selected.contains($0.id) && $0.hiddenDuplicate == true })
+                }
                 Spacer()
                 Button(store.t("closeUpdate")) { dismiss() }.keyboardShortcut(.cancelAction)
                 Button(store.t("previewTags")) { editing = true }.buttonStyle(.glassProminent)
@@ -72,6 +90,10 @@ struct TagReviewView: View {
             .sheet(isPresented: $editing, onDismiss: { refreshID = UUID() }) {
                 BatchTagEditor(tracks: songs.filter { selected.contains($0.id) }).environmentObject(store)
             }
+    }
+    private func setHidden(_ hidden: Bool) {
+        store.setDuplicateVisibility(selected, hidden: hidden, in: songs)
+        refreshID = UUID()
     }
 }
 

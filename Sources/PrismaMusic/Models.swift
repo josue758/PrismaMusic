@@ -43,6 +43,7 @@ struct Track: Identifiable, Codable, Equatable, Sendable {
     // Nil marks an older library entry. An empty value means the file had no album artist.
     var albumArtist: String? = nil
     var addedAt: Date? = nil
+    var hiddenDuplicate: Bool? = nil
     var codecLabel: String {
         format?.components(separatedBy: "·").last?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             ?? url.pathExtension.uppercased()

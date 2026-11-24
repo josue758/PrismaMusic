@@ -54,7 +54,7 @@ struct TrackTagEdits: Codable, Equatable, Sendable {
     }
 }
 enum TagIssueKind: String, CaseIterable, Identifiable, Sendable {
-    case missingArtist, missingAlbum, splitAlbum, possibleDuplicate
+    case missingArtist, missingAlbum, splitAlbum, possibleDuplicate, hiddenCopies
     var id: String { rawValue }
 }
 struct TagReviewIssue: Identifiable, Sendable {
@@ -75,6 +75,10 @@ enum LibraryTagReview {
             "ÁLBUM SEM TÍTULO",
         ]
         var issues: [TagReviewIssue] = []
+        let hidden = tracks.filter { $0.hiddenDuplicate == true }
+        if !hidden.isEmpty {
+            issues.append(.init(id: "hiddenCopies", kind: .hiddenCopies, title: "", tracks: hidden))
+        }
         let missingArtist = tracks.filter { unknownArtists.contains(key($0.artist)) }
         let missingAlbum = tracks.filter { unknownAlbums.contains(key($0.album)) }
         if !missingArtist.isEmpty {

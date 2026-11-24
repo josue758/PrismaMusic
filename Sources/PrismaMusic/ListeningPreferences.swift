@@ -14,6 +14,7 @@ struct ListeningPreferences: Codable, Equatable {
     var balance: Float = 0
     var playbackRate: Float = 1
     var continueQueue = true
+    var gaplessPlayback = true
     var keepAwake = false
     var rememberPosition = true
     var startSection = "home"
@@ -48,7 +49,8 @@ struct ListeningPreferences: Codable, Equatable {
     init() {}
     private enum CodingKeys: String, CodingKey {
         case outputDeviceUID, directOutput, exclusiveOutput, hasCompletedWelcome, eqEnabled, eqGains, eqPreset, preamp,
-            autoHeadroom, replayGain, balance, playbackRate, continueQueue, keepAwake, rememberPosition, startSection, glassStyle,
+            autoHeadroom, replayGain, balance, playbackRate, continueQueue, gaplessPlayback, keepAwake, rememberPosition,
+            startSection, glassStyle,
             atmosphere, adaptiveArtwork, ambientMotion, artworkPulse, glassTransparency, microInteractions, hoverDepth,
             showFeedback, compactRows, showQuality, albumSize, autoArtwork, autoLyrics, watchMusicFolders,
             recursiveScan, scanWorkers,
@@ -72,6 +74,7 @@ struct ListeningPreferences: Codable, Equatable {
         balance = try values.decodeIfPresent(Float.self, forKey: .balance) ?? balance
         playbackRate = try values.decodeIfPresent(Float.self, forKey: .playbackRate) ?? playbackRate
         continueQueue = try values.decodeIfPresent(Bool.self, forKey: .continueQueue) ?? continueQueue
+        gaplessPlayback = try values.decodeIfPresent(Bool.self, forKey: .gaplessPlayback) ?? gaplessPlayback
         keepAwake = try values.decodeIfPresent(Bool.self, forKey: .keepAwake) ?? keepAwake
         rememberPosition = try values.decodeIfPresent(Bool.self, forKey: .rememberPosition) ?? rememberPosition
         let savedSection = try values.decodeIfPresent(String.self, forKey: .startSection)
@@ -119,6 +122,9 @@ struct ListeningPreferences: Codable, Equatable {
         hoverDepth = preset == "glass"
     }
     static let frequencies: [Float] = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+    static let visualizerStyles = ["aurora", "bars", "mirror", "centered", "nebula", "orbit", "ribbons"]
+    static let visualizerFrameRates = [24.0, 30.0, 60.0]
+    var visualizerFrameInterval: TimeInterval { 1 / visualizerFPS }
     static let presets: [String: [Float]] = [
         "flat": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         "rock": [4, 3, 2, 0, -1, -1, 1, 3, 4, 4],
@@ -132,6 +138,62 @@ struct ListeningPreferences: Codable, Equatable {
         eqGains = Self.presets[name] ?? Self.presets["flat"]!
         eqPreset = name
     }
+    mutating func reset(section: String) {
+        let initial = Self()
+        switch section {
+        case "sound":
+            outputDeviceUID = initial.outputDeviceUID
+            directOutput = initial.directOutput
+            exclusiveOutput = initial.exclusiveOutput
+            balance = initial.balance
+            eqEnabled = initial.eqEnabled
+            selectPreset(initial.eqPreset)
+            preamp = initial.preamp
+            autoHeadroom = initial.autoHeadroom
+            replayGain = initial.replayGain
+        case "playback":
+            playbackRate = initial.playbackRate
+            continueQueue = initial.continueQueue
+            gaplessPlayback = initial.gaplessPlayback
+            keepAwake = initial.keepAwake
+            rememberPosition = initial.rememberPosition
+            miniAlwaysOnTop = initial.miniAlwaysOnTop
+            miniAllSpaces = initial.miniAllSpaces
+        case "library":
+            watchMusicFolders = initial.watchMusicFolders
+            recursiveScan = initial.recursiveScan
+            scanWorkers = initial.scanWorkers
+        case "metadata":
+            autoArtwork = initial.autoArtwork
+            autoLyrics = initial.autoLyrics
+        case "appearance":
+            glassStyle = initial.glassStyle
+            atmosphere = initial.atmosphere
+            adaptiveArtwork = initial.adaptiveArtwork
+            ambientMotion = initial.ambientMotion
+            artworkPulse = initial.artworkPulse
+            glassTransparency = initial.glassTransparency
+            microInteractions = initial.microInteractions
+            hoverDepth = initial.hoverDepth
+            showFeedback = initial.showFeedback
+            compactRows = initial.compactRows
+            showQuality = initial.showQuality
+            albumSize = initial.albumSize
+            startSection = initial.startSection
+        case "experience":
+            lyricsFontSize = initial.lyricsFontSize
+            lyricsOffset = initial.lyricsOffset
+            autoScrollLyrics = initial.autoScrollLyrics
+            translateLyrics = initial.translateLyrics
+            lyricsTargetLanguage = initial.lyricsTargetLanguage
+            visualizerStyle = initial.visualizerStyle
+            visualizerSensitivity = initial.visualizerSensitivity
+            visualizerFPS = initial.visualizerFPS
+            animateVisualizer = initial.animateVisualizer
+        default:
+            break
+        }
+    }
     mutating func sanitize() {
         scanWorkers = min(8, max(1, scanWorkers))
         if eqGains.count != 10 { eqGains = Array(repeating: 0, count: 10) }
@@ -141,7 +203,8 @@ struct ListeningPreferences: Codable, Equatable {
         playbackRate = playbackRate.isFinite ? min(1.5, max(0.5, playbackRate)) : 1
         lyricsFontSize = min(32, max(14, lyricsFontSize))
         lyricsOffset = min(10, max(-10, lyricsOffset))
-        visualizerFPS = [24.0, 30, 60].contains(visualizerFPS) ? visualizerFPS : 30
+        if !Self.visualizerFrameRates.contains(visualizerFPS) { visualizerFPS = Self().visualizerFPS }
+        if !Self.visualizerStyles.contains(visualizerStyle) { visualizerStyle = "aurora" }
         atmosphere = atmosphere.isFinite ? min(1, max(0, atmosphere)) : 0.75
         glassTransparency = glassTransparency.isFinite ? min(1, max(0, glassTransparency)) : 0.65
     }

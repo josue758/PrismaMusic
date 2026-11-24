@@ -1,5 +1,22 @@
 # Cambios
 
+## 0.16.0 (en pruebas)
+
+- Canciones y Álbumes se filtran por NAS, archivos locales o una carpeta concreta. Desde el filtro de carpeta puedes buscar música nueva solo en esa fuente.
+- La cola separa la pista actual de las siguientes. Selecciona varias para moverlas juntas, arrastrarlas o quitarlas con Deshacer.
+- Ajustes → Biblioteca importa favoritos, listas y correcciones de exportaciones JSON de Prisma Windows o Mac, con vista previa de las rutas reubicadas y pendientes.
+- Importa listas M3U/M3U8 con vista previa y recuperación de rutas de Windows o del NAS cuando coinciden de forma única con la biblioteca.
+- Edita, reordena, duplica y exporta listas. El editor de listas inteligentes muestra coincidencias y usa los formatos y frecuencias disponibles.
+- Inicio muestra música incorporada recientemente y accesos a listas. Al buscar en Canciones aparecen también los artistas y álbumes coincidentes.
+- Inicio permite retomar la pista actual. Se guarda la posición cada cinco segundos durante la reproducción y al pausar o saltar.
+- Revisión de etiquetas compara formato, duración y ruta. Las copias seleccionadas pueden ocultarse y volver a mostrarse.
+- Ajustes permite buscar una sección, restablecer sus preferencias y previsualizar copias SQLite para aplicar al reiniciar, conservando la biblioteca anterior.
+- El visualizador tiene su propio escenario a pantalla completa, seis estilos de Windows y Cintas. La salida local alimenta un espectro de 48 bandas mientras el escenario está abierto.
+- Los ajustes del visualizador se abren desde el escenario. Puedes cambiar en vivo de estilo, sensibilidad y frecuencia objetivo de 24, 30 o 60 FPS.
+- La reproducción sin pausas se puede desactivar. Si desaparece la salida elegida en modo estándar, Prisma puede continuar por la salida del sistema.
+- El selector distingue la salida elegida de la activa. Las ventanas estrechas usan una barra lateral más compacta.
+- Ajustes de Sonido muestra los dB de ReplayGain aplicados a la pista por separado de la preamplificación del ecualizador.
+
 ## 0.15.0
 
 - Prisma programa la pista siguiente antes del final cuando comparte formato PCM y ganancia con la pista actual. Los cambios de frecuencia o de salida usan la transición normal.

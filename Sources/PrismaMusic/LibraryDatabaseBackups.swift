@@ -1,8 +1,79 @@
 import Foundation
 import SQLite3
 
+struct LibraryBackupPreview: Identifiable, Sendable {
+    let id: String
+    let date: Date?
+    let size: Int64
+}
+
 /// Uses SQLite's online backup API so WAL transactions are included in each snapshot.
 enum LibraryDatabaseBackups {
+    private static let stagedName = "pending-library-restore.sqlite"
+
+    static func list(in directory: URL) throws -> [LibraryBackupPreview] {
+        let folder = directory.appendingPathComponent("Backups")
+        guard FileManager.default.fileExists(atPath: folder.path) else { return [] }
+        return try FileManager.default.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey],
+            options: .skipsHiddenFiles
+        ).compactMap { file in
+            let name = file.lastPathComponent
+            guard name.range(of: #"^library-[0-9]{4}-[0-9]{2}-[0-9]{2}\.sqlite$"#, options: .regularExpression) != nil
+            else { return nil }
+            let info = try file.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey])
+            guard info.isRegularFile == true else { return nil }
+            return LibraryBackupPreview(id: name, date: info.contentModificationDate, size: Int64(info.fileSize ?? 0))
+        }.sorted { $0.id > $1.id }
+    }
+
+    static func trackCount(_ id: String, in directory: URL) throws -> Int {
+        let file = try snapshot(id, in: directory)
+        return try withReadOnly(file) { db in
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "SELECT count(*) FROM tracks", -1, &statement, nil) == SQLITE_OK
+            else { throw error(sqlite3_errcode(db)) }
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_step(statement) == SQLITE_ROW else { throw error(sqlite3_errcode(db)) }
+            return Int(sqlite3_column_int64(statement, 0))
+        }
+    }
+
+    static func stage(_ id: String, in directory: URL) throws {
+        let source = try snapshot(id, in: directory)
+        let fm = FileManager.default
+        let temp = directory.appendingPathComponent(UUID().uuidString + ".restore")
+        let staged = directory.appendingPathComponent(stagedName)
+        defer { try? fm.removeItem(at: temp) }
+        try fm.copyItem(at: source, to: temp)
+        try withReadOnly(temp) { try validate($0) }
+        if fm.fileExists(atPath: staged.path) {
+            _ = try fm.replaceItemAt(staged, withItemAt: temp)
+        } else {
+            try fm.moveItem(at: temp, to: staged)
+        }
+    }
+
+    private static func snapshot(_ id: String, in directory: URL) throws -> URL {
+        guard try list(in: directory).contains(where: { $0.id == id }) else { throw CocoaError(.fileNoSuchFile) }
+        return directory.appendingPathComponent("Backups", isDirectory: true).appendingPathComponent(id)
+    }
+
+    private static func withReadOnly<T>(_ file: URL, _ operation: (OpaquePointer?) throws -> T) throws -> T {
+        var db: OpaquePointer?
+        let opened = sqlite3_open_v2(file.path, &db, SQLITE_OPEN_READONLY, nil)
+        defer { if let db { sqlite3_close(db) } }
+        guard opened == SQLITE_OK else { throw error(opened) }
+        return try operation(db)
+    }
+
+    static func applyPending(in directory: URL) throws -> Bool {
+        let staged = directory.appendingPathComponent(stagedName)
+        guard FileManager.default.fileExists(atPath: staged.path) else { return false }
+        try withReadOnly(staged) { try validate($0) }
+        try install(staged, in: directory, preservingPrefix: "BeforeRestore-")
+        return true
+    }
     static func validate(_ db: OpaquePointer?) throws {
         var statement: OpaquePointer?
         let code = sqlite3_prepare_v2(db, "PRAGMA quick_check", -1, &statement, nil)
@@ -77,27 +148,30 @@ enum LibraryDatabaseBackups {
             let replacement = directory.appendingPathComponent(UUID().uuidString + ".restore")
             try fm.copyItem(at: candidate, to: replacement)
             defer { try? fm.removeItem(at: replacement) }
-            let preserved = directory.appendingPathComponent("Damaged-" + UUID().uuidString, isDirectory: true)
-            try fm.createDirectory(at: preserved, withIntermediateDirectories: true)
-            var moved: [String] = []
-            do {
-                for name in ["library.sqlite", "library.sqlite-wal", "library.sqlite-shm"] {
-                    let original = directory.appendingPathComponent(name)
-                    if fm.fileExists(atPath: original.path) {
-                        try fm.moveItem(at: original, to: preserved.appendingPathComponent(name))
-                        moved.append(name)
-                    }
-                }
-                try fm.moveItem(at: replacement, to: directory.appendingPathComponent("library.sqlite"))
-                return candidate.lastPathComponent
-            } catch {
-                for name in moved {
-                    try? fm.moveItem(
-                        at: preserved.appendingPathComponent(name), to: directory.appendingPathComponent(name))
-                }
-                throw error
-            }
+            try install(replacement, in: directory, preservingPrefix: "Damaged-")
+            return candidate.lastPathComponent
         }
         return nil
+    }
+    private static func install(_ replacement: URL, in directory: URL, preservingPrefix: String) throws {
+        let fm = FileManager.default
+        let preserved = directory.appendingPathComponent(preservingPrefix + UUID().uuidString, isDirectory: true)
+        try fm.createDirectory(at: preserved, withIntermediateDirectories: true)
+        var moved: [String] = []
+        do {
+            for name in ["library.sqlite", "library.sqlite-wal", "library.sqlite-shm"] {
+                let original = directory.appendingPathComponent(name)
+                if fm.fileExists(atPath: original.path) {
+                    try fm.moveItem(at: original, to: preserved.appendingPathComponent(name))
+                    moved.append(name)
+                }
+            }
+            try fm.moveItem(at: replacement, to: directory.appendingPathComponent("library.sqlite"))
+        } catch {
+            for name in moved {
+                try? fm.moveItem(at: preserved.appendingPathComponent(name), to: directory.appendingPathComponent(name))
+            }
+            throw error
+        }
     }
 }
