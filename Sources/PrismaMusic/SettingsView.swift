@@ -671,7 +671,7 @@ struct SettingsView: View {
             card { Text(store.t("listKeyboardHelp")).font(.caption).foregroundStyle(.secondary) }
             card {
                 Text("PRISMA MUSIC").font(.system(size: 20, weight: .light, design: .rounded)).tracking(4)
-                Text("Prisma Music " + AppVersion.current + " · beta (" + AppVersion.build + ")").font(.caption)
+                Text("Prisma Music " + AppVersion.current + " (" + AppVersion.build + ")").font(.caption)
                     .foregroundStyle(.secondary)
                 Text(store.t("engine")).font(.caption).foregroundStyle(.secondary)
                 Text(store.t("tagNote")).font(.caption).foregroundStyle(.secondary)

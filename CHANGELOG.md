@@ -1,5 +1,9 @@
 # Cambios
 
+## 0.16.1
+
+- Publicación estable de las mejoras de la 0.16.0. Acerca de muestra la versión y el número de compilación.
+
 ## 0.16.0 (en pruebas)
 
 - Canciones y Álbumes se filtran por NAS, archivos locales o una carpeta concreta. Desde el filtro de carpeta puedes buscar música nueva solo en esa fuente.
