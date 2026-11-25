@@ -5,9 +5,9 @@
 
 A native macOS music player for local collections and mounted NAS libraries. Built with Swift, SwiftUI, AVAudioEngine and Core Audio, with an artwork-driven Liquid Glass interface.
 
-**Apple Silicon · macOS 26+ · Stable 0.16.2**
+**Apple Silicon · macOS 26+ · Stable 0.16.3**
 
-[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.16.2) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md) · [Windows feature adaptation](docs/WINDOWS_PARITY.md)
+[Download the app](https://github.com/josue758/PrismaMusic/releases/tag/v0.16.3) · [Guía en español](docs/USER_GUIDE.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Validation evidence](VALIDACION.md) · [Windows feature adaptation](docs/WINDOWS_PARITY.md)
 
 ## Try it
 
@@ -78,7 +78,7 @@ To run the same offline validation as CI, including a release build, signature c
 ./scripts/verify.sh
 ```
 
-For 0.16.2, **111 tests passed locally** and nine optional checks were skipped. The run covered queue ordering and undo, playlist persistence, update downloads, and direct PCM playback through a USB output. The 0.16.1 validation also covered real NAS FLAC playback during an incremental scan. See [validation](VALIDACION.md) for earlier test runs and their scope.
+For 0.16.3, **112 tests passed locally** and nine optional checks were skipped. The run covered separate scan reports and retries by source, update downloads, and direct PCM playback through a USB output. The 0.16.1 validation also covered real NAS FLAC playback during an incremental scan. See [validation](VALIDACION.md) for earlier test runs and their scope.
 
 GitHub Actions runs this check on the standard [macOS 26 Apple Silicon runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), with read-only repository permissions and actions pinned to commit IDs. Each run retains its log and installer for 14 days.
 

@@ -1,5 +1,10 @@
 # Cambios
 
+## 0.16.3
+
+- Pulsa una ubicación de la barra lateral para ver sus canciones. Su menú permite buscar música nueva y abrir el informe de esa fuente.
+- El informe guarda los escaneos por carpeta por separado del escaneo general. Puedes reintentar un archivo dentro de su fuente sin perder los demás informes.
+
 ## 0.16.2
 
 - Reproducir a continuación inserta la canción en el lugar correcto aunque la pista actual no estuviera en la cola.

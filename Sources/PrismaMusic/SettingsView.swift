@@ -467,6 +467,9 @@ struct SettingsView: View {
                         }
                     }
                 }
+                if store.scanAudit == nil, !store.sourceScanAudits.isEmpty, !store.scanning {
+                    Button(store.t("scanReport")) { showScanReport = true }.buttonStyle(.glass)
+                }
                 Text(store.t("rescanNote")).font(.caption).foregroundStyle(.secondary)
             }
             card {

@@ -21,6 +21,7 @@ struct ContentView: View {
     @State private var smartPlaylistDraft: SmartPlaylistDraft?
     @State private var managingPlaylist: Playlist?
     @State private var playlistImport: PlaylistImport?
+    @State private var sourceReport: MusicSource?
     @State private var compactInspector = true
     @State private var narrowLibrary = false
     private var inspectorVisible: Bool { store.showInfo || store.showLyrics || store.showQueue }
@@ -157,6 +158,7 @@ struct ContentView: View {
         }
         .sheet(item: $playlistImport) { PlaylistImportView(preview: $0).environmentObject(store) }
         .sheet(item: $managingPlaylist) { PlaylistManagementView(playlist: $0).environmentObject(store) }
+        .sheet(item: $sourceReport) { ScanReportView(sourceID: $0.id).environmentObject(store) }
         .alert("Prisma Music", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } }))
         {
             Button("OK") { store.error = nil }
@@ -270,14 +272,12 @@ struct ContentView: View {
                             }.buttonStyle(.plain).help(store.t("add")).disabled(store.scanning)
                         }.padding(.trailing, 10)
                         ForEach(store.sources) { source in
-                            HStack(spacing: 9) {
-                                Image(
-                                    systemName: source.url.path.hasPrefix("/Volumes")
-                                        ? "externaldrive.connected.to.line.below" : "folder"
-                                ).foregroundStyle(store.effectiveAccent.opacity(0.8))
-                                Text(source.name).lineLimit(1)
-                                Spacer()
-                            }.font(.system(size: 11)).padding(.horizontal, 12).padding(.vertical, 4).contextMenu {
+                            sourceRow(source).contextMenu {
+                                Button(store.t("scanSelectedLocation")) {
+                                    Task { await store.scan(newOnly: true, sourceID: source.id) }
+                                }.disabled(store.scanning)
+                                Button(store.t("scanReport")) { sourceReport = source }
+                                Divider()
                                 Button(store.t("reveal")) {
                                     NSWorkspace.shared.activateFileViewerSelecting([source.url])
                                 }
@@ -327,6 +327,33 @@ struct ContentView: View {
             }
         }.padding(14).frame(width: narrowLibrary ? 180 : 224).frame(maxHeight: .infinity).prismaGlass(24)
             .animation(motion ? .smooth(duration: 0.14) : nil, value: store.section)
+    }
+    private func sourceRow(_ source: MusicSource) -> some View {
+        let selected = store.activeSourceFilter == .folder(source.id)
+        let state = store.sourceStates[source.id]
+        return Button {
+            store.navigateTo("songs")
+            store.sourceFilter = .folder(source.id)
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: source.url.path.hasPrefix("/Volumes")
+                      ? "externaldrive.connected.to.line.below" : "folder")
+                    .foregroundStyle(store.effectiveAccent)
+                Text(source.name).lineLimit(1)
+                Spacer(minLength: 0)
+                if state == "reading" {
+                    ProgressView().controlSize(.mini)
+                } else if state == "offline" {
+                    Image(systemName: "exclamationmark.circle").foregroundStyle(.orange)
+                }
+            }.font(.system(size: 11)).padding(.horizontal, 12).padding(.vertical, 7)
+                .background(selected ? store.effectiveAccent.opacity(0.15) : .clear,
+                            in: RoundedRectangle(cornerRadius: 9))
+                .contentShape(Rectangle())
+        }.buttonStyle(.plain)
+            .help(source.url.path)
+            .accessibilityValue(state.map(store.t) ?? "")
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
     private func sidebarLabel(_ key: String) -> some View {
         Text(store.t(key).uppercased()).font(.system(size: 8, weight: .semibold)).tracking(1.5).foregroundStyle(

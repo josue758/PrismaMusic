@@ -1,14 +1,14 @@
 # Prisma Music
 
-Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión estable **0.16.2**.
+Reproductor nativo para macOS, escrito en Swift y SwiftUI. Versión estable **0.16.3**.
 
-[Descargar la versión estable 0.16.2 para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.16.2) · [Ver el código](https://github.com/josue758/PrismaMusic)
+[Descargar la versión estable 0.16.3 para Apple Silicon](https://github.com/josue758/PrismaMusic/releases/tag/v0.16.3) · [Ver el código](https://github.com/josue758/PrismaMusic)
 
 ## Instalar y probar
 
 Requiere **macOS 26 o posterior**. El instalador incluido contiene una compilación para **Apple Silicon**.
 
-1. Abre `Prisma-Music-0.16.2.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
+1. Abre `Prisma-Music-0.16.3.dmg` y arrastra **Prisma Music** a **Aplicaciones**.
 2. Abre la aplicación y sigue la bienvenida para elegir idioma, biblioteca y estilo. Incluye tres piezas instrumentales originales de 24 segundos, etiquetadas y listas para reproducir.
 3. Pulsa **Añadir música** o `⌘O`: puedes elegir archivos, carpetas y volúmenes de red.
 4. Haz doble clic en una canción o pulsa el botón de reproducción. También puedes abrir archivos de audio con la aplicación desde Finder.
@@ -268,5 +268,6 @@ La ficha de cada artista muestra hasta cinco canciones más reproducidas, según
 ### Fuentes, cola y migración
 
 - En **Canciones** o **Álbumes**, abre **Todas las fuentes** para mostrar el NAS, los archivos locales o una carpeta concreta. Con una carpeta elegida, **Buscar canciones nuevas aquí** limita el escaneo a esa ubicación.
+- Puedes abrir las canciones de una fuente desde **Ubicaciones**. Su menú contextual permite buscar música nueva y abrir su informe. En el informe puedes alternar entre una carpeta y el último escaneo general.
 - En **Cola**, selecciona varias pistas de **A continuación** con ⌘ o Mayús. Arrástralas sobre una pista para colocarlas antes de ella o suéltalas al final. Los botones de flecha permiten moverlas con teclado. Puedes deshacer un cambio de orden o una eliminación, y guardar las próximas pistas como una lista.
 - Para pasar tu biblioteca de Windows a Mac, exporta el JSON de Prisma en Windows y agrega tus carpetas de música en Mac. Luego abre **Ajustes → Biblioteca → Importar biblioteca de Prisma…** y revisa los favoritos, listas, correcciones y rutas reconocidas antes de confirmar. Prisma conserva las correcciones que ya hiciste en Mac y deja pendientes las rutas ambiguas o faltantes.

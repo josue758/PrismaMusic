@@ -925,6 +925,7 @@ let translations: [String: [String]] = [
     "failedFiles": ["Con error", "Failed", "Com erro"],
     "scanSummary": ["Archivos encontrados", "Files discovered", "Arquivos encontrados"],
     "scanReport": ["Mostrar informe de lectura", "Show scan report", "Mostrar relatório de leitura"],
+    "noScanReport": ["Aún no hay un informe para esta fuente", "No Scan Report for This Source Yet", "Ainda não há relatório para esta fonte"],
     "discovering": ["Explorando carpetas", "Discovering folders", "Explorando pastas"],
     "scanCancelled": ["Lectura cancelada", "Scan cancelled", "Leitura cancelada"],
     "scanErrors": [

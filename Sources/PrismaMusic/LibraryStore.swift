@@ -51,6 +51,7 @@ final class LibraryStore: NSObject, ObservableObject {
     @Published private(set) var scanDiscovered = 0
     @Published private(set) var scanProcessed = 0
     @Published private(set) var scanAudit: ScanAudit?
+    @Published private(set) var sourceScanAudits: [UUID: ScanAudit] = [:]
     @Published private(set) var relocatingSource = false
     @Published private(set) var relocationProcessed = 0
     @Published private(set) var relocationTotal = 0
@@ -553,6 +554,9 @@ final class LibraryStore: NSObject, ObservableObject {
         }
         if let data = try? Data(contentsOf: dataDirectory.appendingPathComponent("scan-report.json")) {
             scanAudit = try? JSONDecoder().decode(ScanAudit.self, from: data)
+        }
+        if let data = try? Data(contentsOf: dataDirectory.appendingPathComponent("scan-source-reports.json")) {
+            sourceScanAudits = (try? JSONDecoder().decode([UUID: ScanAudit].self, from: data)) ?? [:]
         }
         section = preferences.startSection
         if preferences.rememberPosition,
@@ -1083,9 +1087,13 @@ final class LibraryStore: NSObject, ObservableObject {
         navigateTo(preferences.startSection)
         if scanAfter && scanOnLaunch && !scanning { Task { await scanNewMusic() } }
     }
-    func retryFailedScan(only url: URL? = nil) async {
-        guard let audit = scanAudit, !audit.issues.isEmpty else { return }
-        await scan(force: true, retrying: audit, retryURL: url)
+    func scanReport(for sourceID: UUID?) -> ScanAudit? {
+        if let sourceID { return sourceScanAudits[sourceID] }
+        return scanAudit
+    }
+    func retryFailedScan(only url: URL? = nil, sourceID: UUID? = nil) async {
+        guard let audit = scanReport(for: sourceID), !audit.issues.isEmpty else { return }
+        await scan(force: true, retrying: audit, retryURL: url, sourceID: sourceID)
     }
     func scanNewMusic() async { await scan(newOnly: true) }
 
@@ -1130,22 +1138,22 @@ final class LibraryStore: NSObject, ObservableObject {
         let workers = automatic ? min(2, maximumScanWorkers) : maximumScanWorkers
         for source in sources where sourceID == nil || source.id == sourceID {
             if Task.isCancelled || cancellation.isCancelled { break }
+            let recursive = preferences.recursiveScan
+            let root = source.url
+            let selected = retrying?.issues.map(\.url).filter {
+                (retryURL == nil || $0 == retryURL)
+                    && MetadataReader.extensions.contains($0.pathExtension.lowercased())
+                    && SourceScanner.isWithin($0, source: root, recursive: recursive)
+            }
+            if selected?.isEmpty == true { continue }
             if !automatic {
                 sourceStates[source.id] = "reading"
                 status = "\(t("discovering")) · \(source.name)"
             }
             scanDiscovered = 0
             scanProcessed = 0
-            let recursive = preferences.recursiveScan
             let report: SourceScanReport
-            if let retrying {
-                let root = source.url
-                let selected = retrying.issues.map(\.url).filter {
-                    (retryURL == nil || $0 == retryURL)
-                        && MetadataReader.extensions.contains($0.pathExtension.lowercased())
-                        && SourceScanner.isWithin($0, source: root, recursive: recursive)
-                }
-                if selected.isEmpty { continue }
+            if let selected {
                 report = await Task.detached(priority: .utility) {
                     let identity = SourceIdentity.read(root)
                     return SourceScanReport(
@@ -1318,22 +1326,31 @@ final class LibraryStore: NSObject, ObservableObject {
             previous.imported += recovered.count
             previous.failed = max(0, previous.failed - recovered.count)
             previous.finishedAt = audit.finishedAt
-            previous.unavailableSources = max(previous.unavailableSources, audit.unavailableSources)
+            previous.unavailableSources = sourceID == nil
+                ? max(previous.unavailableSources, audit.unavailableSources) : audit.unavailableSources
             previous.cancelled = audit.cancelled
             audit = previous
             failures = audit.failed
         }
-        scanAudit = audit
-        let reportURL = dataDirectory.appendingPathComponent("scan-report.json")
-        do {
-            try await Task.detached(priority: .utility) {
-                try JSONEncoder().encode(audit).write(to: reportURL, options: .atomic)
-            }.value
-        } catch { self.error = error.localizedDescription }
+        if let sourceID {
+            sourceScanAudits[sourceID] = audit
+            await saveScanReport(sourceScanAudits, filename: "scan-source-reports.json")
+        } else {
+            scanAudit = audit
+            await saveScanReport(audit, filename: "scan-report.json")
+        }
         status =
             cancellation.isCancelled
             ? t("scanCancelled")
             : unavailable > 0 ? t("offline") : failures > 0 ? "\(t("scanErrors")): \(failures)" : t("ready")
+    }
+    private func saveScanReport<T: Encodable & Sendable>(_ report: T, filename: String) async {
+        let url = dataDirectory.appendingPathComponent(filename)
+        do {
+            try await Task.detached(priority: .utility) {
+                try JSONEncoder().encode(report).write(to: url, options: .atomic)
+            }.value
+        } catch { self.error = error.localizedDescription }
     }
     private var customAlbumArtwork: [String: URL] {
         tracks.reduce(into: [:]) { covers, track in
@@ -2475,8 +2492,9 @@ final class LibraryStore: NSObject, ObservableObject {
     func stageLibraryRestore(_ id: String) async throws {
         try await persistence.stageRestore(id)
     }
-    func showScanReport() {
-        NSWorkspace.shared.activateFileViewerSelecting([dataDirectory.appendingPathComponent("scan-report.json")])
+    func showScanReport(sourceID: UUID? = nil) {
+        let name = sourceID == nil ? "scan-report.json" : "scan-source-reports.json"
+        NSWorkspace.shared.activateFileViewerSelecting([dataDirectory.appendingPathComponent(name)])
     }
     func showDataFolder() { NSWorkspace.shared.open(dataDirectory) }
     private func setupRemoteCommands() {

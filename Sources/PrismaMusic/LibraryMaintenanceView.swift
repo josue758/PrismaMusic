@@ -227,8 +227,11 @@ struct ScanReportView: View {
     @EnvironmentObject private var store: LibraryStore
     @Environment(\.dismiss) private var dismiss
     @State private var search = ""
+    @State private var sourceID: UUID?
+    init(sourceID: UUID? = nil) { _sourceID = State(initialValue: sourceID) }
+    private var audit: ScanAudit? { store.scanReport(for: sourceID) }
     private var issues: [ScanIssue] {
-        (store.scanAudit?.issues ?? []).filter {
+        (audit?.issues ?? []).filter {
             search.isEmpty || $0.url.path.localizedStandardContains(search)
                 || $0.message.localizedStandardContains(search)
         }
@@ -236,7 +239,11 @@ struct ScanReportView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Label(store.t("scanReport"), systemImage: "doc.text.magnifyingglass").font(.title2.bold())
-            if let audit = store.scanAudit {
+            Picker(store.t("sources"), selection: $sourceID) {
+                Text(store.t("allLocations")).tag(nil as UUID?)
+                ForEach(store.sources) { source in Text(source.name).tag(source.id as UUID?) }
+            }.frame(maxWidth: 290)
+            if let audit {
                 Text(
                     "\(store.t("processedFiles")): \(audit.imported + audit.unchanged) · \(store.t("failedFiles")): \(audit.failed)"
                 )
@@ -246,8 +253,14 @@ struct ScanReportView: View {
                         .secondary)
                 }
                 if audit.cancelled || audit.unavailableSources > 0 {
-                    Button(store.t("resumeScan")) { Task { await store.scanNewMusic() } }.disabled(store.scanning)
+                    Button(store.t("resumeScan")) {
+                        Task { await store.scan(newOnly: true, sourceID: sourceID) }
+                    }.disabled(store.scanning)
                 }
+            } else if sourceID != nil {
+                Button(store.t("scanSelectedLocation")) {
+                    Task { await store.scan(newOnly: true, sourceID: sourceID) }
+                }.disabled(store.scanning)
             }
             TextField(store.t("searchScanReport"), text: $search).textFieldStyle(.roundedBorder)
             List(Array(issues.enumerated()), id: \.offset) { _, issue in
@@ -261,20 +274,25 @@ struct ScanReportView: View {
                             NSPasteboard.general.setString(issue.url.path, forType: .string)
                         }
                         if MetadataReader.extensions.contains(issue.url.pathExtension.lowercased()) {
-                            Button(store.t("retryFile")) { Task { await store.retryFailedScan(only: issue.url) } }
+                            Button(store.t("retryFile")) {
+                                Task { await store.retryFailedScan(only: issue.url, sourceID: sourceID) }
+                            }
                                 .disabled(store.scanning)
                         }
                     }.buttonStyle(.borderless)
                 }.padding(.vertical, 8)
             }.overlay {
-                if issues.isEmpty { ContentUnavailableView(store.t("reportEmpty"), systemImage: "checkmark.circle") }
+                if issues.isEmpty {
+                    ContentUnavailableView(store.t(audit == nil ? "noScanReport" : "reportEmpty"),
+                                           systemImage: audit == nil ? "doc.text.magnifyingglass" : "checkmark.circle")
+                }
             }
             HStack {
-                Button(store.t("showReportFile")) { store.showScanReport() }
-                Button(store.t("retryFailed")) { Task { await store.retryFailedScan() } }
+                Button(store.t("showReportFile")) { store.showScanReport(sourceID: sourceID) }.disabled(audit == nil)
+                Button(store.t("retryFailed")) { Task { await store.retryFailedScan(sourceID: sourceID) } }
                     .disabled(
                         store.scanning
-                            || store.scanAudit?.issues.contains {
+                            || audit?.issues.contains {
                                 MetadataReader.extensions.contains($0.url.pathExtension.lowercased())
                             } != true)
                 Spacer()

@@ -110,6 +110,40 @@ final class LibraryMaintenanceTests: XCTestCase {
         XCTAssertEqual(store.scanAudit?.failed, 1)
         XCTAssertEqual(store.scanAudit?.issues.map(\.url), [b])
     }
+    @MainActor
+    func testSourceScanReportsPersistWithoutReplacingTheGeneralReport() async throws {
+        let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = MusicSource(url: root.appendingPathComponent("One", isDirectory: true))
+        let second = MusicSource(url: root.appendingPathComponent("Two", isDirectory: true))
+        for source in [first, second] {
+            try FileManager.default.createDirectory(at: source.url, withIntermediateDirectories: true)
+        }
+        let a = first.url.appendingPathComponent("a.m4a")
+        let b = second.url.appendingPathComponent("b.m4a")
+        try Data([0]).write(to: a)
+        try Data([0]).write(to: b)
+        let directory = root.appendingPathComponent("Data")
+        let store = LibraryStore(directory: directory, autoStart: false)
+        store.sources = [first, second]
+        await store.scan()
+        let general = store.scanAudit?.finishedAt
+        await store.scan(newOnly: true, sourceID: first.id)
+        await store.scan(newOnly: true, sourceID: second.id)
+        XCTAssertEqual(store.scanReport(for: first.id)?.issues.map(\.url), [a])
+        XCTAssertEqual(store.scanReport(for: second.id)?.issues.map(\.url), [b])
+        XCTAssertEqual(store.scanAudit?.finishedAt, general)
+        XCTAssertEqual(store.scanAudit?.failed, 2)
+        try FileManager.default.removeItem(at: a)
+        try FileManager.default.copyItem(at: demo, to: a)
+        await store.retryFailedScan(only: a, sourceID: first.id)
+        XCTAssertEqual(store.scanReport(for: first.id)?.failed, 0)
+        XCTAssertEqual(store.sourceStates[second.id], "ready")
+        let reopened = LibraryStore(directory: directory, autoStart: false)
+        XCTAssertEqual(reopened.scanReport(for: first.id)?.failed, 0)
+        XCTAssertEqual(reopened.scanReport(for: second.id)?.issues.map(\.url), [b])
+        XCTAssertEqual(reopened.scanAudit?.failed, 2)
+    }
     func testDailySQLiteBackupRestoresCorruptionAndPreservesOriginal() async throws {
         let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(
             UUID().uuidString)
