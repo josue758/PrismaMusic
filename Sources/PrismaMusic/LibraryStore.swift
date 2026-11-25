@@ -2199,7 +2199,7 @@ final class LibraryStore: NSObject, ObservableObject {
         }
         return playlists.first { $0.id == id }
     }
-    func saveManualPlaylist(_ name: String, ids: [String], replacing id: UUID? = nil) {
+    func saveManualPlaylist(_ name: String, ids: [String], replacing id: UUID? = nil, navigate: Bool = true) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
         var seen = Set<String>()
@@ -2211,7 +2211,7 @@ final class LibraryStore: NSObject, ObservableObject {
         } else {
             let playlist = Playlist(name: name, trackIDs: ids)
             playlists.append(playlist)
-            navigateTo("playlist:\(playlist.id)")
+            if navigate { navigateTo("playlist:\(playlist.id)") }
         }
         save()
     }
@@ -2287,12 +2287,24 @@ final class LibraryStore: NSObject, ObservableObject {
     func enqueue(_ track: Track, next: Bool = false) {
         guard track.id != currentID else { return }
         let previous = queue
-        queue.removeAll { $0 == track.id && $0 != currentID }
-        if next, let index = queue.firstIndex(where: { $0 == currentID }) {
-            queue.insert(track.id, at: index + 1)
+        var updated = queue.filter { $0 != track.id }
+        if next {
+            if let currentID, self.track(for: currentID) != nil {
+                let currentIndex: Int
+                if let index = updated.firstIndex(of: currentID) {
+                    currentIndex = index
+                } else {
+                    updated.insert(currentID, at: 0)
+                    currentIndex = 0
+                }
+                updated.insert(track.id, at: currentIndex + 1)
+            } else {
+                updated.insert(track.id, at: 0)
+            }
         } else {
-            queue.append(track.id)
+            updated.append(track.id)
         }
+        queue = updated
         postFeedback(next ? "queuedNext" : "queued", detail: track.title, icon: "list.bullet", undo: .queue(previous))
     }
     func removeQueued(_ track: Track) {
@@ -2325,7 +2337,19 @@ final class LibraryStore: NSObject, ObservableObject {
         let offset = destination.flatMap { reordered.firstIndex(of: $0) } ?? reordered.count
         reordered.insert(contentsOf: moving, at: offset)
         guard reordered != queue else { return false }
+        let previous = queue
         queue = reordered
+        postFeedback("queueReordered", detail: songCountText(moving.count), icon: "arrow.up.arrow.down",
+                     undo: .queue(previous))
+        return true
+    }
+    @discardableResult
+    func saveUpcomingPlaylist(_ name: String) -> Bool {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ids = upcomingIDs
+        guard !name.isEmpty, !ids.isEmpty, !saveBlocked else { return false }
+        saveManualPlaylist(name, ids: ids, navigate: false)
+        postFeedback("playlistCreated", detail: name, icon: "music.note.list")
         return true
     }
     func moveQueued(_ track: Track, direction: Int) {

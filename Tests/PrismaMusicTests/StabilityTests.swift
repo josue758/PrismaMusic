@@ -5,6 +5,30 @@ import XCTest
 
 final class StabilityTests: XCTestCase {
     @MainActor
+    func testPlayNextAnchorsTheCurrentTrackAndCanSaveTheUpcomingQueue() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = LibraryStore(directory: directory, autoStart: false)
+        let items = (0...2).map { index in
+            Track(url: directory.appendingPathComponent("\(index).flac"), title: "\(index)", artist: "Artist",
+                  album: "Album", genre: "", year: "", duration: 30)
+        }
+        store.tracks = items
+        store.queue = [items[1].id]
+        store.enqueue(items[2], next: true)
+        XCTAssertEqual(store.queue, [items[2].id, items[1].id])
+        store.currentID = items[0].id
+        store.enqueue(items[1], next: true)
+        XCTAssertEqual(store.queue, items.map(\.id))
+        XCTAssertTrue(store.saveUpcomingPlaylist(" Próximas "))
+        XCTAssertEqual(store.playlists.first?.name, "Próximas")
+        XCTAssertEqual(store.playlists.first?.trackIDs, [items[1].id, items[2].id])
+        XCTAssertEqual(store.section, "home")
+        try await store.flushSaving()
+        let restored = LibraryStore(directory: directory, autoStart: false)
+        XCTAssertEqual(restored.playlists, store.playlists)
+    }
+    @MainActor
     func testUpcomingBatchMoveAndUndoKeepPastAndCurrentTracks() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -19,6 +43,9 @@ final class StabilityTests: XCTestCase {
         XCTAssertFalse(store.moveUpcoming([tracks[1].id, tracks[3].id], before: tracks[2].id))
         XCTAssertTrue(store.moveUpcoming([tracks[3].id, tracks[5].id], before: tracks[2].id))
         XCTAssertEqual(store.queue, [0, 1, 3, 5, 2, 4].map { tracks[$0].id })
+        store.undoFeedback()
+        XCTAssertEqual(store.queue, tracks.map(\.id))
+        XCTAssertTrue(store.moveUpcoming([tracks[3].id, tracks[5].id], before: tracks[2].id))
         store.removeQueued(ids: [tracks[1].id, tracks[3].id, tracks[5].id])
         XCTAssertEqual(store.queue, [0, 1, 2, 4].map { tracks[$0].id })
         store.undoFeedback()

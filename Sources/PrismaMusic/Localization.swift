@@ -100,6 +100,8 @@ let translations: [String: [String]] = [
         "Usa as etiquetas ReplayGain de arquivos FLAC. Disponível com a saída de áudio padrão.",
     ],
     "queueRemoved": ["Quitada de la cola", "Removed from queue", "Removida da fila"],
+    "queueReordered": ["Cola reordenada", "Queue reordered", "Fila reordenada"],
+    "saveQueuePlaylist": ["Guardar cola como lista", "Save Queue as Playlist", "Salvar fila como lista"],
     "localTagCorrections": ["Etiquetas corregidas en Prisma", "Tags edited in Prisma", "Etiquetas editadas no Prisma"],
     "writeFileTags": [
         "Guardar también en los archivos FLAC", "Also save to FLAC files", "Salvar também nos arquivos FLAC",

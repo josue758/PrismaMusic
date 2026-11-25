@@ -1,5 +1,11 @@
 # Cambios
 
+## 0.16.2
+
+- Reproducir a continuación inserta la canción en el lugar correcto aunque la pista actual no estuviera en la cola.
+- La cola ofrece Deshacer al reordenar varias pistas y permite guardar las próximas canciones como una lista.
+- Las flechas para mover pistas se desactivan al alcanzar el límite de la cola.
+
 ## 0.16.1
 
 - Publicación estable de las mejoras de la 0.16.0. Acerca de muestra la versión y el número de compilación.
